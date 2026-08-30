@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.pde.internal;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
@@ -19,6 +20,7 @@ import org.osgi.framework.BundleContext;
 import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceReference;
 
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.JreUsability;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.json.JsonArray;
@@ -224,15 +226,24 @@ final class TargetPlatforms {
 			if (path == null) {
 				return null;
 			}
-			String temporary = System.getProperty("java.io.tmpdir", "/tmp"); //$NON-NLS-1$ //$NON-NLS-2$
-			return trailing(path).equals(trailing(temporary)) ? null : path;
+			return isTemporaryDirectory(path) ? null : path;
 		} catch (CoreException | RuntimeException e) {
 			return null;
 		}
 	}
 
-	private static String trailing(String path) {
-		return path.endsWith("/") ? path.substring(0, path.length() - 1) : path; //$NON-NLS-1$
+	/**
+	 * Compared as paths rather than as strings: java.io.tmpdir ends with a
+	 * separator on Windows and not on Linux, the separator itself differs, and
+	 * Windows paths differing only in case are one directory. A string comparison
+	 * therefore said "not the temp directory" off Linux and let PDE's placeholder
+	 * through as if it were a real location.
+	 */
+	private static boolean isTemporaryDirectory(String path) {
+		Path candidate = FileLocations.pathOf(path);
+		Path temporary = FileLocations.pathOf(System.getProperty("java.io.tmpdir")); //$NON-NLS-1$
+		return candidate != null && temporary != null
+				&& candidate.toAbsolutePath().normalize().equals(temporary.toAbsolutePath().normalize());
 	}
 
 	/** The location's own XML, which carries what the API does not expose. */

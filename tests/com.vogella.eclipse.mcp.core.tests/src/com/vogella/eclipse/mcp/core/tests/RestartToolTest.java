@@ -126,9 +126,13 @@ class RestartToolTest {
 
 	@Test
 	void aFileUriIsAcceptedBecauseThatIsWhatTheToolUsedToReport() {
-		// a caller handing back the workspace it was given would otherwise be refused
-		assertEquals(Path.of("/tmp/ws"), RestartTool.pathOf("file:/tmp/ws"));
-		assertEquals(Path.of("/tmp/ws"), RestartTool.pathOf("/tmp/ws"));
+		// a caller handing back the workspace it was given would otherwise be refused.
+		// Built from a real path rather than written out, because "file:/tmp/ws" is
+		// not a path on Windows and this has to hold on every window system
+		Path workspace = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().resolve("ws");
+
+		assertEquals(workspace, RestartTool.pathOf(workspace.toUri().toString()));
+		assertEquals(workspace, RestartTool.pathOf(workspace.toString()));
 	}
 
 	@Test

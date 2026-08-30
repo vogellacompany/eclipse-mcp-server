@@ -1,6 +1,9 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -261,6 +264,23 @@ public final class TestRunRegistry {
 	/** Errors reported from a launched platform's log. Enough to diagnose, not a dump. */
 	private static final int MAX_LAUNCH_ERRORS = 8;
 
+	/**
+	 * The lines of a platform log.
+	 * <p>
+	 * Read leniently rather than through {@code Files.readAllLines}, which decodes
+	 * as UTF-8 and throws on the first byte that is not: the log carries whatever
+	 * encoding the launched platform's default was, which on Windows is a code page
+	 * and not UTF-8, and one stack trace with an accented class name would
+	 * otherwise cost the whole diagnosis. Split on either delimiter for the same
+	 * reason.
+	 */
+	private static List<String> logLines(Path log) throws IOException {
+		var decoder = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPLACE)
+				.onUnmappableCharacter(CodingErrorAction.REPLACE);
+		String text = decoder.decode(ByteBuffer.wrap(Files.readAllBytes(log))).toString();
+		return List.of(text.split("\r\n|\n|\r", -1)); //$NON-NLS-1$
+	}
+
 	/** Error entries from the log of the platform that was launched, newest last. */
 	private static JsonArray launchedPlatformErrors(Run run) {
 		JsonArray errors = new JsonArray();
@@ -285,7 +305,7 @@ public final class TestRunRegistry {
 			}
 			List<String> collected = new ArrayList<>();
 			String entry = null;
-			for (String line : Files.readAllLines(log)) {
+			for (String line : logLines(log)) {
 				if (line.startsWith("!ENTRY") && line.contains(" 4 ")) { //$NON-NLS-1$ //$NON-NLS-2$
 					entry = line.substring("!ENTRY ".length()); //$NON-NLS-1$
 				} else if (entry != null && line.startsWith("!MESSAGE")) { //$NON-NLS-1$

@@ -19,6 +19,7 @@ import org.osgi.framework.FrameworkUtil;
 import org.osgi.service.prefs.BackingStoreException;
 import org.osgi.service.prefs.Preferences;
 
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.server.McpPreferences;
 
 /**
@@ -129,9 +130,9 @@ final class SplashBranding {
 
 	private static Path configurationArea() {
 		Location location = Platform.getConfigurationLocation();
-		URL url = location == null ? null : location.getURL();
-		return url == null ? Path.of(System.getProperty("user.home"), ".eclipse") //$NON-NLS-1$ //$NON-NLS-2$
-				: Path.of(url.getPath());
+		Path area = location == null ? null : FileLocations.pathOf(location.getURL());
+		return area == null ? Path.of(System.getProperty("user.home"), ".eclipse") //$NON-NLS-1$ //$NON-NLS-2$
+				: area;
 	}
 
 	private static Path configFile() {

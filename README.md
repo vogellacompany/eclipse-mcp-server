@@ -1671,6 +1671,10 @@ Give enough surrounding text to be unique rather than a bare identifier.
 Writing goes through the workspace, so the file keeps its charset, the resource tree sees the change at once, and the previous content goes into the local history where *Compare With > Local History* recovers it.
 The answer shows the changed lines with context, so it reports the result rather than promising it.
 
+**Line endings need no attention.**
+A file written with CRLF, which is what a repository checked out on Windows looks like, is matched against an `oldText` given with LF: without that every edit spanning a line break in such a file was refused as if the caller had read a different file.
+The file keeps its own delimiter, so the edit is not what converts it, and the answer carries `lineDelimiter` and `matchedAfterConvertingLineEndings` when that is what happened.
+
 For Java, follow the edit with `eclipse_format`.
 
 ### `eclipse_search_text`

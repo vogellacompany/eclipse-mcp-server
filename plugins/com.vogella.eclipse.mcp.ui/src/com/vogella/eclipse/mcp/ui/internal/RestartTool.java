@@ -1,7 +1,6 @@
 package com.vogella.eclipse.mcp.ui.internal;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -25,6 +24,7 @@ import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
 
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.LaunchAttributes;
 import com.vogella.eclipse.mcp.core.McpToolResult;
@@ -348,14 +348,10 @@ public final class RestartTool implements IMcpTool {
 	 * that hands back what it was given would otherwise be refused.
 	 */
 	public static Path pathOf(String workspace) {
-		try {
-			if (workspace.startsWith("file:")) { //$NON-NLS-1$
-				return Path.of(URI.create(workspace).getPath());
-			}
-			return Path.of(workspace);
-		} catch (RuntimeException e) {
-			return null;
-		}
+		// through FileLocations rather than URI.getPath(): that form hands back
+		// "/C:/ws" for a Windows workspace, which is not a path at all, and leaves
+		// %20 wherever the URL was encoded
+		return FileLocations.pathOf(workspace);
 	}
 
 	/**

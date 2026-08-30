@@ -152,9 +152,14 @@ public final class ThemeTools {
 			return UiThread.call(UI_TIMEOUT_SECONDS, () -> CssStyling.registerTheme(id, label, stylesheetUri));
 		}
 
-		/** Turns a bare path into an absolute file URI; a URI with a scheme passes through. */
+		/**
+		 * Turns a bare path into an absolute file URI; a URI with a scheme passes
+		 * through. The scheme is two characters at least, because a one letter one is
+		 * a Windows drive: {@code C:\themes\dark.css} otherwise reads as a URI and
+		 * is handed to the CSS engine unchanged, which finds nothing there.
+		 */
 		private static String stylesheetUri(String css) {
-			if (!css.matches("(?i)[a-z][a-z0-9+.-]*:.*")) { //$NON-NLS-1$
+			if (!css.matches("(?i)[a-z][a-z0-9+.-]+:.*")) { //$NON-NLS-1$
 				Path path = Path.of(css);
 				if (!Files.exists(path)) {
 					return null;

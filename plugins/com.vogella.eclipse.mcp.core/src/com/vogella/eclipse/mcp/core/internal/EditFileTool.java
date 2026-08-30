@@ -37,7 +37,7 @@ public final class EditFileTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Replaces one passage of a workspace file with another. MODIFIES THE WORKSPACE. This is how a file is changed without resending it: eclipse_write_file takes the complete content, so changing one line of an 800 line file through it means reading and returning all 800. THE EDIT IS CHECKED AGAINST WHAT YOU BELIEVE IS THERE: oldText that matches nothing is refused, and oldText that matches more than once is refused with the count unless replaceAll is set, so an edit made on a stale reading of the file fails instead of landing somewhere unintended. Give enough surrounding text to be unique rather than a bare identifier. Writing goes through the workspace, so the file keeps its charset, the resource tree sees the change at once, and the previous content goes into the local history where Compare With > Local History recovers it. The answer shows the changed lines with context. Use eclipse_format afterwards for Java."; //$NON-NLS-1$
+		return "Replaces one passage of a workspace file with another. MODIFIES THE WORKSPACE. This is how a file is changed without resending it: eclipse_write_file takes the complete content, so changing one line of an 800 line file through it means reading and returning all 800. THE EDIT IS CHECKED AGAINST WHAT YOU BELIEVE IS THERE: oldText that matches nothing is refused, and oldText that matches more than once is refused with the count unless replaceAll is set, so an edit made on a stale reading of the file fails instead of landing somewhere unintended. Line endings need no attention: a file written with CRLF is matched against text given with LF, and the answer reports lineDelimiter when that is what happened. Give enough surrounding text to be unique rather than a bare identifier. Writing goes through the workspace, so the file keeps its charset, the resource tree sees the change at once, and the previous content goes into the local history where Compare With > Local History recovers it. The answer shows the changed lines with context. Use eclipse_format afterwards for Java."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -105,7 +105,14 @@ public final class EditFileTool implements IMcpTool {
 			return McpToolResult.error("Could not read '%s': %s".formatted(path, e)); //$NON-NLS-1$
 		}
 
-		int matches = count(content, oldText);
+		// a file checked out on Windows has CRLF line endings while a client composing
+		// an edit sends LF, so a passage spanning a line break matches nothing at all
+		// and the refusal reads as a stale reading of the file rather than as what it
+		// is. The delimiter belongs to the file, so the caller's text is brought to it
+		boolean crlf = count(content, oldText) == 0 && oldText.indexOf('\n') >= 0 && usesCrlf(content);
+		String wanted = crlf ? toCrlf(oldText) : oldText;
+		String replacement = crlf ? toCrlf(newText) : newText;
+		int matches = count(content, wanted);
 		JsonObject result = new JsonObject().put("path", file.getFullPath().toString()) //$NON-NLS-1$
 				.put("matches", Integer.valueOf(matches)); //$NON-NLS-1$
 		if (matches == 0) {
@@ -113,17 +120,21 @@ public final class EditFileTool implements IMcpTool {
 					"'oldText' does not occur in %s, so nothing was changed. The file may have moved on since you read it, or the passage may differ in whitespace or line endings." //$NON-NLS-1$
 							.formatted(path));
 		}
+		if (crlf) {
+			result.put("lineDelimiter", "\\r\\n") //$NON-NLS-1$ //$NON-NLS-2$
+					.put("matchedAfterConvertingLineEndings", Boolean.TRUE); //$NON-NLS-1$
+		}
 		if (matches > 1 && !replaceAll) {
 			return McpToolResult.error(
 					"'oldText' occurs %d times in %s, so which one was meant is not decidable. Give more surrounding text, or pass replaceAll true to change all of them." //$NON-NLS-1$
 							.formatted(Integer.valueOf(matches), path));
 		}
 
-		String edited = replaceAll ? content.replace(oldText, newText)
-				: replaceFirst(content, oldText, newText);
-		int line = lineOf(content, content.indexOf(oldText));
+		String edited = replaceAll ? content.replace(wanted, replacement)
+				: replaceFirst(content, wanted, replacement);
+		int line = lineOf(content, content.indexOf(wanted));
 		result.put("replacements", Integer.valueOf(replaceAll ? matches : 1)) //$NON-NLS-1$
-				.put("changedLines", changedLines(content, oldText)) //$NON-NLS-1$
+				.put("changedLines", changedLines(content, wanted)) //$NON-NLS-1$
 				.put("firstChangedLine", Integer.valueOf(line)) //$NON-NLS-1$
 				.put("charset", charset.name()) //$NON-NLS-1$
 				.put("context", context(edited, line)); //$NON-NLS-1$
@@ -159,6 +170,21 @@ public final class EditFileTool implements IMcpTool {
 		return "The previous content is in the local history. Auto-build is OFF in this workspace, so nothing has compiled the change yet: run eclipse_build before believing any problem report. eclipse_format tidies Java."; //$NON-NLS-1$
 	}
 
+	/**
+	 * Whether the file is written with CRLF, decided on the first line break: a file
+	 * with mixed endings is one an editor has already half converted, and its next
+	 * line break is the one this edit has to land beside.
+	 */
+	private static boolean usesCrlf(String content) {
+		int at = content.indexOf('\n');
+		return at > 0 && content.charAt(at - 1) == '\r';
+	}
+
+	/** The text with every bare LF turned into CRLF, leaving CRLF that is already there. */
+	private static String toCrlf(String text) {
+		return text.replace("\r\n", "\n").replace("\n", "\r\n"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+	}
+
 	static int count(String content, String text) {
 		int found = 0;
 		for (int at = content.indexOf(text); at >= 0; at = content.indexOf(text, at + text.length())) {
@@ -183,9 +209,13 @@ public final class EditFileTool implements IMcpTool {
 		return line;
 	}
 
-	/** The edited file around the change, so the answer shows the result rather than promising it. */
+	/**
+	 * The edited file around the change, so the answer shows the result rather than
+	 * promising it. Split on LF and stripped of the CR a CRLF file leaves behind,
+	 * which would otherwise reach the caller as a stray carriage return per line.
+	 */
 	static String context(String content, int line) {
-		String[] lines = content.split("\n", -1); //$NON-NLS-1$
+		String[] lines = content.split("\r?\n", -1); //$NON-NLS-1$
 		int from = Math.max(0, line - 1 - CONTEXT_LINES);
 		int to = Math.min(lines.length, line + CONTEXT_LINES);
 		StringBuilder text = new StringBuilder();

@@ -53,8 +53,13 @@ public final class LaunchRecording {
 	 */
 	public static String vmArgument(String settings, Path file, int seconds) {
 		String duration = seconds > 0 ? ",duration=%ds".formatted(Integer.valueOf(seconds)) : ""; //$NON-NLS-1$ //$NON-NLS-2$
-		return "-XX:StartFlightRecording=name=%s,settings=%s,dumponexit=true%s,filename=%s".formatted(NAME, settings, //$NON-NLS-1$
-				duration, file);
+		String argument = "-XX:StartFlightRecording=name=%s,settings=%s,dumponexit=true%s,filename=%s" //$NON-NLS-1$
+				.formatted(NAME, settings, duration, file);
+		// the launch keeps its VM arguments as one string and the platform splits it
+		// on whitespace, so an unquoted path with a space in it arrives as two
+		// arguments and the launch fails on the second. The temporary directory has
+		// one on any Windows account whose name has one, which is most of them
+		return argument.indexOf(' ') < 0 ? argument : '"' + argument + '"'; //$NON-NLS-1$
 	}
 
 	/** Appended rather than replaced, so a caller's own VM arguments survive. */

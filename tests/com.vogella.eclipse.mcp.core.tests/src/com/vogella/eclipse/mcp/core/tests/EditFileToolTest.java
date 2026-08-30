@@ -50,6 +50,25 @@ class EditFileToolTest {
 	}
 
 	@Test
+	void matchesACrlfFileAgainstTextGivenWithLf() throws Exception {
+		// what a repository checked out on Windows looks like. A client composes its
+		// oldText with LF, so without this every multi-line edit of such a file is
+		// refused as if the caller had read a different file
+		IFile file = write("Crlf.java", "class Crlf {\r\n\tint width = 1;\r\n\tint height = 2;\r\n}\r\n");
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("path", file.getFullPath().toString(),
+				"oldText", "\tint width = 1;\n\tint height = 2;", "newText", "\tint width = 3;\n\tint height = 4;"));
+
+		assertEquals(Boolean.TRUE, result.get("edited"), "got " + result);
+		assertEquals(Boolean.TRUE, result.get("matchedAfterConvertingLineEndings"), "got " + result);
+		// the file keeps its own delimiter: the edit is not what converts it
+		assertEquals("class Crlf {\r\n\tint width = 3;\r\n\tint height = 4;\r\n}\r\n", read(file));
+		assertTrue(String.valueOf(result.get("context")).contains("int width = 3;"), "got " + result);
+		assertTrue(String.valueOf(result.get("context")).indexOf('\r') < 0,
+				"the context must not carry the file's carriage returns: " + result);
+	}
+
+	@Test
 	void refusesWhenTheExpectedTextIsNotThere() throws Exception {
 		IFile file = write("Sample.java", "class Sample {\n}\n");
 

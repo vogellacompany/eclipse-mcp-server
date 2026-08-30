@@ -2,8 +2,6 @@ package com.vogella.eclipse.mcp.core.internal;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.Files;
@@ -25,6 +23,7 @@ import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.Platform;
 
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -199,7 +198,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 		String path = fields[2];
 		try {
 			if (path.startsWith("file:")) { //$NON-NLS-1$
-				return Path.of(URI.create(path));
+				return FileLocations.pathOf(path);
 			}
 			Path installation = configuration.getParent();
 			return installation == null ? null : installation.resolve(path);
@@ -776,10 +775,6 @@ public final class SubstituteBundleTool implements IMcpTool {
 		if (location == null || location.getURL() == null) {
 			return null;
 		}
-		try {
-			return Path.of(location.getURL().toURI());
-		} catch (URISyntaxException | RuntimeException e) {
-			return null;
-		}
+		return FileLocations.pathOf(location.getURL());
 	}
 }

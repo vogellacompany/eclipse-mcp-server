@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.git.internal;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -133,13 +134,19 @@ public final class AddGitRepositoryTool implements IMcpTool {
 		if (workTree == null) {
 			return List.of();
 		}
-		String root = workTree.getAbsolutePath() + File.separator;
+		// through Path rather than a string prefix: comparing absolute paths as text
+		// is case sensitive, and on Windows the same directory reaches this with the
+		// casing whoever produced it happened to use, so a working tree naming the
+		// profile directory in one casing would not contain a project naming it in
+		// another. Path comparison is case insensitive where the filesystem is
+		Path root = workTree.toPath().toAbsolutePath().normalize();
 		List<IProject> inside = new ArrayList<>();
 		for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
 			if (!project.isAccessible() || project.getLocation() == null) {
 				continue;
 			}
-			if (project.getLocation().toFile().getAbsolutePath().startsWith(root)) {
+			Path location = project.getLocation().toFile().toPath().toAbsolutePath().normalize();
+			if (!location.equals(root) && location.startsWith(root)) {
 				inside.add(project);
 			}
 		}

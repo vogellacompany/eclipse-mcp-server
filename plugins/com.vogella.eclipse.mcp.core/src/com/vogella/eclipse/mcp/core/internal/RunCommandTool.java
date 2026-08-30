@@ -10,6 +10,7 @@ import java.util.Map;
 import org.eclipse.core.runtime.IProgressMonitor;
 
 import com.vogella.eclipse.mcp.core.CallBudget;
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolException;
 import com.vogella.eclipse.mcp.core.McpToolResult;
@@ -97,8 +98,7 @@ public final class RunCommandTool implements IMcpTool {
 		}
 		// through a shell, because the point of the string form is that a caller can
 		// write the command line it would type
-		return System.getProperty("os.name", "").toLowerCase().contains("win") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-				? List.of("cmd.exe", "/c", line) //$NON-NLS-1$ //$NON-NLS-2$
+		return FileLocations.isWindows() ? List.of("cmd.exe", "/c", line) //$NON-NLS-1$ //$NON-NLS-2$
 				: List.of("/bin/sh", "-c", line); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 

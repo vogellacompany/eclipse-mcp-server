@@ -18,13 +18,16 @@ import com.vogella.eclipse.mcp.core.McpToolResult;
  */
 class RunCommandToolTest {
 
+	/** Windows has no echo.exe and no /bin/sh, so the shell form is the portable one. */
+	private static final boolean WINDOWS = java.io.File.separatorChar == '\\';
+
 	@Test
 	@SuppressWarnings("unchecked")
 	void runsACommandAndCapturesItsOutput() throws Exception {
 		Path directory = Files.createTempDirectory("mcp-command-run");
 
 		Map<String, Object> result = TestFixture.callAndParse("eclipse_run_command",
-				Map.of("args", List.of("echo", "from the command"), "directory", directory.toString(),
+				Map.of("command", "echo from the command", "directory", directory.toString(),
 						"wait", Boolean.TRUE, "timeoutSeconds", Integer.valueOf(20)));
 
 		assertEquals("done", result.get("state"), "got " + result);
@@ -41,8 +44,11 @@ class RunCommandToolTest {
 	void reportsAFailingCommandAsFailedWithItsExitCode() throws Exception {
 		Path directory = Files.createTempDirectory("mcp-command-fail");
 
+		// the args form, which runs without a shell, so the shell is named explicitly
+		List<String> failing = WINDOWS ? List.of("cmd.exe", "/c", "echo broken 1>&2& exit /b 3")
+				: List.of("/bin/sh", "-c", "echo broken >&2; exit 3");
 		Map<String, Object> result = TestFixture.callAndParse("eclipse_run_command",
-				Map.of("args", List.of("sh", "-c", "echo broken >&2; exit 3"), "directory",
+				Map.of("args", failing, "directory",
 						directory.toString(), "wait", Boolean.TRUE, "timeoutSeconds", Integer.valueOf(20)));
 
 		assertEquals("failed", result.get("state"), "got " + result);
@@ -53,8 +59,12 @@ class RunCommandToolTest {
 
 	@Test
 	void refusesADirectoryThatDoesNotExist() throws Exception {
+		// absolute on every window system: a bare /no/such/... is relative on Windows,
+		// where it would be refused for the wrong reason
+		String missing = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath()
+				.resolve("no-such-directory-here").toString();
 		McpToolResult result = TestFixture.call("eclipse_run_command",
-				Map.of("command", "echo hello", "directory", "/no/such/directory/here"));
+				Map.of("command", "echo hello", "directory", missing));
 
 		assertTrue(result.isError(), "got " + result.text());
 		assertTrue(result.text().contains("no directory"), "got " + result.text());

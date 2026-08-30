@@ -537,6 +537,17 @@ The package lives in the `jdk.xml.dom` module, which Equinox exports as a system
 `org.eclipse.e4.ui.css.core` uses it with no `Import-Package` either.
 Adding an optional import here was considered and rejected: an optional import that the target platform cannot resolve turns the package into a compile error rather than a graceful degradation.
 
+**A `Location`'s URL is not a path, and the two obvious ways of making one are both wrong off Linux.**
+`FileLocations` is the only place that turns one into a `java.nio.file.Path`.
+`url.getPath()` yields `/C:/eclipse` on Windows, which the path parser rejects outright, and it leaves `%20` in place wherever the URL was encoded, so an installation under `Program Files` misses on every window system.
+`Path.of(url.toURI())` gets both right and throws on the other half of the problem, which is that Equinox does not always encode what it puts in a Location URL, so a path with a space in it is not a URI at all.
+The helper tries the URI form and decodes the raw one by hand when that fails.
+This was a whole class of bug rather than one: the configuration area, the install location, the workspace a restart is sent to, and the jars a target platform search reads were each written a different way, and three of the four were unusable on Windows.
+
+**This repository is developed and tested on Linux, so anything platform shaped is a guess until somebody runs it elsewhere.**
+The fixes so far were found by reading rather than by failing, which means the review is the record: shell selection and process output encoding in `eclipse_run_command`, the URL-to-path conversions above, CRLF line endings in `eclipse_edit_file`, a Windows drive letter read as a URI scheme in `eclipse_apply_css`, an unquoted flight recording path with a space in it, and the token file's access rights, which POSIX permissions cannot express on Windows and an ACL can.
+Prefer `FileLocations.isWindows()` over a fresh `os.name` test, and `Path.startsWith` over a string prefix, since path comparison is case insensitive on Windows and a text one is not.
+
 ## Verifying UI work
 
 A UI change is not verified by reading the JSON.

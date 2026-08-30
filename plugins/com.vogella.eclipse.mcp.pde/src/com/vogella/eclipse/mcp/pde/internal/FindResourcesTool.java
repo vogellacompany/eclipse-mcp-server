@@ -32,6 +32,7 @@ import org.eclipse.pde.core.target.TargetBundle;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
 
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.Globs;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
@@ -234,10 +235,10 @@ public final class FindResourcesTool implements IMcpTool {
 							&& (symbolicName == null || !symbolicName.contains(search.bundleFilter)))) {
 						continue;
 					}
-					File file = new File(URI.create(location).getPath());
-					if (!file.isFile()) {
-						file = new File(location);
-					}
+					// getLocation is a file: URL, and reading its path directly hands
+					// back "/C:/..." on Windows and leaves %20 in an encoded one
+					Path resolved = FileLocations.pathOf(location);
+					File file = resolved == null ? new File(location) : resolved.toFile();
 					if (file.isFile()) {
 						searchJar(file, symbolicName, version, search);
 					}

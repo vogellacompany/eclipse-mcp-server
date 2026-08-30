@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -182,8 +183,7 @@ public final class CommandRegistry {
 				Process process = builder.start();
 				execution.process = process;
 				try (InputStream stream = process.getInputStream();
-						BufferedReader reader = new BufferedReader(
-								new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+						BufferedReader reader = new BufferedReader(new InputStreamReader(stream, outputCharset()))) {
 					String line;
 					while ((line = reader.readLine()) != null) {
 						execution.append(line);
@@ -204,6 +204,29 @@ public final class CommandRegistry {
 		job.setPriority(Job.LONG);
 		job.schedule();
 		return execution;
+	}
+
+	/**
+	 * What a spawned process writes its output in.
+	 * <p>
+	 * Not UTF-8 unconditionally: since JDK 18 the JVM's own default is UTF-8
+	 * everywhere, but a Windows console and the tools that write to it still use
+	 * the machine's ANSI or OEM code page, so decoding a Maven log as UTF-8 there
+	 * turns every non-ASCII byte into a replacement character. {@code native.encoding}
+	 * is the JVM's report of what the operating system actually uses, and it is
+	 * UTF-8 on the Linux and macOS installations this changes nothing for.
+	 */
+	static Charset outputCharset() {
+		String name = System.getProperty("native.encoding"); //$NON-NLS-1$
+		if (name == null || name.isBlank()) {
+			return StandardCharsets.UTF_8;
+		}
+		try {
+			return Charset.forName(name.strip());
+		} catch (IllegalArgumentException e) {
+			// an encoding this JVM does not know is no reason to lose the output
+			return StandardCharsets.UTF_8;
+		}
 	}
 
 	/** Only for tests. */

@@ -2,7 +2,6 @@ package com.vogella.eclipse.mcp.core.internal;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -43,6 +42,7 @@ import org.osgi.framework.wiring.BundleWiring;
 import org.osgi.framework.wiring.FrameworkWiring;
 
 import com.vogella.eclipse.mcp.core.CallBudget;
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -288,12 +288,10 @@ public final class InstallBundleTool implements IMcpTool {
 		if (installLocation == null || installLocation.getURL() == null) {
 			return McpToolResult.error("This IDE has no readable installation location, so there is no dropins directory to copy into."); //$NON-NLS-1$
 		}
-		Path installation;
-		try {
-			installation = Path.of(installLocation.getURL().toURI());
-		} catch (Exception e) {
-			return McpToolResult.error("The installation location %s is not a local directory: %s" //$NON-NLS-1$
-					.formatted(installLocation.getURL(), rootMessage(e)));
+		Path installation = FileLocations.pathOf(installLocation.getURL());
+		if (installation == null) {
+			return McpToolResult.error(
+					"The installation location %s is not a local directory.".formatted(installLocation.getURL())); //$NON-NLS-1$
 		}
 		Path dropins = installation.resolve("dropins"); //$NON-NLS-1$
 		Path target = dropins.resolve(jar.getFileName());
@@ -601,12 +599,8 @@ public final class InstallBundleTool implements IMcpTool {
 		if (!path.startsWith("file:")) { //$NON-NLS-1$
 			return null;
 		}
-		try {
-			Path candidate = Path.of(URI.create(path));
-			return Files.isRegularFile(candidate) ? candidate : null;
-		} catch (RuntimeException e) {
-			return null;
-		}
+		Path candidate = FileLocations.pathOf(path);
+		return candidate != null && Files.isRegularFile(candidate) ? candidate : null;
 	}
 
 	private static String sha256(Path file) throws IOException {
