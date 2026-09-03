@@ -560,6 +560,9 @@ That is the merged declaration of the rules that matched, which is as far as the
 **The CSS engine's API is not binary stable, and this bundle is compiled against one release and run on another.**
 `CSSEngine.parseStyleSheet` changed its return type from `org.w3c.dom.stylesheets.StyleSheet` to `CSSStyleSheetImpl`, which is a source-compatible change and a binary incompatible one: a call site compiled against the target platform dies with `NoSuchMethodError` on an IDE that has the newer engine.
 `CssStyling.parse` calls it reflectively for that reason, and `CssStyling.rules` reads the rule count under either spelling.
+css.core 0.14.900 then removed `CSSErrorHandler` with its two accessors, which took `eclipse_apply_css` down with `NoSuchMethodError` on a 2026-09 I-build, and replaced `getViewCSS` with `computeStyle`, which failed silently because `cascade` swallowed the `LinkageError` and reported every themed colour as the widget's own.
+So `divertErrors` installs the handler through a `Proxy` where the engine still has one and reads `getProblems` off the sheet where it does not, and `computedStyle` tries either name.
+A removed method a catch block hides is the worse of the two: check the answer on a newer IDE, not only that the call returned.
 The development IDE here already runs a newer platform than `com.vogella.eclipse.mcp.target` names, so this is the normal case and not an exotic one.
 Check a signature against both before adding a call: `javap` on the jar in `~/.m2/repository/.cache/tycho` answers it in a second.
 

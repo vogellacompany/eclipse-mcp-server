@@ -3,6 +3,8 @@ package com.vogella.eclipse.mcp.ui.internal;
 import java.io.Reader;
 import java.io.StringReader;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -12,7 +14,6 @@ import java.util.Map;
 
 import org.eclipse.e4.core.contexts.IEclipseContext;
 import org.eclipse.e4.ui.css.core.engine.CSSEngine;
-import org.eclipse.e4.ui.css.core.engine.CSSErrorHandler;
 import org.eclipse.e4.ui.css.swt.dom.WidgetElement;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Widget;
@@ -20,6 +21,7 @@ import org.eclipse.ui.PlatformUI;
 import org.w3c.dom.Element;
 import org.w3c.dom.css.CSSStyleDeclaration;
 import org.w3c.dom.css.CSSStyleSheet;
+import org.w3c.dom.css.ViewCSS;
 
 import com.vogella.eclipse.mcp.core.json.JsonArray;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
@@ -112,10 +114,7 @@ final class CssStyling {
 	private static Map<String, String> cascade(CSSEngine engine, Widget widget, String pseudo) {
 		try {
 			Element element = engine.getElement(widget);
-			// getViewCSS is the cascade the engine keeps; a newer platform deprecates it
-			// in favour of computeStyle, and answers through it either way
-			CSSStyleDeclaration declaration = element == null ? null
-					: engine.getViewCSS().getComputedStyle(element, pseudo);
+			CSSStyleDeclaration declaration = element == null ? null : computedStyle(engine, element, pseudo);
 			if (declaration == null) {
 				return Map.of();
 			}
@@ -125,8 +124,24 @@ final class CssStyling {
 				values.put(name, declaration.getPropertyValue(name));
 			}
 			return values;
-		} catch (LinkageError | RuntimeException e) {
+		} catch (LinkageError | ReflectiveOperationException | RuntimeException e) {
 			return Map.of();
+		}
+	}
+
+	/**
+	 * The cascade's declaration for an element. css.core 0.14.900 replaced
+	 * {@code getViewCSS} with {@code computeStyle}, and neither name exists on
+	 * both sides of that change, so each is reached by name.
+	 */
+	private static CSSStyleDeclaration computedStyle(CSSEngine engine, Element element, String pseudo)
+			throws ReflectiveOperationException {
+		try {
+			Method compute = CSSEngine.class.getMethod("computeStyle", Element.class, String.class); //$NON-NLS-1$
+			return (CSSStyleDeclaration) compute.invoke(engine, element, pseudo);
+		} catch (NoSuchMethodException e) {
+			Object view = CSSEngine.class.getMethod("getViewCSS").invoke(engine); //$NON-NLS-1$
+			return view instanceof ViewCSS cascade ? cascade.getComputedStyle(element, pseudo) : null;
 		}
 	}
 
@@ -289,18 +304,22 @@ final class CssStyling {
 	private record Parsed(boolean ok, int rules) {
 	}
 
-	/** Parses a snippet into an engine, which is what puts it into the cascade. */
+	/**
+	 * Parses a snippet into an engine, which is what puts it into the cascade.
+	 * <p>
+	 * Every engine call here is by name: {@code parseStyleSheet} changed its
+	 * return type, and css.core 0.14.900 removed the error handler in favour of
+	 * {@code getProblems} on the parsed sheet. This bundle is compiled against
+	 * one release and run on another, so both shapes have to work.
+	 */
 	private static Parsed parse(CSSEngine engine, String css, JsonArray errors) {
-		CSSErrorHandler previous = engine.getErrorHandler();
 		List<Exception> reported = new ArrayList<>();
+		Diverted diverted = divertErrors(engine, reported);
 		try {
-			engine.setErrorHandler(reported::add);
-			// reflection because parseStyleSheet changed its return type: a call compiled
-			// against the target platform dies with NoSuchMethodError on an IDE that has
-			// the newer engine, and this tool exists to be used on somebody else's IDE.
 			// Appended last, so the snippet wins the cascade ties it is written to win.
 			Object sheet = CSSEngine.class.getMethod("parseStyleSheet", Reader.class).invoke(engine, //$NON-NLS-1$
 					new StringReader(css));
+			problems(sheet).forEach(problem -> errors.add(String.valueOf(problem)));
 			return new Parsed(true, rules(sheet));
 		} catch (InvocationTargetException e) {
 			// e4's parser throws unchecked as well, and the message carries line and column
@@ -311,7 +330,61 @@ final class CssStyling {
 			return new Parsed(false, -1);
 		} finally {
 			reported.forEach(e -> errors.add(String.valueOf(e)));
-			engine.setErrorHandler(previous);
+			if (diverted != null) {
+				diverted.restore(engine);
+			}
+		}
+	}
+
+	/** An engine's previous error handler, kept so it can be put back. */
+	private record Diverted(Method setter, Object previous) {
+		void restore(CSSEngine engine) {
+			try {
+				setter.invoke(engine, previous);
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				// the handler was this call's own, and the engine logs on its own without one
+			}
+		}
+	}
+
+	/**
+	 * Points an engine's error handler at a list, where the engine still has one.
+	 * Null on an engine without the handler API, which logs through ILog instead.
+	 */
+	private static Diverted divertErrors(CSSEngine engine, List<Exception> into) {
+		try {
+			Method getter = CSSEngine.class.getMethod("getErrorHandler"); //$NON-NLS-1$
+			Class<?> type = getter.getReturnType();
+			Method setter = CSSEngine.class.getMethod("setErrorHandler", type); //$NON-NLS-1$
+			Object handler = Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] { type },
+					(proxy, method, args) -> {
+						if (args != null && args.length == 1 && args[0] instanceof Exception e) {
+							into.add(e);
+							return null;
+						}
+						return switch (method.getName()) {
+						case "hashCode" -> System.identityHashCode(proxy); //$NON-NLS-1$
+						case "equals" -> proxy == args[0]; //$NON-NLS-1$
+						case "toString" -> "eclipse_apply_css error handler"; //$NON-NLS-1$ //$NON-NLS-2$
+						default -> null;
+						};
+					});
+			Object previous = getter.invoke(engine);
+			setter.invoke(engine, handler);
+			return new Diverted(setter, previous);
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return null;
+		}
+	}
+
+	/** The malformed rules a parsed sheet reports, where the sheet can say. */
+	private static Collection<?> problems(Object sheet) {
+		try {
+			return sheet.getClass().getMethod("getProblems").invoke(sheet) instanceof Collection<?> problems //$NON-NLS-1$
+					? problems
+					: List.of();
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return List.of();
 		}
 	}
 
