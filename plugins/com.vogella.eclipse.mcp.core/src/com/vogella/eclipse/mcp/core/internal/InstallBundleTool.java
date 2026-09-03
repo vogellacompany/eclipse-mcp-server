@@ -43,6 +43,7 @@ import org.osgi.framework.wiring.FrameworkWiring;
 
 import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.FileLocations;
+import com.vogella.eclipse.mcp.core.FrameworkChanges;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -246,6 +247,7 @@ public final class InstallBundleTool implements IMcpTool {
 			}
 		}
 		int state = bundle.getState();
+		FrameworkChanges.markLiveChange("eclipse_install_bundle " + outcome + " " + symbolicName + " " + version); //$NON-NLS-1$ //$NON-NLS-2$
 		JsonObject json = base(symbolicName, previousVersion, version).put("mode", "hot") //$NON-NLS-1$ //$NON-NLS-2$
 				.put("dryRun", Boolean.FALSE) //$NON-NLS-1$
 				.put("outcome", outcome) //$NON-NLS-1$

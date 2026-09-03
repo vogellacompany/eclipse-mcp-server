@@ -2341,7 +2341,12 @@ The tool answers first and restarts two seconds later, so a dropped connection i
 | `save` | boolean | `false` | Save dirty editors first. |
 | `force` | boolean | `false` | Restart anyway, discarding unsaved work. |
 | `splash` | boolean | `true` | `false` comes back without the splash screen. |
+| `clean` | boolean | `true` after a hot install or substitution in this session, else `false` | Relaunch with `-clean`, discarding the registry and resolver caches. |
 | `workspace` | string | current one | Absolute path of the workspace to start into. Created when it does not exist. |
+
+**A hot install or a substitution makes the next plain restart untrustworthy.**
+The extension registry cache written at shutdown describes the contributions of the bundles that were refreshed, and the editors the workbench restores at the next start then fail with `InvalidRegistryObjectException` while a freshly opened one works.
+So after `eclipse_install_bundle` in mode `hot` or any `eclipse_substitute_bundle` change, `eclipse_restart` adds `-clean` by default, which costs a few seconds of startup and rebuilds both caches; the answer carries `clean` and `cleanReason`, and `clean: false` keeps the caches when that is wanted.
 
 `splash: false` appends `-nosplash` to the arguments the workbench hands the launcher for the next start, which is the same channel `Workbench.buildCommandLine` uses to pass `-data`.
 `splashSuppressed` in the answer reports whether the argument was added, and deliberately not whether the splash then stayed away: the splash is painted by the native launcher before the JVM exists, so nothing inside the IDE can observe the result.

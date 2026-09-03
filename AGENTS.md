@@ -371,6 +371,11 @@ Two hazards of that class are handled rather than discovered.
 Its modal question about discarding the root project is reachable only when no directories to import were set, so the tool always sets them, from the proposals it has just read; `getImportProposals` runs detection only and writes nothing, which is what makes it the dry run as well.
 And it switches auto-build off for the duration and back on at the end of its try block, with no finally, so any exception leaves the workspace with auto-build off for good. The tool restores what it found. Both are recorded in `docs/platform-bugs.md`.
 
+**A restart after a hot install or a substitution relaunches with `-clean`, and the reason is reported.**
+A hot refresh of `org.eclipse.pde.core` followed by a plain restart left every editor the workbench restored throwing `InvalidRegistryObjectException` on open and close, while a freshly opened one worked; `-clean` fixed it.
+`FrameworkChanges` records those changes in core, `eclipse_restart` defaults `clean` from it and says so under `cleanReason`, and the record is per JVM, which is exactly the lifetime of the caches it is about.
+Do not make `-clean` unconditional: it costs seconds on every restart of an IDE that had no such change, and a default a caller can read the reason for is the one they will leave alone.
+
 **A hidden IDE must not be able to outlive the thing that can unhide it.**
 `eclipse_set_ide_visibility` can take the window off the screen and the taskbar, where no menu can bring it back, so `McpUiPlugin.stop` calls `VisibilityTool.restoreIfHidden`.
 Disabling or uninstalling the server must not be the moment the IDE becomes unrecoverable.

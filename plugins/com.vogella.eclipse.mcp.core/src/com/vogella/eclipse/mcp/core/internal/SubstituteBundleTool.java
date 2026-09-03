@@ -29,6 +29,7 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.Platform;
 
 import com.vogella.eclipse.mcp.core.FileLocations;
+import com.vogella.eclipse.mcp.core.FrameworkChanges;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -99,7 +100,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 					.formatted(bundlesInfo));
 		}
 		try {
-			return switch (action) {
+			McpToolResult result = switch (action) {
 			case "status" -> McpToolResult.of(status(configuration, bundlesInfo).toString()); //$NON-NLS-1$
 			case "restore" -> restore(configuration, bundlesInfo, args.getBoolean("dryRun", true)); //$NON-NLS-1$ //$NON-NLS-2$
 			case "cleanup" -> cleanup(configuration, bundlesInfo, args.getBoolean("dryRun", true)); //$NON-NLS-1$ //$NON-NLS-2$
@@ -107,6 +108,13 @@ public final class SubstituteBundleTool implements IMcpTool {
 			case "substitute" -> substitute(configuration, bundlesInfo, args, monitor);
 			default -> McpToolResult.error("'action' is 'substitute', 'restore', 'status', 'cleanup' or 'repair'."); //$NON-NLS-1$
 			};
+			// a changed bundles.info line is loaded under caches written for the old
+			// jar, so the next restart discards them
+			if (!result.isError() && !args.getBoolean("dryRun", true) //$NON-NLS-1$
+					&& List.of("restore", "repair", "substitute").contains(action)) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				FrameworkChanges.markLiveChange("eclipse_substitute_bundle " + action); //$NON-NLS-1$
+			}
+			return result;
 		} catch (IOException e) {
 			return McpToolResult.error("Could not work with the installation: " + e); //$NON-NLS-1$
 		}

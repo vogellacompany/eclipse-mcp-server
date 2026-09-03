@@ -25,6 +25,7 @@ import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
 
 import com.vogella.eclipse.mcp.core.FileLocations;
+import com.vogella.eclipse.mcp.core.FrameworkChanges;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.LaunchAttributes;
 import com.vogella.eclipse.mcp.core.McpToolResult;
@@ -47,6 +48,8 @@ public final class RestartTool implements IMcpTool {
 	public static final String EXIT_DATA_PROPERTY = "eclipse.exitdata"; //$NON-NLS-1$
 
 	public static final String NO_SPLASH = "-nosplash"; //$NON-NLS-1$
+
+	public static final String CLEAN = "-clean"; //$NON-NLS-1$
 
 	/** Decides whether the launcher reads the exit data at all. */
 	public static final String EXIT_CODE_PROPERTY = "eclipse.exitcode"; //$NON-NLS-1$
@@ -83,6 +86,7 @@ public final class RestartTool implements IMcpTool {
 				    "save":  {"type":"boolean","default":false,"description":"Save dirty editors first, then restart."},
 				    "force":  {"type":"boolean","default":false,"description":"Restart even with unsaved changes or an open modal dialog. DISCARDS that work: dirty editors are closed without saving and dirty views are marked clean, so the platform has nothing left to prompt about."},
 				    "splash": {"type":"boolean","default":true,"description":"False comes back without the splash screen. The argument is added to the relaunch arguments; whether the launcher honours it is not something this server can observe."},
+				    "clean":  {"type":"boolean","description":"Relaunch with -clean, which discards the registry and resolver caches. Defaults to true when this session hot installed or substituted a bundle, because the caches written at shutdown then describe the wrong contributions and the editors restored at the next start fail with InvalidRegistryObjectException; false otherwise. The answer reports clean and cleanReason."},
 				    "workspace": {"type":"string","description":"Absolute path of the workspace to start into. Omit to come back into the current one. The directory is created when it does not exist, because a path that is not there opens the workspace chooser and waits for a person. A workspace another IDE has open cannot be taken over, and that is only visible once the relaunch has happened."}
 				  },
 				  "additionalProperties": false
@@ -98,6 +102,7 @@ public final class RestartTool implements IMcpTool {
 		boolean save = args.getBoolean("save", false); //$NON-NLS-1$
 		boolean force = args.getBoolean("force", false); //$NON-NLS-1$
 		boolean splash = args.getBoolean("splash", true); //$NON-NLS-1$
+		boolean clean = args.getBoolean("clean", FrameworkChanges.any()); //$NON-NLS-1$
 		String workspace = args.getString("workspace"); //$NON-NLS-1$
 		if (workspace != null) {
 			McpToolResult refusal = checkWorkspace(workspace);
@@ -109,7 +114,7 @@ public final class RestartTool implements IMcpTool {
 		CompletableFuture<JsonObject> pending = new CompletableFuture<>();
 		PlatformUI.getWorkbench().getDisplay().asyncExec(() -> {
 			try {
-				pending.complete(prepare(save, force, splash, workspace));
+				pending.complete(prepare(save, force, splash, workspace, clean, args.has("clean"))); //$NON-NLS-1$
 			} catch (RuntimeException e) {
 				pending.completeExceptionally(e);
 			}
@@ -226,17 +231,30 @@ public final class RestartTool implements IMcpTool {
 	 * whether it honours the relaunch arguments cannot be observed from here.
 	 */
 	public static boolean appendNoSplash() {
+		return appendArgument(NO_SPLASH);
+	}
+
+	/** Adds one argument to the relaunch arguments, once. */
+	public static boolean appendArgument(String argument) {
 		try {
 			String existing = System.getProperty(EXIT_DATA_PROPERTY, ""); //$NON-NLS-1$
-			if (contains(existing, NO_SPLASH)) {
+			if (contains(existing, argument)) {
 				return true;
 			}
-			System.setProperty(EXIT_DATA_PROPERTY, existing + NO_SPLASH + "\n"); //$NON-NLS-1$
+			System.setProperty(EXIT_DATA_PROPERTY, existing + argument + "\n"); //$NON-NLS-1$
 			return true;
 		} catch (RuntimeException e) {
-			// a restart that happens with a splash beats one that does not happen
+			// a restart that happens without the argument beats one that does not happen
 			return false;
 		}
+	}
+
+	private static String cleanReason(boolean explicit) {
+		if (explicit) {
+			return "clean was passed."; //$NON-NLS-1$
+		}
+		return "This session changed what the framework runs (" + String.join("; ", FrameworkChanges.since()) //$NON-NLS-1$ //$NON-NLS-2$
+				+ "), so the registry and resolver caches are discarded rather than trusted; pass clean false to keep them."; //$NON-NLS-1$
 	}
 
 	/** The arguments are newline separated, so a substring match would hit -nosplashfoo. */
@@ -369,7 +387,7 @@ public final class RestartTool implements IMcpTool {
 		System.setProperty(EXIT_CODE_PROPERTY, org.eclipse.equinox.app.IApplication.EXIT_RELAUNCH.toString());
 	}
 
-	private static JsonObject prepare(boolean save, boolean force, boolean splash, String workspace) {
+	private static JsonObject prepare(boolean save, boolean force, boolean splash, String workspace, boolean clean, boolean cleanExplicit) {
 		String cannot = cannotRestartReason();
 		if (cannot != null) {
 			return new JsonObject().put("restarting", Boolean.FALSE).put("reason", "Refused: " + cannot); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
@@ -395,6 +413,7 @@ public final class RestartTool implements IMcpTool {
 		// property and appends the workspace to whatever is already in it, so adding
 		// the argument here is the same channel the platform uses for -data
 		boolean splashSuppressed = splash ? false : appendNoSplash();
+		boolean cleaning = clean && appendArgument(CLEAN);
 		String target = workspace == null ? null : String.valueOf(pathOf(workspace));
 		JsonObject server = null;
 		if (target != null) {
@@ -416,6 +435,8 @@ public final class RestartTool implements IMcpTool {
 				.put("cleared", cleared) //$NON-NLS-1$
 				.put("discarded", discarded) //$NON-NLS-1$
 				.put("splashSuppressed", Boolean.valueOf(splashSuppressed)) //$NON-NLS-1$
+				.put("clean", Boolean.valueOf(cleaning)) //$NON-NLS-1$
+				.put("cleanReason", cleaning ? cleanReason(cleanExplicit) : null) //$NON-NLS-1$
 				.put("workspace", target == null ? workspaceLocation() : target) //$NON-NLS-1$
 				.put("previousWorkspace", workspaceLocation()) //$NON-NLS-1$
 				.put("workspaceChanged", Boolean.valueOf(workspace != null)) //$NON-NLS-1$

@@ -334,3 +334,11 @@ The frames themselves were fine.
 `Control.print` on GTK 3 (`org.eclipse.swt.widgets.Control`, the `else` branch of `print(GC)`) size-allocates the live top handle to satisfy `gtk_widget_draw`'s precondition and then draws it into the caller's cairo context; the on-screen copy is not invalidated afterwards, and under a window system with no compositor it shows whatever was left.
 `Screencast.paint` and the `Paintable` prints in `ScreenshotTools` queue `Control.redraw(0, 0, w, h, true)` after every print on GTK, which was verified to keep the root capture identical before, during and after a recording.
 Nothing filed upstream yet.
+
+## A hot bundle refresh leaves the registry cache stale, and the next start restores editors that throw
+
+Observed 2026-09-03 on 4.42 in the Xvfb test IDE: after `eclipse_install_bundle` replaced `org.eclipse.pde.core` in the live framework (refreshing 22 bundles, `org.eclipse.pde.ui` among them) and the IDE was then restarted normally, every editor the workbench restored from the previous session, a PDE manifest editor and a feature editor, failed to open or close with `InvalidRegistryObjectException: Invalid registry object`, while an editor opened fresh in the same session worked.
+Restarting with `-clean` made the same restored editors work.
+The extension registry cache written at shutdown evidently held objects from the refreshed contributor, and the restored editor references resolved their descriptors against it.
+`eclipse_restart` therefore adds `-clean` by default after a hot install or a substitution, and reports it; the startup costs a few seconds more and the registry and resolver caches are rebuilt.
+Nothing filed upstream yet.
