@@ -2435,6 +2435,7 @@ Changes the installation, not the workspace, and runs as a dry run unless `dryRu
 | `action` | string | `status` | `substitute`, `restore`, `status`, `cleanup` or `repair`. |
 | `project` | string | | Workspace project to pack, for `substitute`. |
 | `jar` | string | | A packed jar to act on instead. |
+| `bundle` | string | | For `restore`: put back only this bundle's line and leave other substitutions alone. |
 | `dryRun` | boolean | `true` | Shows the exact line before and after. |
 
 **This is the only way in for most of the SDK.**
@@ -2448,6 +2449,8 @@ Never delete a packed jar by hand.
 `action` `cleanup` does it and re-reads `bundles.info` first, because that file is rewritten at every start and by other sessions, so a jar that looks unreferenced can be the one the next start loads.
 
 The original line is recorded, so `action` `restore` needs nothing from the caller.
+It restores every recorded substitution of the installation, and the record is per installation, which several IDEs and sessions share: a restore meant for one bundle once undid another session's substitution of `org.eclipse.jface.text` in the same install.
+Pass `bundle` to put back one bundle's line and leave the rest in place.
 `action` `status` reports what is substituted right now, checked against `bundles.info` rather than believed from the record, including a substitution another session made, and under `referencingSubstitutedJars` every line that points at a packed jar even when nothing here recorded it, which is what stops somebody debugging an IDE that is not running what its `plugins` directory holds.
 
 **The version field is what makes it take effect.**

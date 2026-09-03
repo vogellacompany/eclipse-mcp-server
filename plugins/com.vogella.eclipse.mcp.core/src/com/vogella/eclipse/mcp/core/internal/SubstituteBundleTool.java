@@ -66,7 +66,8 @@ public final class SubstituteBundleTool implements IMcpTool {
 				{
 				  "type": "object",
 				  "properties": {
-				    "action":  {"type":"string","enum":["substitute","restore","status","cleanup","repair"],"default":"status","description":"'substitute' packs the project and points bundles.info at it, 'restore' puts the recorded original lines back, 'status' only reports, 'cleanup' deletes the packed jars that nothing references any more, 'repair' points a line whose jar is missing back at the installed one."},
+				    "action":  {"type":"string","enum":["substitute","restore","status","cleanup","repair"],"default":"status","description":"'substitute' packs the project and points bundles.info at it, 'restore' puts the recorded original lines back, all of them or only the one named by 'bundle', 'status' only reports, 'cleanup' deletes the packed jars that nothing references any more, 'repair' points a line whose jar is missing back at the installed one."},
+				    "bundle":  {"type":"string","description":"For restore: put back only this bundle's original line, by symbolic name, and leave every other recorded substitution in place. Without it restore undoes EVERY recorded substitution of this installation, including one another session made, since the record is per installation and an installation is shared."},
 				    "jar":     {"type":"string","description":"Absolute path of a jar that is already built, used instead of 'project'. Its Bundle-SymbolicName and Bundle-Version are read from its own manifest rather than guessed from the file name, which for a Maven build matches neither. The jar is copied, so rebuilding it afterwards does not silently change what this IDE runs."},
 				    "project": {"type":"string","description":"Plug-in project to pack, for substitute. Its output folder and the bin.includes of build.properties are what goes into the jar. CHECK WHICH CLONE IT IS: the answer reports packedFrom, because a workspace project can point at one clone of a repository while the change being measured lives in another, and then this packs a tree without it."},
 				    "dryRun":  {"type":"boolean","default":true,"description":"Report the line that would change, and change nothing."}
@@ -102,7 +103,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 		try {
 			McpToolResult result = switch (action) {
 			case "status" -> McpToolResult.of(status(configuration, bundlesInfo).toString()); //$NON-NLS-1$
-			case "restore" -> restore(configuration, bundlesInfo, args.getBoolean("dryRun", true)); //$NON-NLS-1$ //$NON-NLS-2$
+			case "restore" -> restore(configuration, bundlesInfo, args.getBoolean("dryRun", true), args.getString("bundle")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 			case "cleanup" -> cleanup(configuration, bundlesInfo, args.getBoolean("dryRun", true)); //$NON-NLS-1$ //$NON-NLS-2$
 			case "repair" -> repair(configuration, bundlesInfo, args.getBoolean("dryRun", true)); //$NON-NLS-1$ //$NON-NLS-2$
 			case "substitute" -> substitute(configuration, bundlesInfo, args, monitor);
@@ -280,11 +281,24 @@ public final class SubstituteBundleTool implements IMcpTool {
 		return null;
 	}
 
-	private static McpToolResult restore(Path configuration, Path bundlesInfo, boolean dryRun) throws IOException {
-		List<String[]> records = records(configuration);
-		if (records.isEmpty()) {
+	private static McpToolResult restore(Path configuration, Path bundlesInfo, boolean dryRun, String bundle)
+			throws IOException {
+		List<String[]> all = records(configuration);
+		if (all.isEmpty()) {
 			return McpToolResult.of(new JsonObject().put("restored", Integer.valueOf(0)) //$NON-NLS-1$
 					.put("note", "Nothing was substituted, so there is nothing to put back.").toString()); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		// the record is per installation, and an installation is shared between the
+		// IDEs and sessions started from it, so a restore of everything undoes what
+		// another session put in place; naming the bundle leaves the rest alone
+		List<String[]> records = new ArrayList<>();
+		List<String[]> kept = new ArrayList<>();
+		for (String[] record : all) {
+			(bundle == null || record[0].equals(bundle) ? records : kept).add(record);
+		}
+		if (records.isEmpty()) {
+			return McpToolResult.error("No substitution of '%s' is recorded; action status lists what is." //$NON-NLS-1$
+					.formatted(bundle));
 		}
 		List<String> lines = new ArrayList<>(Files.readAllLines(bundlesInfo, StandardCharsets.UTF_8));
 		JsonArray done = new JsonArray();
@@ -330,6 +344,9 @@ public final class SubstituteBundleTool implements IMcpTool {
 		if (!dryRun && done.size() > 0) {
 			Files.write(bundlesInfo, lines, StandardCharsets.UTF_8);
 			Files.deleteIfExists(configuration.resolve(RECORD));
+			for (String[] record : kept) {
+				record(configuration, record[0], record[1], record[2]);
+			}
 			// read the file back rather than trust what was just written: another
 			// session writes this file too, and a restore that looks clean while a
 			// line still points at a packed jar is how a deleted jar takes the IDE
