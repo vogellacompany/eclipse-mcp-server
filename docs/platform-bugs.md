@@ -342,3 +342,20 @@ Restarting with `-clean` made the same restored editors work.
 The extension registry cache written at shutdown evidently held objects from the refreshed contributor, and the restored editor references resolved their descriptors against it.
 `eclipse_restart` therefore adds `-clean` by default after a hot install or a substitution, and reports it; the startup costs a few seconds more and the registry and resolver caches are rebuilt.
 Nothing filed upstream yet.
+
+## A root capture into an image surface repeats the frame cairo read first
+
+Observed 2026-09-07 on GTK 3.24.52 under Xvfb at `GDK_SCALE=2`, reported by a session whose book suite came back with 43 of 44 captures showing the same picture.
+
+`GC.copyArea(Image, x, y)` sets the root window as the cairo source and paints it into the image's surface.
+Cairo keeps a snapshot of a source surface it has already read and invalidates it only when cairo itself draws on that surface.
+The screen is changed by everything except cairo, so the snapshot of the root window is never invalidated and every later copy returns the first frame, at the right size, the right zoom and the right area.
+
+It only appears when the destination is an image surface.
+`new Image(display, width, height)` allocates a server-side surface and the copy happens in the X server, which is always current; the `ImageData` constructor a scaled display needs allocates an image surface, which is what made this arrive together with the fix for those pixels.
+
+Measured with two shells, one moved and recoloured between two whole-display captures: without the invalidation the second capture is byte-identical to the first and differs from `import -window root` by RMSE 111; with `cairo_surface_flush` plus `cairo_surface_mark_dirty` on the root window's surface both the display capture and a shell capture at a non-zero origin are RMSE 0 against the X server.
+`DisplayScaling.refreshScreenSource` does that before every root read and `eclipse_screenshot` reports it as `screenSourceRefreshed`.
+
+Arguably cairo behaving as documented rather than a platform bug, but SWT offers no way to read the screen twice without hitting it.
+Nothing filed upstream yet.

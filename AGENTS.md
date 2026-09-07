@@ -560,6 +560,15 @@ Note `Shell.print` is not the same call: on X11 it grabs the root window's frame
 Off GTK none of this happens. SWT scales its own drawing there and `Image` sizes are in points, so a device sized canvas would be doubled twice; those platforms keep the behaviour they had, and `zoom` is derived from the pixels that came back rather than promised, so a platform that still loses them says so through `deviceZoom` and `belowDeviceZoom` instead of reporting 100 as if it were the truth.
 Unpainted canvas is magenta, never white, because white is what the unstyled widgets of a broken dark theme look like.
 
+**A root capture is answered from the copy cairo made the first time, and every later one repeated it.**
+`GC.copyArea` sets the root window as the cairo source, and cairo keeps a snapshot of a source it has read, invalidating it only when cairo itself draws on that source.
+The screen is changed by everything except cairo, so the snapshot is never invalidated.
+It only bites when the destination is an image surface, which is exactly what the fix above allocates on a scaled display, so it arrived with that fix rather than having always been there: a server-side surface copies inside the X server and is always current.
+`DisplayScaling.refreshScreenSource` flushes and marks the root surface dirty before every read and the answer carries `screenSourceRefreshed`.
+Measured against the X server: without it a whole-display capture is byte-identical to the previous one and off by RMSE 111, and a dialog capture at a non-zero origin by RMSE 156; with it both are RMSE 0.
+This is why a HiDPI regression test has to capture something at a NON-ZERO origin and has to capture TWICE with the screen changed in between.
+A shell at 0,0 captured once is correct either way, which is how the earlier verification passed while 43 of 44 captures in a peer's suite were the same picture.
+
 **`eclipse_get_widget_tree` reports three coordinate systems, and they are not interchangeable.**
 `bounds` is parent-relative and cannot be summed up the ancestor chain, because a Group offsets its children by its label.
 `boundsInShell` is measured from the shell's CLIENT area, which is what a shell capture shows.

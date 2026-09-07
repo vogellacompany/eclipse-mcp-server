@@ -35,6 +35,21 @@ class CaptureForegroundTest {
 	}
 
 	@Test
+	void theScreenshotDescriptionSaysAScreenReadCanRepeatAnEarlierFrame() {
+		IMcpTool screenshot = TestFixture.tool("eclipse_screenshot");
+		String description = screenshot.getDescription();
+
+		// cairo answers a root read from the copy it made the first time unless it
+		// is told otherwise, and every capture after the first was then the first
+		// one again, with nothing in the answer able to say so
+		assertTrue(description.contains("screenSourceRefreshed"), "got " + description);
+		assertTrue(description.contains("EARLIER FRAME"), "got " + description);
+		// the same reason the foreground case is a bug rather than a limitation:
+		// the picture is wrong and every measurable field of it is right
+		assertTrue(description.contains("the right size, the right zoom and the right area"), "got " + description);
+	}
+
+	@Test
 	void theVisibilityToolAsksForFocusRatherThanPromisingIt() {
 		IMcpTool visibility = TestFixture.tool("eclipse_set_ide_visibility");
 		String schema = visibility.getInputSchema();
