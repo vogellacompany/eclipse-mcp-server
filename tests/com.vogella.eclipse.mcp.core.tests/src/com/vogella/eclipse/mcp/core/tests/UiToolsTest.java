@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 import org.eclipse.compare.ISharedDocumentAdapter;
@@ -15,6 +16,7 @@ import org.eclipse.ui.IFileEditorInput;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.ui.internal.CompareTool;
 
@@ -155,6 +157,24 @@ class UiToolsTest {
 		// detaching is the one position that needs no target
 		assertRefused(TestFixture.call("eclipse_move_part", Map.of("part", "org.eclipse.ui.views.ProblemView", //
 				"position", "detached")), "no running workbench");
+	}
+
+	@Test
+	void launchShortcutIsSafeByDefaultAndValidatesItsArguments() throws Exception {
+		IMcpTool tool = TestFixture.tool("eclipse_run_launch_shortcut");
+		Map<String, Object> schema = TestFixture.parse(tool.getInputSchema());
+		@SuppressWarnings("unchecked")
+		Map<String, Object> properties = (Map<String, Object>) schema.get("properties");
+		@SuppressWarnings("unchecked")
+		Map<String, Object> dryRun = (Map<String, Object>) properties.get("dryRun");
+		assertTrue(Boolean.TRUE.equals(dryRun.get("default")), "launch shortcuts must not run by default");
+		assertTrue(properties.containsKey("maxResults"), "candidate lists must have a result limit");
+		assertRefused(TestFixture.call("eclipse_run_launch_shortcut", Map.of()), "elements");
+		fixture.createProject(PROJECT);
+		assertRefused(TestFixture.call("eclipse_run_launch_shortcut", Map.of("elements", List.of(PROJECT))),
+				"exactly one");
+		assertRefused(TestFixture.call("eclipse_run_launch_shortcut",
+				Map.of("elements", List.of(PROJECT), "shortcutId", "a", "mode", "profile")), "mode must be");
 	}
 
 	private static IFile write(IProject project, String name, String content) throws Exception {
