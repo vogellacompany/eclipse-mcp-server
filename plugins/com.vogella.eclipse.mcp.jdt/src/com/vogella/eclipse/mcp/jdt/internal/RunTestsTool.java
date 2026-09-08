@@ -31,6 +31,7 @@ import org.eclipse.jdt.core.IPackageFragmentRoot;
 import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaCore;
+import org.eclipse.jdt.internal.junit.launcher.TestKindRegistry;
 import org.eclipse.jdt.junit.JUnitCore;
 import org.eclipse.jdt.launching.IJavaLaunchConfigurationConstants;
 import org.eclipse.pde.launching.IPDELauncherConstants;
@@ -685,16 +686,24 @@ public final class RunTestsTool implements IMcpTool {
 	}
 
 	/**
-	 * Which JUnit the project is on, read from its own build path. JDT then supplies
-	 * the matching runner, so nothing here has to know about JUnit itself.
+	 * Which JUnit the project is on, asked of JDT rather than worked out here.
+	 * <p>
+	 * The kind has to be the one {@code JUnitLaunchConfigurationDelegate} would
+	 * pick, because that delegate rechecks it in {@code preLaunchCheck} and aborts
+	 * the launch when the two disagree. Since jdt.junit.core 3.14 the Jupiter kind
+	 * is split into junit5 and junit6, and a project on JUnit Platform 6 launched
+	 * as junit5 is refused with "Cannot find
+	 * 'org.junit.platform.commons.annotation.Testable' on project build path",
+	 * naming the one thing that is on the path. Reading the platform version here
+	 * would be a copy of that decision that can drift from it; calling the
+	 * registry cannot.
+	 * <p>
+	 * {@code TestKindRegistry} is x-friends to four JDT bundles, so this is a
+	 * discouraged access, taken deliberately: there is no public API for the
+	 * question, and a JDT rename fails this build rather than mispicking a runner
+	 * at launch time.
 	 */
-	private static String testKind(IJavaProject javaProject) throws CoreException {
-		if (javaProject.findType("org.junit.jupiter.api.Test") != null) { //$NON-NLS-1$
-			return "org.eclipse.jdt.junit.loader.junit5"; //$NON-NLS-1$
-		}
-		if (javaProject.findType("org.junit.Test") != null) { //$NON-NLS-1$
-			return "org.eclipse.jdt.junit.loader.junit4"; //$NON-NLS-1$
-		}
-		return "org.eclipse.jdt.junit.loader.junit3"; //$NON-NLS-1$
+	private static String testKind(IJavaProject javaProject) {
+		return TestKindRegistry.getContainerTestKindId(javaProject);
 	}
 }

@@ -368,6 +368,12 @@ It once reported the same four points for two projects that contributed to none 
 What is actually needed is `kind="java"` and `basedOn` on one element, which is far smaller to own than PDE's schema model.
 If a real case turns up that needs schema includes or inherited attributes, that is when this tradeoff is worth revisiting.
 
+**`eclipse_run_tests` asks JDT which JUnit kind to launch, and that is the third discouraged dependency.**
+The kind has to be the one `JUnitLaunchConfigurationDelegate` would pick, because the delegate rechecks it in `preLaunchCheck` and aborts when the two disagree.
+Since jdt.junit.core 3.14 the Jupiter kind is split into junit5 and junit6, and a project on JUnit Platform 6 launched as junit5 is refused with "Cannot find 'org.junit.platform.commons.annotation.Testable' on project build path", naming the one library that IS on the path.
+`TestKindRegistry.getContainerTestKindId` is x-friends to four JDT bundles, and calling it is still the smaller risk: the alternative is a copy of JDT's version reading that drifts from the delegate silently, and it would also have to reproduce the `@RunWith(JUnitPlatform)` case, the rule that `@Testable` does not count when the raw entry is the JUnit 3 or 4 container, and the `Engine-Version-junit-jupiter` attribute of the console-standalone jar.
+A rename in JDT fails this build; a drifted copy fails a user's test run.
+
 **`eclipse_import_project` is the second discouraged dependency, and it is why the tool is not in core.**
 `SmartImportJob` is `x-internal` in `org.eclipse.ui.ide`, with no friends list at all, so it stands on weaker ground than `CleanUpConstants` does.
 It was taken because the hand written walk for `.project` files it replaced could not import a Maven or Gradle module that has no `.project` yet, which is the case a client hits first on a repository nobody has opened here before, and no public entry point drives the configurators.
