@@ -14,7 +14,6 @@ import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.ui.IEditorPart;
-import org.eclipse.ui.IEditorReference;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
@@ -49,13 +48,7 @@ public final class KeyboardTools {
 				throw new IllegalStateException("There is no active editor. Give 'part' to name one."); //$NON-NLS-1$
 			}
 		} else {
-			editor = null;
-			for (IEditorReference reference : page.getEditorReferences()) {
-				if (partId.equals(reference.getId())) {
-					editor = reference.getEditor(true);
-					break;
-				}
-			}
+			editor = Parts.part(page, partId) instanceof IEditorPart named ? named : null;
 			if (editor == null) {
 				throw new IllegalStateException(
 						"No open editor has the id '%s'. eclipse_list_ui_targets lists the open parts.".formatted(partId)); //$NON-NLS-1$
@@ -87,7 +80,7 @@ public final class KeyboardTools {
 					  "type": "object",
 					  "properties": {
 					    "text": {"type":"string","description":"The text to insert at the caret. A current selection is replaced by it."},
-					    "part": {"type":"string","description":"Editor part id. Defaults to the active editor."}
+					    "part": {"type":"string","description":"Editor part id. Defaults to the active editor. Several open parts share one id, every Java editor above all; the active or a visible one is chosen, and a part's TITLE from eclipse_list_ui_targets names a particular one."}
 					  },
 					  "required": ["text"],
 					  "additionalProperties": false

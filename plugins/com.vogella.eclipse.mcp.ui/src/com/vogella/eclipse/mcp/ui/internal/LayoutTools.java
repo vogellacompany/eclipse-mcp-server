@@ -139,7 +139,7 @@ public final class LayoutTools {
 					{
 					  "type": "object",
 					  "properties": {
-					    "part":  {"type":"string","description":"Part id, from eclipse_list_ui_targets."},
+					    "part":  {"type":"string","description":"Part id, from eclipse_list_ui_targets. Several open parts share one id, every Java editor above all; the active or a visible one is chosen, and a part's TITLE from eclipse_list_ui_targets names a particular one."},
 					    "state": {"type":"string","enum":["maximized","minimized","restored","activated"],"description":"Omit to only activate. activated gives focus and brings the part forward; it is not a window state, so the answer reports focusGiven and 'state' stays the window state the part had."}
 					  },
 					  "required": ["part"],
@@ -164,13 +164,8 @@ public final class LayoutTools {
 			if (page == null) {
 				return new JsonObject().put("changed", Boolean.FALSE).put("reason", "There is no active page."); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 			}
-			IWorkbenchPartReference reference = null;
-			for (IWorkbenchPartReference candidate : ScreenshotTools.ListTargets.allReferences(page)) {
-				if (partId.equals(candidate.getId())) {
-					reference = candidate;
-					break;
-				}
-			}
+			Parts.Match match = Parts.find(page, partId);
+			IWorkbenchPartReference reference = match == null ? null : match.reference();
 			if (reference == null) {
 				return new JsonObject().put("changed", Boolean.FALSE) //$NON-NLS-1$
 						.put("reason", "No open part '%s'. Use eclipse_list_ui_targets.".formatted(partId)); //$NON-NLS-1$ //$NON-NLS-2$
@@ -178,8 +173,16 @@ public final class LayoutTools {
 			String previous = nameOf(page.getPartState(reference));
 			JsonObject result = new JsonObject().put("changed", Boolean.TRUE) //$NON-NLS-1$
 					.put("part", partId) //$NON-NLS-1$
+					// which of the parts under that id this acted on: it used to take
+					// the first and report the id back, so acting on the wrong editor
+					// was indistinguishable from acting on the right one
+					.put("partTitle", reference.getTitle()) //$NON-NLS-1$
 					.put("requested", state) //$NON-NLS-1$
 					.put("previousState", previous); //$NON-NLS-1$
+			String ambiguity = Parts.ambiguityNote(match);
+			if (ambiguity != null) {
+				result.put("sharedId", ambiguity); //$NON-NLS-1$
+			}
 			if ("activated".equals(state)) { //$NON-NLS-1$
 				// activating is not one of the three window states, so reporting only
 				// 'state' back reads as if the request had been ignored

@@ -24,7 +24,6 @@ import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.IEditorPart;
-import org.eclipse.ui.IEditorReference;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
@@ -70,15 +69,7 @@ public final class TextBoundsTools {
 				return Target.failed("There is no active editor. Give 'part' to name one."); //$NON-NLS-1$
 			}
 		} else {
-			IEditorPart active = page.getActiveEditor();
-			if (active != null && partId.equals(active.getSite().getId())) {
-				editor = active;
-			}
-			for (IEditorReference reference : page.getEditorReferences()) {
-				if (editor == null && partId.equals(reference.getId())) {
-					editor = reference.getEditor(true);
-				}
-			}
+			editor = Parts.part(page, partId) instanceof IEditorPart named ? named : null;
 			if (editor == null) {
 				return Target.failed("No open editor has the id '%s'. eclipse_list_ui_targets lists the open parts." //$NON-NLS-1$
 						.formatted(partId));
@@ -175,7 +166,7 @@ public final class TextBoundsTools {
 					{
 					  "type": "object",
 					  "properties": {
-					    "part":   {"type":"string","description":"Editor part id, e.g. org.eclipse.jdt.ui.CompilationUnitEditor. Defaults to the active editor."},
+					    "part":   {"type":"string","description":"Editor part id, e.g. org.eclipse.jdt.ui.CompilationUnitEditor. Defaults to the active editor. Several open parts share one id, every Java editor above all; the active or a visible one is chosen, and a part's TITLE from eclipse_list_ui_targets names a particular one."},
 					    "line":   {"type":"integer","minimum":1,"description":"1-based document line."},
 					    "column": {"type":"integer","minimum":1,"default":1,"description":"1-based column within the line."},
 					    "offset": {"type":"integer","minimum":0,"description":"Document offset, instead of line and column."},
@@ -251,7 +242,7 @@ public final class TextBoundsTools {
 					{
 					  "type": "object",
 					  "properties": {
-					    "part":          {"type":"string","description":"Editor part id. Defaults to the active editor."},
+					    "part":          {"type":"string","description":"Editor part id. Defaults to the active editor. Several open parts share one id, every Java editor above all; the active or a visible one is chosen, and a part's TITLE from eclipse_list_ui_targets names a particular one."},
 					    "typePattern":   {"type":"string","description":"Regular expression matched anywhere in the annotation type, e.g. error|warning or projection."},
 					    "fromLine":      {"type":"integer","minimum":1,"description":"Only annotations starting at or after this 1-based line."},
 					    "toLine":        {"type":"integer","minimum":1,"description":"Only annotations starting at or before this 1-based line."},

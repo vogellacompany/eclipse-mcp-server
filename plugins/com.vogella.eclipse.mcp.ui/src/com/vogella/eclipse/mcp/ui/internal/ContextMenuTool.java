@@ -42,7 +42,7 @@ public final class ContextMenuTool implements IMcpTool {
 				{
 				  "type": "object",
 				  "properties": {
-				    "part":       {"type":"string","description":"Part id whose context menu to report, e.g. org.eclipse.ui.navigator.ProjectExplorer. Defaults to the active part."},
+				    "part":       {"type":"string","description":"Part id whose context menu to report, e.g. org.eclipse.ui.navigator.ProjectExplorer. Defaults to the active part. Several open parts share one id, every Java editor above all; the active or a visible one is chosen, and a part's TITLE from eclipse_list_ui_targets names a particular one."},
 				    "path":       {"type":"string","description":"Report only this submenu, by label without its mnemonic, e.g. 'Team'. Nested submenus are separated by /, as in 'Team/Advanced'."},
 				    "maxDepth":   {"type":"integer","default":2,"minimum":1,"maximum":6,"description":"How many levels of submenu to open. Every level costs a Show event on each submenu, which is what populates it."},
 				    "maxResults": {"type":"integer","default":300,"minimum":1,"maximum":2000}

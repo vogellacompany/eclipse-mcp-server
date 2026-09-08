@@ -15,7 +15,6 @@ import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.swt.widgets.Widget;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchPart;
-import org.eclipse.ui.IWorkbenchPartReference;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.services.IEvaluationService;
@@ -137,12 +136,7 @@ public final class SelectionTools {
 		if (partId == null || partId.isBlank()) {
 			return page.getActivePart();
 		}
-		for (IWorkbenchPartReference reference : ScreenshotTools.ListTargets.allReferences(page)) {
-			if (partId.equals(reference.getId())) {
-				return reference.getPart(true);
-			}
-		}
-		return null;
+		return Parts.part(page, partId);
 	}
 
 	/** The selection as the handler framework sees it, plus the part it came from. */
@@ -220,7 +214,7 @@ public final class SelectionTools {
 					{
 					  "type": "object",
 					  "properties": {
-					    "part":     {"type":"string","description":"Part id whose selection to set, e.g. org.eclipse.jdt.ui.PackageExplorer. Defaults to the active part."},
+					    "part":     {"type":"string","description":"Part id whose selection to set, e.g. org.eclipse.jdt.ui.PackageExplorer. Defaults to the active part. Several open parts share one id, every Java editor above all; the active or a visible one is chosen, and a part's TITLE from eclipse_list_ui_targets names a particular one."},
 					    "elements": {"type":"array","items":{"type":"string"},"description":"What to select: workspace paths ('/org.eclipse.compare'), project names ('g'), or widget tree row paths ('0/0/1/r4'). A ROW PATH COMES FROM eclipse_get_widget_tree WITH includeRows TRUE, which is a different flag from includeItems: includeItems enumerates ToolItems and CTabItems and reports no tree rows at all, so a tree looks empty and the path has to be guessed. Guessing does not work, and a row path that names nothing is reported in unresolved rather than selected. An empty array clears the selection."},
 					    "reveal":   {"type":"boolean","default":true,"description":"Scroll the viewer to the selection."},
 					    "activate": {"type":"boolean","default":true,"description":"Activate the part first, so the selection reaches the handler evaluation context. Without it a command asked afterwards may still see the old active part's selection."}

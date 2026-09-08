@@ -569,6 +569,14 @@ Measured against the X server: without it a whole-display capture is byte-identi
 This is why a HiDPI regression test has to capture something at a NON-ZERO origin and has to capture TWICE with the screen changed in between.
 A shell at 0,0 captured once is correct either way, which is how the earlier verification passed while 43 of 44 captures in a peer's suite were the same picture.
 
+**A part id names a class of parts, not a part, and taking the first match was wrong in two directions.**
+Every Java editor is `org.eclipse.jdt.ui.CompilationUnitEditor`, so a workspace with eighteen open Java files has eighteen parts under that id and one of them is on screen.
+Six tools took the first reference with a matching id: the capture tools then tested visibility on it and refused a part that was visible and active, while `eclipse_set_part_state`, which tests nothing, acted on whichever editor happened to be first and reported success.
+Those are the same bug and the second is the worse one, because nothing in the answer said which part it had acted on.
+`Parts.find` resolves once for all of them: the active part, then a visible one, then the first, and the argument also takes a part's title, since that is the only field of `eclipse_list_ui_targets` that tells two parts under one id apart.
+The id is tried before the title so an existing caller keeps the answer it had, and `eclipse_set_part_state` now reports `partTitle` and `sharedId`.
+`eclipse_move_part` already did this for editors and is what the shape was taken from; do not add a seventh private lookup.
+
 **`eclipse_get_widget_tree` reports three coordinate systems, and they are not interchangeable.**
 `bounds` is parent-relative and cannot be summed up the ancestor chain, because a Group offsets its children by its label.
 `boundsInShell` is measured from the shell's CLIENT area, which is what a shell capture shows.

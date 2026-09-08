@@ -110,7 +110,7 @@ public final class ScreenshotTools {
 
 		@Override
 		public String getDescription() {
-			return "Lists what the UI tools can address: every open shell with its title, whether it is modal and its bounds, and every workbench part with its id, title and whether it is currently visible. With includeAvailableViews it also lists the views that are registered but not open, which is where eclipse_show_view gets its ids. Also the answer to 'which dialog is open right now', which nothing else here can tell you."; //$NON-NLS-1$
+			return "Lists what the UI tools can address: every open shell with its title, whether it is modal and its bounds, and every workbench part with its id, title and whether it is currently visible. A PART ID IS NOT UNIQUE: every Java editor carries the same one, so the title is what tells two parts under one id apart, and it is what the other tools take to name a particular one. With includeAvailableViews it also lists the views that are registered but not open, which is where eclipse_show_view gets its ids. Also the answer to 'which dialog is open right now', which nothing else here can tell you."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -217,7 +217,7 @@ public final class ScreenshotTools {
 					  "type": "object",
 					  "properties": {
 					    "target":     {"type":"string","enum":["part","shell","display"],"default":"part"},
-					    "part":       {"type":"string","description":"Part id, e.g. org.eclipse.ui.views.ProblemView. Use eclipse_list_ui_targets to find it."},
+					    "part":       {"type":"string","description":"Part id, e.g. org.eclipse.ui.views.ProblemView. Use eclipse_list_ui_targets to find it. Several open parts share one id, every Java editor above all; the active or a visible one is chosen, and a part's TITLE from eclipse_list_ui_targets names a particular one."},
 					    "shellTitle": {"type":"string","description":"Title of the shell to capture, or a substring. Ambiguous when several shells share a title, e.g. the empty title of the workbench and the content assist popup; use 'shell' then."},
 				    "shell":      {"type":"string","description":"Shell to capture, independent of title: 'popup' for the topmost untitled non-workbench shell (the content assist proposals), an index from eclipse_list_ui_targets ('1' or '#1'), or its bounds as printed ('151,334 402x255'). Wins over shellTitle."},
 					    "activate":   {"type":"boolean","default":false,"description":"Bring the part to the front first. This visibly rearranges the user's IDE, so it is off by default."},
@@ -400,9 +400,7 @@ public final class ScreenshotTools {
 			} else {
 				Control control = findPart(partId, activate);
 				if (control == null) {
-					return failure(
-							"No part '%s', or it is not visible. A part behind another tab is not rendered at all; pass activate to bring it forward." //$NON-NLS-1$
-									.formatted(partId));
+					return failure(noPartReason(partId));
 				}
 				if (includeToolbar) {
 					control = stackOf(control);
@@ -1062,19 +1060,26 @@ public final class ScreenshotTools {
 			return null;
 		}
 
+		/**
+		 * Why a part could not be captured, naming the parts that share the id when
+		 * several do: the one that is on screen is then addressable by its title.
+		 */
+		static String noPartReason(String partId) {
+			String reason = "No part '%s', or it is not visible. A part behind another tab is not rendered at all; pass activate to bring it forward." //$NON-NLS-1$
+					.formatted(partId);
+			IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+			IWorkbenchPage page = window == null ? null : window.getActivePage();
+			String ambiguity = Parts.ambiguityNote(Parts.find(page, partId));
+			return ambiguity == null ? reason : reason + " " + ambiguity; //$NON-NLS-1$
+		}
+
 		static Control findPart(String partId, boolean activate) {
 			IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
 			IWorkbenchPage page = window == null ? null : window.getActivePage();
 			if (page == null) {
 				return null;
 			}
-			IWorkbenchPartReference reference = null;
-			for (IWorkbenchPartReference candidate : ListTargets.allReferences(page)) {
-				if (partId.equals(candidate.getId())) {
-					reference = candidate;
-					break;
-				}
-			}
+			IWorkbenchPartReference reference = Parts.reference(page, partId);
 			if (reference == null) {
 				return null;
 			}
