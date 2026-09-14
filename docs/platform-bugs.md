@@ -297,19 +297,19 @@ By then the widget can have scrolled or shrunk, `JFaceTextUtil.modelLineToWidget
 Here it surfaced during shutdown, inside the nested event loop of `SaveableHelper.waitForBackgroundSaveJobs`, which widens the window between the capture and the callback.
 Four independent stack frames match the shipped source exactly (616, 705, 712, 868), and no `org.eclipse.jface.text` has ever been substituted in this installation, so it is not a local artifact.
 
-This is the same shape as the `Control.print` HiDPI problem below: an `ImageGcDrawer` callback runs later than its caller assumes.
 Nothing filed upstream yet; the session working in the platform text editors has the analysis.
 
-## `Control.print` on a HiDPI monitor doubles a composed capture, so `includeToolbar` is unreliable there
+## `GC.fillGradientRectangle` on GTK rewrites the target surface's device scale
 
-Observed 2026-08-29 on GTK3 at 200 % zoom: `eclipse_screenshot` with `includeToolbar` (the part stack, an e4 `CTabFolder`) renders the editor content at twice its size, so a highlight from `eclipse_get_text_bounds` `inPartStack` lands several lines off.
-A single top-level `Control.print` of one part is correct at any zoom, which is why a `part` capture (no `includeToolbar`) is pixel-exact and why `inPart` bounds enclose the text they name.
-Composing a capture from several prints, whether by printing the `CTabFolder` for its children or by printing each child into a sub-image and drawing it in, doubles: the print GC an `ImageGcDrawer` hands out already carries the monitor's 2x transform and the child print applies it again.
-Attempts to compose the stack (folder chrome plus per-child prints, with and without a translate) all reproduced the doubling and were reverted.
+Observed 2026-09-14 on GTK 3.24.52, Wayland, zoom 200, on stock SWT `3.135.100.v20260911-2129` as well as a locally built one: an `eclipse_screenshot` shell or `includeToolbar` capture in the Light theme painted every part stack at twice its size inside a correctly sized image, while the same capture in the Dark theme was right, and so was a `part` capture in either theme.
 
-For now `eclipse_screenshot` on a HiDPI monitor is trustworthy for `target: part` and `target: display`; a `part` capture already contains the whole `SourceViewer`, meaning the vertical ruler, the line numbers, the overview ruler, the squiggles and the caret, which is what a caller documenting editor drawing needs.
-`includeToolbar` and a `shell` capture keep the 2x limitation until the print path is understood.
-Nothing filed upstream yet.
+`GC.fillGradientRectangle` (`org.eclipse.swt.graphics.GC`, GTK, right after the colour setup) calls `cairo_surface_set_device_scale(cairo_get_target(cairo), deviceZoom / 100, ...)` and never restores it.
+On screen the surface already has that scale, so the write is a no-op.
+Into an image created with `new Image(display, w, h)`, whose surface has scale 1, it changes the surface for the rest of the paint, so a print that scaled the GC with a `Transform` was scaled twice from the first gradient on.
+The Light theme's `CTabRendering` draws gradients and the Dark one does not, which is the whole theme dependence; a bare `CTabFolder` with `setSelectionBackground(Color[], int[], true)` reproduces it outside the workbench.
+
+`DeviceScale.paint` prints into a surface that already carries the device scale (an image built from `ImageData`), so the write changes nothing.
+Fixed upstream by https://github.com/eclipse-platform/eclipse.platform.swt/pull/3589 (open), which restores the previous device scale; the workaround stays for every IDE released without it.
 
 ## `SmartImportJob` leaves auto-build switched off when an import fails
 

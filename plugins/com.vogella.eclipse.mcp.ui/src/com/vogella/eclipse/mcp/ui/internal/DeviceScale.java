@@ -26,11 +26,18 @@ import org.eclipse.swt.widgets.Display;
  * and that surface takes the real pixels.
  * <p>
  * A widget print goes through {@code gtk_widget_draw}, which paints in GTK's
- * logical coordinates whatever the target surface is, so a device sized canvas
- * alone leaves the picture at 1x in a corner. The cairo matrix is what GTK
- * honours: a canvas in device pixels plus a scale transform makes it rasterise
- * at the device resolution, glyphs included, which is measurably closer to the
- * screen than upscaling a 1x print afterwards.
+ * logical coordinates, so a 1:1 canvas of device size leaves the picture at 1x
+ * in a corner. The print is therefore painted into a surface that carries the
+ * device scale itself, the same kind a screen read uses, which makes GTK
+ * rasterise at the device resolution, glyphs included.
+ * <p>
+ * It has to be the surface and not a scale transform on a 1:1 canvas:
+ * {@code GC.fillGradientRectangle} on GTK sets the target surface's device
+ * scale to the device zoom and never restores it, so under a transform
+ * everything painted after the first gradient, which the Light theme's tabs
+ * draw, landed at twice the scale inside a correctly sized image. The
+ * transform is kept only for a zoom other than the device zoom, which that
+ * write would break anyway.
  * <p>
  * Off GTK this does nothing. SWT scales its own drawing on Windows and macOS
  * and {@code Image} sizes are in points there, so a device sized canvas would
@@ -77,6 +84,11 @@ public final class DeviceScale {
 		return GTK && zoom > 100;
 	}
 
+	/** Whether a paint at this zoom goes into a surface that carries the device scale. */
+	private static boolean onScaledSurface(int zoom) {
+		return inDevicePixels(zoom) && zoom == screenZoom();
+	}
+
 	/** An image to read the screen into that takes the pixels the screen holds. */
 	static Image screenTarget(Display display, int widthInPoints, int heightInPoints, int zoom) {
 		if (!inDevicePixels(zoom)) {
@@ -93,6 +105,16 @@ public final class DeviceScale {
 		if (!inDevicePixels(zoom)) {
 			return new Image(display, (gc, width, height) -> painting.paint(gc, width, height), widthInPoints,
 					heightInPoints);
+		}
+		if (onScaledSurface(zoom)) {
+			Image image = screenTarget(display, widthInPoints, heightInPoints, zoom);
+			GC gc = new GC(image);
+			try {
+				painting.paint(gc, widthInPoints, heightInPoints);
+			} finally {
+				gc.dispose();
+			}
+			return image;
 		}
 		Image image = new Image(display, pixels(widthInPoints, zoom), pixels(heightInPoints, zoom));
 		GC gc = new GC(image);
@@ -111,11 +133,14 @@ public final class DeviceScale {
 	/**
 	 * The pixels of an image from {@link #paint}.
 	 * <p>
-	 * A device sized canvas is a plain image, so SWT counts its own zoom as 100 and
-	 * asking for that is what returns the surface untouched; asking for the device
-	 * zoom would resample the picture it already holds.
+	 * A scaled surface is read at its own zoom, like a screen read. A device sized
+	 * 1:1 canvas is a plain image, so SWT counts its zoom as 100 and asking for that
+	 * returns the surface untouched; asking for the device zoom would resample it.
 	 */
 	static ImageData paintedData(Image image, int zoom) {
+		if (onScaledSurface(zoom)) {
+			return screenData(image, zoom);
+		}
 		return image.getImageData(inDevicePixels(zoom) ? 100 : zoom);
 	}
 
@@ -133,7 +158,8 @@ public final class DeviceScale {
 	 * one pixel of it per pixel of the target.
 	 */
 	static void drawPixels(GC gc, Image image, int xInPoints, int yInPoints, int zoom) {
-		if (!inDevicePixels(zoom)) {
+		// on a scaled surface both images share the device scale, so points are pixels one for one
+		if (!inDevicePixels(zoom) || onScaledSurface(zoom)) {
 			gc.drawImage(image, xInPoints, yInPoints);
 			return;
 		}
