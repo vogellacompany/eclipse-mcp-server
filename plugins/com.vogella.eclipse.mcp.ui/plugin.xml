@@ -43,6 +43,7 @@
       <tool class="com.vogella.eclipse.mcp.ui.internal.PerspectiveTools$Reset"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.MovePartTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.CompareTool"/>
+      <tool class="com.vogella.eclipse.mcp.ui.internal.LaunchShortcutTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.VisibilityTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ModelVisibilityTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.EditorTools$ListEditors"/>
