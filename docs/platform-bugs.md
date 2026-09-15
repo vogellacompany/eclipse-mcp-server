@@ -342,3 +342,12 @@ Restarting with `-clean` made the same restored editors work.
 The extension registry cache written at shutdown evidently held objects from the refreshed contributor, and the restored editor references resolved their descriptors against it.
 `eclipse_restart` therefore adds `-clean` by default after a hot install or a substitution, and reports it; the startup costs a few seconds more and the registry and resolver caches are rebuilt.
 Nothing filed upstream yet.
+
+## `Display.post` of a mouse button does nothing on GTK 3
+
+Observed 2026-09-15 on GTK 3.24 under Xvfb with `GDK_BACKEND=x11`, SWT `3.135.100.v20260911-2129`: `eclipse_click` moved the pointer onto a `CTabItem` through `Display.post(MouseMove)`, read it back at the right place over the right `CTabFolder`, and posted `MouseDown` and `MouseUp`, both returning true; neither a left click nor a right click changed anything on screen.
+An XTest button event from outside the IDE at the same point selected the tab.
+
+`Display.post` (`org.eclipse.swt.widgets.Display`, GTK, `case SWT.MouseDown`) builds a `GdkEventButton` with `send_event = 1` for the window under the pointer and hands it to `gdk_event_put`, and GTK does not deliver it to the widget; `MouseMove` works because it warps through `setCursorLocation` instead.
+`XTestInput` sends the button through libXtst with the FFM API and keeps `Display.post` for the move and for other window systems.
+Nothing filed upstream yet.

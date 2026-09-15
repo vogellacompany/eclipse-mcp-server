@@ -157,6 +157,21 @@ class UiToolsTest {
 				"position", "detached")), "no running workbench");
 	}
 
+	@Test
+	void clickingChecksItsArgumentsBeforeTheUiThread() throws Exception {
+		assertRefused(TestFixture.call("eclipse_click", Map.of("button", "fourth")), "Unknown button");
+		assertRefused(TestFixture.call("eclipse_click", Map.of("displayX", Integer.valueOf(10))),
+				"both 'displayX' and 'displayY'");
+		assertRefused(TestFixture.call("eclipse_click", Map.of("displayX", Integer.valueOf(10), "displayY",
+				Integer.valueOf(10), "path", "0/1")), "not both");
+	}
+
+	@Test
+	void clickingRefusesWithoutAWorkbench() throws Exception {
+		assertRefused(TestFixture.call("eclipse_click", Map.of("path", "0", "button", "right")),
+				"no running workbench");
+	}
+
 	private static IFile write(IProject project, String name, String content) throws Exception {
 		IFile file = project.getFile(name);
 		file.create(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)), true,

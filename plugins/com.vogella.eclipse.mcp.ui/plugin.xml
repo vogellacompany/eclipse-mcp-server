@@ -10,6 +10,7 @@
       <tool class="com.vogella.eclipse.mcp.ui.internal.WidgetTools$InspectWidget"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.WidgetTools$SelectTab"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.WidgetTools$ExpandRow"/>
+      <tool class="com.vogella.eclipse.mcp.ui.internal.WidgetTools$Click"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.WaitUntilSettledTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.PauseTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ApplyCssTool"/>

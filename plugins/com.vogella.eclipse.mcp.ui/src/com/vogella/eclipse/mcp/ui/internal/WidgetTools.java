@@ -9,10 +9,12 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Widget;
 import org.eclipse.ui.IWorkbenchPage;
@@ -690,6 +692,179 @@ public final class WidgetTools {
 					.put("listenersNotified", Boolean.valueOf(notified)) //$NON-NLS-1$
 					.put("note", //$NON-NLS-1$
 							"The page is rendered now, so eclipse_screenshot and eclipse_get_widget_tree report it with real bounds. Selecting another tab hides it again the same way."); //$NON-NLS-1$
+		}
+	}
+
+	/** Moves the pointer onto a widget or a screen point and posts a real button press and release. */
+	public static final class Click implements IMcpTool {
+
+		@Override
+		public String getName() {
+			return "eclipse_click"; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getDescription() {
+			return "Clicks a widget with a real mouse button: moves the pointer onto it and sends a press and a release through the X server's XTest extension on GTK, or Display.post elsewhere, so the event goes through the window system and SWT's own dispatch exactly like a person's click, including a right click opening a context menu through Control.showMenu. CHANGES WHAT THE IDE DOES, which is whatever that click does, and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path, including item paths such as a CTabItem (0/i2) and row paths (0/r3); the click lands on its centre, or at x and y inside it. displayX and displayY click an absolute screen point instead. Before pressing, the pointer is read back: when it did not arrive, or the control under it is not the addressed widget, nothing is pressed and the answer names what is there, so a covering window or popup is never clicked by mistake. The press is dispatched after this call returns, so verify the effect with eclipse_screenshot or eclipse_list_ui_targets. It works on an X11 display without a compositor, such as Xvfb. It refuses on native Wayland, which ignores pointer warps, and under XWayland on a compositing desktop such as GNOME, where the pointer moves but the compositor keeps the IDE window from being under it. No double click and no modifier keys."; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getInputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "part":           {"type":"string","description":"Part id the path is rooted in. Use eclipse_list_ui_targets."},
+					    "shellTitle":     {"type":"string","description":"Shell to root the path in, by title substring; omit both for the active shell."},
+					    "shell":          {"type":"string","description":"Shell independent of title: 'popup', an index from eclipse_list_ui_targets, or its bounds. Wins over shellTitle."},
+					    "includeToolbar": {"type":"boolean","default":false,"description":"Root the path in the surrounding part stack, where a view's toolbar and its tabs are."},
+					    "path":           {"type":"string","description":"Widget path from eclipse_get_widget_tree, such as 0/1 or 0/i2. Omit to click the root itself."},
+					    "x":              {"type":"integer","minimum":0,"description":"Horizontal offset inside the widget. Defaults to its centre."},
+					    "y":              {"type":"integer","minimum":0,"description":"Vertical offset inside the widget. Defaults to its centre."},
+					    "displayX":       {"type":"integer","description":"Absolute screen x, as boundsInDisplay reports it. Use with displayY instead of a widget."},
+					    "displayY":       {"type":"integer","description":"Absolute screen y. Use with displayX instead of a widget."},
+					    "button":         {"type":"string","enum":["left","middle","right"],"default":"left"}
+					  },
+					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
+			ToolArguments args = ToolArguments.of(arguments);
+			int button = switch (args.getString("button", "left").toLowerCase(Locale.ROOT)) { //$NON-NLS-1$ //$NON-NLS-2$
+			case "left" -> 1; //$NON-NLS-1$
+			case "middle" -> 2; //$NON-NLS-1$
+			case "right" -> 3; //$NON-NLS-1$
+			default -> 0;
+			};
+			if (button == 0) {
+				return McpToolResult.error("Unknown button '%s'; use left, middle or right.".formatted(args.getString("button"))); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+			String partId = args.getString("part"); //$NON-NLS-1$
+			String shellSpec = args.getString("shell") != null ? args.getString("shell") : args.getString("shellTitle"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			String path = args.getString("path"); //$NON-NLS-1$
+			boolean absolute = args.has("displayX") || args.has("displayY"); //$NON-NLS-1$ //$NON-NLS-2$
+			if (absolute) {
+				if (!args.has("displayX") || !args.has("displayY")) { //$NON-NLS-1$ //$NON-NLS-2$
+					return McpToolResult.error("Give both 'displayX' and 'displayY'."); //$NON-NLS-1$
+				}
+				if (partId != null || shellSpec != null || path != null || args.has("x") || args.has("y")) { //$NON-NLS-1$ //$NON-NLS-2$
+					return McpToolResult.error(
+							"Give either a widget (part, shell, path, x, y) or displayX and displayY, not both."); //$NON-NLS-1$
+				}
+			}
+			Integer offsetX = args.has("x") ? Integer.valueOf(args.getInt("x", 0, 0, 100_000)) : null; //$NON-NLS-1$ //$NON-NLS-2$
+			Integer offsetY = args.has("y") ? Integer.valueOf(args.getInt("y", 0, 0, 100_000)) : null; //$NON-NLS-1$ //$NON-NLS-2$
+			int displayX = args.getInt("displayX", 0, -100_000, 100_000); //$NON-NLS-1$
+			int displayY = args.getInt("displayY", 0, -100_000, 100_000); //$NON-NLS-1$
+			boolean includeToolbar = args.getBoolean("includeToolbar", false); //$NON-NLS-1$
+			return UiThread.call(10, () -> {
+				Display display = PlatformUI.getWorkbench().getDisplay();
+				Control owner = null;
+				JsonObject result = new JsonObject();
+				org.eclipse.swt.graphics.Point point;
+				if (absolute) {
+					point = new org.eclipse.swt.graphics.Point(displayX, displayY);
+				} else {
+					Control root = rootOf(partId, shellSpec, includeToolbar);
+					if (root == null) {
+						return refusal("No such part or shell, or the part is not open. Use eclipse_list_ui_targets."); //$NON-NLS-1$
+					}
+					Widget target = resolve(root, path);
+					if (target == null) {
+						return refusal("The path '%s' does not resolve under this root.".formatted(path)); //$NON-NLS-1$
+					}
+					owner = target instanceof Control control ? control : parentOf(target);
+					Rectangle own = target instanceof Control control
+							? new Rectangle(0, 0, control.getSize().x, control.getSize().y)
+							: rectangleOf(target);
+					if (owner == null || own == null) {
+						return refusal("A %s has no bounds to click.".formatted(target.getClass().getSimpleName())); //$NON-NLS-1$
+					}
+					if (!owner.isVisible() || own.width <= 0 || own.height <= 0) {
+						return refusal("The %s is not showing, so there is nothing on screen to click." //$NON-NLS-1$
+								.formatted(target.getClass().getSimpleName()));
+					}
+					Rectangle onScreen = display.map(owner, null, own);
+					int dx = offsetX == null ? own.width / 2 : offsetX.intValue();
+					int dy = offsetY == null ? own.height / 2 : offsetY.intValue();
+					if (dx >= own.width || dy >= own.height) {
+						return refusal("The offset %d,%d lies outside the widget, which is %dx%d." //$NON-NLS-1$
+								.formatted(Integer.valueOf(dx), Integer.valueOf(dy), Integer.valueOf(own.width),
+										Integer.valueOf(own.height)));
+					}
+					point = new org.eclipse.swt.graphics.Point(onScreen.x + dx, onScreen.y + dy);
+					result.put("target", target.getClass().getSimpleName()) //$NON-NLS-1$
+							.put("boundsInDisplay", describe(onScreen)); //$NON-NLS-1$
+				}
+				org.eclipse.swt.graphics.Point previous = display.getCursorLocation();
+				result.put("point", point.x + "," + point.y) //$NON-NLS-1$ //$NON-NLS-2$
+						.put("previousPointer", previous.x + "," + previous.y); //$NON-NLS-1$ //$NON-NLS-2$
+				Event move = new Event();
+				move.type = SWT.MouseMove;
+				move.x = point.x;
+				move.y = point.y;
+				if (!display.post(move)) {
+					return result.put("clicked", Boolean.FALSE) //$NON-NLS-1$
+							.put("reason", "Display.post refused to move the pointer, which is what GTK4 does with every posted event."); //$NON-NLS-1$ //$NON-NLS-2$
+				}
+				// the read back is a round trip to the window server, so it sees the warp
+				org.eclipse.swt.graphics.Point arrived = display.getCursorLocation();
+				Control under = display.getCursorControl();
+				result.put("pointer", arrived.x + "," + arrived.y) //$NON-NLS-1$ //$NON-NLS-2$
+						.put("controlUnderPointer", under == null ? null : under.getClass().getSimpleName()); //$NON-NLS-1$
+				if (Math.abs(arrived.x - point.x) > 1 || Math.abs(arrived.y - point.y) > 1) {
+					return result.put("clicked", Boolean.FALSE) //$NON-NLS-1$
+							.put("reason", "The pointer did not arrive, so nothing was pressed. Native Wayland ignores pointer warps; clicking needs the IDE on an X11 display without a compositor, such as Xvfb."); //$NON-NLS-1$ //$NON-NLS-2$
+				}
+				if (under == null) {
+					return result.put("clicked", Boolean.FALSE) //$NON-NLS-1$
+							.put("reason", "The point is not over a window of this IDE, so nothing was pressed: another application covers it, the IDE is not on screen, or a compositing desktop running the IDE under XWayland keeps the pointer from reaching it."); //$NON-NLS-1$ //$NON-NLS-2$
+				}
+				if (owner != null && !isInside(under, owner)) {
+					return result.put("clicked", Boolean.FALSE) //$NON-NLS-1$
+							.put("reason", "A %s covers the widget at that point, so nothing was pressed. Close whatever is on top, or address that control instead." //$NON-NLS-1$
+									.formatted(under.getClass().getSimpleName()));
+				}
+				String failure;
+				if (XTestInput.unavailableReason() == null) {
+					result.put("method", "xtest"); //$NON-NLS-1$ //$NON-NLS-2$
+					failure = XTestInput.click(button);
+				} else {
+					result.put("method", "displayPost"); //$NON-NLS-1$ //$NON-NLS-2$
+					failure = post(display, SWT.MouseDown, button) && post(display, SWT.MouseUp, button) ? null
+							: "Display.post refused the button event."; //$NON-NLS-1$
+				}
+				result.put("clicked", Boolean.valueOf(failure == null)) //$NON-NLS-1$
+						.put("button", button == 1 ? "left" : button == 2 ? "middle" : "right"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+				if (failure != null) {
+					result.put("reason", failure); //$NON-NLS-1$
+				} else {
+					result.put("note", "The click is dispatched once this call returns. Verify what it did with eclipse_screenshot or eclipse_list_ui_targets."); //$NON-NLS-1$ //$NON-NLS-2$
+				}
+				return result;
+			});
+		}
+
+		private static boolean post(Display display, int type, int button) {
+			Event event = new Event();
+			event.type = type;
+			event.button = button;
+			return display.post(event);
+		}
+
+		private static boolean isInside(Control control, Control ancestor) {
+			for (Control current = control; current != null; current = current.getParent()) {
+				if (current == ancestor) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		private static JsonObject refusal(String reason) {
+			return new JsonObject().put("clicked", Boolean.FALSE).put("reason", reason); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 	}
 
