@@ -27,7 +27,7 @@ There is no faster partial build worth using: `mvn verify -pl` on a single bundl
 
 ```
 plugins/com.vogella.eclipse.mcp.core     tool API, registry, extension point, workspace tools
-plugins/com.vogella.eclipse.mcp.server   MCP protocol, embedded Jetty, bearer token
+plugins/com.vogella.eclipse.mcp.server   MCP protocol, embedded Jetty, bearer token, startup component
 plugins/com.vogella.eclipse.mcp.jdt      Java model tools, declaration sweep and registry index
 plugins/com.vogella.eclipse.mcp.ui       editor, view, perspective and layout tools, compare, screenshots, preference page, startup hook
 plugins/com.vogella.eclipse.mcp.pde      PDE tools
@@ -49,6 +49,13 @@ No reference to the MCP SDK, to Jetty or to any UI bundle.
 The bundle is meant to stay a candidate for contribution to the Eclipse Platform, and the split exists only for that reason.
 It also has no JSON library, which is why it carries the small reader and writer in `com.vogella.eclipse.mcp.core.json`.
 When a core tool needs something to happen in the UI, it goes through a hook the UI side registers, the way `eclipse_clear_log` empties the Error Log view through `LogClearedHandlers`: core declares the interface, `McpUiPlugin.start` registers the implementation, and the handler's answer is folded into the tool's result. A failing handler must never turn a completed operation into a failed call.
+
+**The server starts itself through a declarative service, not through the IDE's startup extension point.**
+`McpServerComponent` is an immediate DS component that publishes `McpServerService` and reconciles the preferences, so an RCP application that has no `org.eclipse.ui.startup` runs the same path the IDE does.
+That is why the bundle requires the `osgi.component` extender: an SCR-less framework then refuses to resolve it, which is loud, rather than resolving a bundle whose server never starts, which is silent.
+`OSGI-INF/*.xml` and that requirement are generated from the annotations, by `tycho-ds-plugin` in the build and by PDE in the workspace, and neither is committed; `McpServerComponentTest` fails if the descriptor stops being packaged.
+The `@Reference` to `IExtensionRegistry` is never read and is not dead code: the tool list is built once when the server starts, so a component activating before the registry exists would serve a short list for the rest of the session.
+Reconciling lives in `McpServerLifecycle` in the server bundle so that the component and the preference page share one path, under a scheduling rule, since two reconciliations can otherwise stop what the other just started.
 
 **Most tools are read-only, and the exceptions are deliberate.**
 `eclipse_organize_imports` and `eclipse_format` modify the file they are given, `eclipse_write_file` creates and replaces files, `eclipse_set_target_platform` replaces what the workspace compiles against, `eclipse_build` runs builders, `eclipse_get_problems` triggers a build when auto-build is off, `eclipse_run_workbench_command` does whatever the named command's handler does, `eclipse_manage_window` opens and closes windows, `eclipse_log_status` writes into the Error Log, `eclipse_install_bundle` installs or replaces a bundle in the running framework or copies a jar into dropins, `eclipse_checkout` and `eclipse_fetch_pull_request` change the working tree through EGit, the p2 tools `eclipse_install` and `eclipse_uninstall` change the installed software itself, and `eclipse_hot_code_replace` redefines classes inside the running JVM.

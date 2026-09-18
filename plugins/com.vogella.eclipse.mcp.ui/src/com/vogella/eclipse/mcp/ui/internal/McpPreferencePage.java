@@ -33,6 +33,7 @@ import org.eclipse.ui.PlatformUI;
 import com.vogella.eclipse.mcp.server.McpEndpoint;
 import com.vogella.eclipse.mcp.server.McpPreferences;
 import com.vogella.eclipse.mcp.server.McpServerException;
+import com.vogella.eclipse.mcp.server.McpServerLifecycle;
 import com.vogella.eclipse.mcp.server.McpServerService;
 
 /**
@@ -176,7 +177,7 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 	public boolean performOk() {
 		boolean result = super.performOk();
 		boolean enabled = McpPreferences.isEnabled();
-		McpServerJob.reconcile().addJobChangeListener(new JobChangeAdapter() {
+		McpServerLifecycle.reconcile().addJobChangeListener(new JobChangeAdapter() {
 			@Override
 			public void done(IJobChangeEvent event) {
 				refreshLater();

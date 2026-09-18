@@ -3,7 +3,8 @@ package com.vogella.eclipse.mcp.ui.internal;
 import org.eclipse.ui.IStartup;
 
 /**
- * Starts the server on IDE startup when the user enabled it.
+ * The IDE side of startup. The server itself is started by the declarative service of
+ * the server bundle, which an application without this extension point also has.
  */
 public class McpStartup implements IStartup {
 
@@ -15,6 +16,5 @@ public class McpStartup implements IStartup {
 		// every startup, not only when the preference changes: a p2 update rewrites
 		// config.ini and would otherwise drop the setting without saying so
 		SplashBranding.reconcile();
-		McpServerJob.reconcile();
 	}
 }

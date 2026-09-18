@@ -5,7 +5,6 @@ Bundle-SymbolicName: com.vogella.eclipse.mcp.server;singleton:=true
 Bundle-Version: 0.2.0.qualifier
 Bundle-Vendor: vogella GmbH
 Bundle-RequiredExecutionEnvironment: JavaSE-25
-Bundle-Activator: com.vogella.eclipse.mcp.server.internal.McpServerActivator
 Bundle-ActivationPolicy: lazy
 Automatic-Module-Name: com.vogella.eclipse.mcp.server
 Require-Bundle: org.eclipse.core.runtime;bundle-version="3.31.0",
@@ -24,3 +23,4 @@ Import-Package: io.modelcontextprotocol.json;version="[2.0,3)",
  org.eclipse.jetty.util.thread;version="[12.1.12,13)",
  org.osgi.framework;version="[1.10,2)"
 Export-Package: com.vogella.eclipse.mcp.server
+Service-Component: OSGI-INF/com.vogella.eclipse.mcp.server.internal.McpServerComponent.xml

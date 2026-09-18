@@ -79,6 +79,22 @@ The same preference page shows the endpoint once the server is listening: the UR
 When the port is already in use the server does not fall back to another one, it stays down and the page says why, so the URL never changes behind a client's back.
 That it is listening, and on which port, is also written to the Error Log view.
 
+## In an RCP application
+
+The server bundle starts itself through an OSGi declarative service, so an Eclipse RCP application gets a server from the same preference, without the IDE's `org.eclipse.ui.startup` extension point.
+It needs `org.apache.felix.scr` in the product, which the `org.eclipse.rcp` feature provides, and a workspace, because `com.vogella.eclipse.mcp.core` requires `org.eclipse.core.resources`.
+
+Install `com.vogella.eclipse.mcp.core`, `com.vogella.eclipse.mcp.server` and the third party bundles the feature lists.
+`com.vogella.eclipse.mcp.ui` additionally needs the 3.x compatibility layer, `org.eclipse.ui`, `org.eclipse.ui.ide` and `org.eclipse.compare`, and it is what brings the preference page, the screenshots, the widget tree and the workbench tools.
+The `jdt`, `pde`, `debug`, `git` and `p2` bundles need those stacks in the product and can simply be left out: tools are contributed through an extension point, so a bundle that is not installed only removes its own tools.
+
+Without the ui bundle there is no preference page, so switch the server on through the product's `plugin_customization.ini`:
+
+```
+com.vogella.eclipse.mcp.server/enabled=true
+com.vogella.eclipse.mcp.server/port=8642
+```
+
 ## Connecting a client
 
 On startup the server writes a discovery file so that no value has to be copied by hand:
