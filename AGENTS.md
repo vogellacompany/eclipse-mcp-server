@@ -290,10 +290,11 @@ It also defaults to `dryRun`, and requires an explicit selection, so that no cal
 **`IBundleProjectDescription.apply()` does not touch `.classpath`.**
 It writes the manifest header and nothing else, so `eclipse_set_bree` points the JRE container at the new environment itself with `JavaRuntime.newJREContainerPath`.
 This was assumed to be automatic and the test caught it; do not remove `setJreContainer` on the belief that PDE reconciles the project.
+The container is checked on its own, not only when the header changes, so a project whose header matches while `.classpath` still names an older environment, or no JRE container at all, is repaired rather than reported as up to date.
 
-**Only compliance, source and target are written, though the environment offers more.**
-`IExecutionEnvironment.getComplianceOptions()` returns further options whose values do not round-trip through `IJavaProject.getOption`, so comparing all of them meant a project could never be seen as up to date and every run reported a change.
-Write and compare exactly `COMPLIANCE_KEYS`.
+**Every option the environment dictates is written, and only compliance, source and target are compared.**
+Writing all of `IExecutionEnvironment.getComplianceOptions()`, `release` included, is what PDE's `ClasspathComputer.setComplianceOptions` does when the manifest editor changes the BREE.
+Some of those values do not round-trip through `IJavaProject.getOption`, so comparing all of them means a project is never seen as up to date and every run reports a change; compare exactly `COMPLIANCE_KEYS`.
 
 **`com.vogella.eclipse.mcp.pde` needs `Bundle-ActivationPolicy: lazy`.**
 It looks up `IBundleProjectService` from its own `BundleContext`, which is null while the bundle is merely resolved.

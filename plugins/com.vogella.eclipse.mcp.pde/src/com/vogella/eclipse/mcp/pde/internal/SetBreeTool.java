@@ -41,7 +41,7 @@ public final class SetBreeTool implements IMcpTool {
 
 	private static final String PLUGIN_NATURE = "org.eclipse.pde.PluginNature"; //$NON-NLS-1$
 
-	/** The compiler options an execution environment dictates. */
+	/** The compiler options compared to decide whether a project is up to date. */
 	private static final List<String> COMPLIANCE_KEYS = List.of(JavaCore.COMPILER_COMPLIANCE,
 			JavaCore.COMPILER_SOURCE, JavaCore.COMPILER_CODEGEN_TARGET_PLATFORM);
 
@@ -52,7 +52,7 @@ public final class SetBreeTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Sets the Bundle-RequiredExecutionEnvironment of plug-in projects and the JDT compiler compliance that has to match it, in one operation. MODIFIES THE WORKSPACE: it rewrites META-INF/MANIFEST.MF, and PDE reconciles .classpath so that the JRE container follows the new environment. Runs as a dry run unless dryRun is set to false. Setting the BREE without the compiler settings leaves a project whose manifest and compiler disagree, which is why the two are done together."; //$NON-NLS-1$
+		return "Sets the Bundle-RequiredExecutionEnvironment of plug-in projects and the JDT compiler compliance that has to match it, in one operation. MODIFIES THE WORKSPACE: it rewrites META-INF/MANIFEST.MF, points the JRE container in .classpath at the environment (adding one if there is none), and writes every compiler option the environment dictates, including release, as the PDE manifest editor does. A project whose header already matches but whose JRE container or compiler settings do not is repaired too. Runs as a dry run unless dryRun is set to false. Setting the BREE without the compiler settings leaves a project whose manifest and compiler disagree, which is why the two are done together."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -65,7 +65,7 @@ public final class SetBreeTool implements IMcpTool {
 				    "projects":         {"type":"array","items":{"type":"string"},"description":"Plug-in project names to act on."},
 				    "namePattern":      {"type":"string","description":"Glob over project names, '*' and '?' allowed, case insensitive."},
 				    "currentBree":      {"type":"string","description":"Only act on projects currently declaring this environment. Use it to move everything off one version."},
-				    "updateCompliance": {"type":"boolean","default":true,"description":"Also set the project's compiler compliance, source and target to the ones the environment dictates."},
+				    "updateCompliance": {"type":"boolean","default":true,"description":"Also set the compiler options the environment dictates: compliance, source, target, release and the related problem severities."},
 				    "dryRun":           {"type":"boolean","default":true,"description":"Report what would change without writing anything."},
 				    "maxResults":       {"type":"integer","default":200,"minimum":1,"maximum":2000}
 				  },
@@ -206,40 +206,42 @@ public final class SetBreeTool implements IMcpTool {
 		}
 
 		IJavaProject javaProject = JavaCore.create(project);
+		String previousContainer = jreContainer(javaProject);
 		JsonObject entry = new JsonObject().put("name", project.getName()) //$NON-NLS-1$
 				.put("previousBree", previousBree) //$NON-NLS-1$
 				.put("bree", environment.getId()) //$NON-NLS-1$
-				.put("previousJreContainer", jreContainer(javaProject)); //$NON-NLS-1$
+				.put("previousJreContainer", previousContainer); //$NON-NLS-1$
 
 		Map<String, String> complianceBefore = optionsOf(javaProject);
 		Map<String, String> complianceAfter = environment.getComplianceOptions();
+		String wantedContainer = JavaRuntime.newJREContainerPath(environment).toString();
 		boolean breeDiffers = !environment.getId().equals(previousBree);
+		boolean containerDiffers = javaProject.exists() && !wantedContainer.equals(previousContainer);
 		boolean complianceDiffers = updateCompliance && complianceAfter != null
 				&& !agrees(complianceBefore, complianceAfter);
 
-		if (!breeDiffers && !complianceDiffers) {
-			return skip(entry, "It already declares %s and its compiler settings agree.".formatted(environment.getId())); //$NON-NLS-1$
+		if (!breeDiffers && !containerDiffers && !complianceDiffers) {
+			return skip(entry, "It already declares %s, its JRE container follows it and its compiler settings agree." //$NON-NLS-1$
+					.formatted(environment.getId()));
 		}
 		entry.put("compliance", complianceReport(complianceBefore, complianceAfter, updateCompliance)); //$NON-NLS-1$
 
 		if (dryRun) {
-			return done(entry);
+			return done(entry.put("jreContainer", javaProject.exists() ? wantedContainer : null)); //$NON-NLS-1$
 		}
 		try {
 			if (breeDiffers) {
 				description.setExecutionEnvironments(new String[] { environment.getId() });
 				description.apply(monitor);
-				// apply() writes the manifest header but leaves .classpath alone, so the JRE
-				// container has to be pointed at the new environment here
+			}
+			// apply() writes the manifest header but leaves .classpath alone
+			if (containerDiffers) {
 				setJreContainer(javaProject, environment, monitor);
 			}
 			if (updateCompliance && complianceAfter != null) {
-				for (String key : COMPLIANCE_KEYS) {
-					String wanted = complianceAfter.get(key);
-					if (wanted != null) {
-						javaProject.setOption(key, wanted);
-					}
-				}
+				Map<String, String> options = javaProject.getOptions(false);
+				options.putAll(complianceAfter);
+				javaProject.setOptions(options);
 			}
 		} catch (CoreException e) {
 			return skip(entry, "Eclipse refused: " + e.getMessage()); //$NON-NLS-1$
@@ -247,28 +249,31 @@ public final class SetBreeTool implements IMcpTool {
 		return done(entry.put("jreContainer", jreContainer(javaProject))); //$NON-NLS-1$
 	}
 
-	/** Points the JRE container at {@code environment}, leaving every other entry as it is. */
+	/**
+	 * Points the JRE container at {@code environment}, appending one when there is
+	 * none, and leaves every other entry as it is.
+	 */
 	private static void setJreContainer(IJavaProject javaProject, IExecutionEnvironment environment,
 			IProgressMonitor monitor) throws CoreException {
 		if (javaProject == null || !javaProject.exists()) {
 			return;
 		}
 		IPath wanted = JavaRuntime.newJREContainerPath(environment);
-		IClasspathEntry[] entries = javaProject.getRawClasspath();
-		boolean changed = false;
-		for (int i = 0; i < entries.length; i++) {
-			IClasspathEntry entry = entries[i];
+		List<IClasspathEntry> entries = new ArrayList<>(List.of(javaProject.getRawClasspath()));
+		boolean found = false;
+		for (int i = 0; i < entries.size(); i++) {
+			IClasspathEntry entry = entries.get(i);
 			if (entry.getEntryKind() == IClasspathEntry.CPE_CONTAINER
-					&& JavaRuntime.JRE_CONTAINER.equals(entry.getPath().segment(0))
-					&& !wanted.equals(entry.getPath())) {
-				entries[i] = JavaCore.newContainerEntry(wanted, entry.getAccessRules(), entry.getExtraAttributes(),
-						entry.isExported());
-				changed = true;
+					&& JavaRuntime.JRE_CONTAINER.equals(entry.getPath().segment(0))) {
+				found = true;
+				entries.set(i, JavaCore.newContainerEntry(wanted, entry.getAccessRules(), entry.getExtraAttributes(),
+						entry.isExported()));
 			}
 		}
-		if (changed) {
-			javaProject.setRawClasspath(entries, monitor);
+		if (!found) {
+			entries.add(JavaCore.newContainerEntry(wanted));
 		}
+		javaProject.setRawClasspath(entries.toArray(IClasspathEntry[]::new), monitor);
 	}
 
 	/** The JRE container entry, which is the part of {@code .classpath} the BREE drives. */

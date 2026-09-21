@@ -2,19 +2,24 @@ package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.core.resources.IFolder;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IProjectDescription;
+import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.jdt.core.IClasspathEntry;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.JavaCore;
+import org.eclipse.jdt.launching.JavaRuntime;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -77,6 +82,49 @@ class SetBreeToolTest {
 		assertEquals("21", javaProject.getOption(JavaCore.COMPILER_COMPLIANCE, true));
 		assertEquals("21", javaProject.getOption(JavaCore.COMPILER_SOURCE, true));
 		assertEquals("21", javaProject.getOption(JavaCore.COMPILER_CODEGEN_TARGET_PLATFORM, true));
+	}
+
+	@Test
+	void writesEveryOptionTheEnvironmentDictates() throws Exception {
+		IProject project = createPlugin();
+		IJavaProject javaProject = JavaCore.create(project);
+		javaProject.setOption(JavaCore.COMPILER_RELEASE, JavaCore.DISABLED);
+
+		TestFixture.callAndParse(TOOL, Map.of("bree", TO, "projects", List.of(PROJECT), "dryRun", Boolean.FALSE));
+
+		assertEquals(JavaCore.ENABLED, javaProject.getOption(JavaCore.COMPILER_RELEASE, true));
+		assertEquals(JavaCore.ERROR, javaProject.getOption(JavaCore.COMPILER_PB_ENUM_IDENTIFIER, true));
+	}
+
+	@Test
+	void repairsAJreContainerThatLagsBehindTheHeader() throws Exception {
+		IProject project = createPlugin(TO);
+		setJreContainer(JavaCore.create(project), FROM);
+		String manifestBefore = manifest(project);
+
+		Map<String, Object> entry = only(TestFixture.callAndParse(TOOL,
+				Map.of("bree", TO, "projects", List.of(PROJECT), "dryRun", Boolean.FALSE)));
+
+		assertEquals(Boolean.TRUE, entry.get("changed"));
+		assertTrue(String.valueOf(entry.get("previousJreContainer")).endsWith(FROM), entry.toString());
+		assertTrue(String.valueOf(entry.get("jreContainer")).endsWith(TO), entry.toString());
+		assertEquals(manifestBefore, manifest(project), "a matching header must not be rewritten");
+	}
+
+	@Test
+	void addsAJreContainerWhenThereIsNone() throws Exception {
+		IProject project = createPlugin();
+		IJavaProject javaProject = JavaCore.create(project);
+		javaProject.setRawClasspath(Arrays.stream(javaProject.getRawClasspath())
+				.filter(e -> e.getEntryKind() != IClasspathEntry.CPE_CONTAINER).toArray(IClasspathEntry[]::new),
+				new NullProgressMonitor());
+
+		Map<String, Object> entry = only(TestFixture.callAndParse(TOOL,
+				Map.of("bree", TO, "projects", List.of(PROJECT), "dryRun", Boolean.FALSE)));
+
+		assertNull(entry.get("previousJreContainer"));
+		assertEquals(JavaRuntime.newJREContainerPath(
+				JavaRuntime.getExecutionEnvironmentsManager().getEnvironment(TO)).toString(), entry.get("jreContainer"));
 	}
 
 	@Test
@@ -144,6 +192,10 @@ class SetBreeToolTest {
 	}
 
 	private IProject createPlugin() throws Exception {
+		return createPlugin(FROM);
+	}
+
+	private IProject createPlugin(String bree) throws Exception {
 		IJavaProject javaProject = fixture.createJavaProject(PROJECT);
 		IProject project = javaProject.getProject();
 		IProjectDescription description = project.getDescription();
@@ -159,10 +211,21 @@ class SetBreeToolTest {
 				Bundle-SymbolicName: %s;singleton:=true
 				Bundle-Version: 1.0.0.qualifier
 				Bundle-RequiredExecutionEnvironment: %s
-				""".formatted(PROJECT, FROM);
+				""".formatted(PROJECT, bree);
 		project.getFile("META-INF/MANIFEST.MF").create(
 				new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)), false, new NullProgressMonitor());
 		return project;
+	}
+
+	private static void setJreContainer(IJavaProject javaProject, String bree) throws Exception {
+		IPath path = JavaRuntime.newJREContainerPath(JavaRuntime.getExecutionEnvironmentsManager().getEnvironment(bree));
+		IClasspathEntry[] entries = javaProject.getRawClasspath();
+		for (int i = 0; i < entries.length; i++) {
+			if (entries[i].getEntryKind() == IClasspathEntry.CPE_CONTAINER) {
+				entries[i] = JavaCore.newContainerEntry(path);
+			}
+		}
+		javaProject.setRawClasspath(entries, new NullProgressMonitor());
 	}
 
 	private static String manifest(IProject project) throws Exception {

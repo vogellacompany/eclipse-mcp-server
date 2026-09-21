@@ -492,7 +492,8 @@ A client that wants to activate a target definition of its own can write the `.t
 ### `eclipse_set_bree`
 
 **Rewrites `META-INF/MANIFEST.MF` and `.classpath`.**
-Sets the `Bundle-RequiredExecutionEnvironment` of plug-in projects and the JDT compiler settings that have to agree with it, in one operation.
+Sets the `Bundle-RequiredExecutionEnvironment` of plug-in projects and the JDT compiler settings that have to agree with it, in one operation, the way the PDE manifest editor does.
+The JRE container in `.classpath` follows the environment and is added when missing, and a project whose header already matches but whose container or compiler settings lag behind is repaired too.
 Runs as a dry run unless `dryRun` is set to `false`.
 
 | Argument | Type | Default | Meaning |
@@ -501,7 +502,7 @@ Runs as a dry run unless `dryRun` is set to `false`.
 | `projects` | array of strings | | Plug-in project names to act on. |
 | `namePattern` | string | | Glob over project names, `*` and `?`, case insensitive. |
 | `currentBree` | string | any | Only projects currently declaring this environment. |
-| `updateCompliance` | boolean | `true` | Also set compiler compliance, source and target. |
+| `updateCompliance` | boolean | `true` | Also set every compiler option the environment dictates: compliance, source, target, release and the related problem severities. |
 | `dryRun` | boolean | `true` | |
 | `maxResults` | integer, 1 to 2000 | 200 | |
 
