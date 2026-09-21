@@ -286,10 +286,13 @@ public final class ScreenshotTools {
 				}
 			}
 			String target0 = path;
-			Supplier<JsonObject> once = () -> capture(target, part, shellTitle, activate, maxWidth, target0,
+			Supplier<Encoding> once = () -> capture(target, part, shellTitle, activate, maxWidth, target0,
 					includeBase64, args.getBoolean("includeToolbar", false), highlights, sameTurn, suppressCaret); //$NON-NLS-1$
 			if (!settlePixels) {
-				return onUi(once, answer -> (settled == null ? answer : answer.put("settle", settled)).toString()); //$NON-NLS-1$
+				return onUi(once, encoding -> {
+					JsonObject answer = encoding.finish();
+					return (settled == null ? answer : answer.put("settle", settled)).toString(); //$NON-NLS-1$
+				});
 			}
 			JsonObject answer = null;
 			byte[] previous = null;
@@ -299,10 +302,11 @@ public final class ScreenshotTools {
 				// each capture is its own UI hop on purpose: the point is to let
 				// whatever is painting get on with it between them, which cannot happen
 				// inside one
-				answer = onUiValue(once);
-				if (answer == null) {
+				Encoding encoding = onUiValue(once);
+				if (encoding == null) {
 					return McpToolResult.error("The Eclipse UI is busy, try again."); //$NON-NLS-1$
 				}
+				answer = encoding.finish();
 				taken++;
 				byte[] bytes = bytesOf(target0);
 				if (bytes != null && previous != null && java.util.Arrays.equals(bytes, previous)) {
@@ -348,8 +352,8 @@ public final class ScreenshotTools {
 		}
 
 		/** One capture on the UI thread, as the object rather than as a result. */
-		private static JsonObject onUiValue(Supplier<JsonObject> work) {
-			CompletableFuture<JsonObject> pending = new CompletableFuture<>();
+		private static Encoding onUiValue(Supplier<Encoding> work) {
+			CompletableFuture<Encoding> pending = new CompletableFuture<>();
 			UiThread.exec(() -> {
 				try {
 					pending.complete(work.get());
@@ -367,7 +371,7 @@ public final class ScreenshotTools {
 			}
 		}
 
-		private static JsonObject capture(String target, String partId, String shellTitle, boolean activate,
+		private static Encoding capture(String target, String partId, String shellTitle, boolean activate,
 				int maxWidth, String outputPath, boolean includeBase64, boolean includeToolbar, Object highlights,
 				boolean sameTurn, boolean suppressCaret) {
 			Display display = PlatformUI.getWorkbench().getDisplay();
@@ -390,8 +394,8 @@ public final class ScreenshotTools {
 			} else if ("shell".equals(target)) { //$NON-NLS-1$
 				Shell shell = findShell(display, shellTitle);
 				if (shell == null) {
-					return failure(shellTitle == null ? "This IDE has no window to capture." //$NON-NLS-1$
-							: "No shell matching '%s'.".formatted(shellTitle)); //$NON-NLS-1$
+					return Encoding.done(failure(shellTitle == null ? "This IDE has no window to capture." //$NON-NLS-1$
+							: "No shell matching '%s'.".formatted(shellTitle))); //$NON-NLS-1$
 				}
 				area = shell.getBounds();
 				requested = new Rectangle(area.x, area.y, area.width, area.height);
@@ -400,9 +404,9 @@ public final class ScreenshotTools {
 			} else {
 				Control control = findPart(partId, activate);
 				if (control == null) {
-					return failure(
+					return Encoding.done(failure(
 							"No part '%s', or it is not visible. A part behind another tab is not rendered at all; pass activate to bring it forward." //$NON-NLS-1$
-									.formatted(partId));
+									.formatted(partId)));
 				}
 				if (includeToolbar) {
 					control = stackOf(control);
@@ -416,9 +420,9 @@ public final class ScreenshotTools {
 			if (area.width <= 0 || area.height <= 0) {
 				// zero bounds have two quite different causes and the caller can only
 				// act on one of them, so name both rather than saying "empty"
-				return failure(
+				return Encoding.done(failure(
 						"The capture area is empty: the target reports %dx%d. Either the widget has never been laid out, which is what a shell that has not been shown yet reports, or the part is behind another one and is therefore not rendered at all. A part behind another tab has no area until it is brought forward; pass activate for that. Use eclipse_list_ui_targets to see which shells and parts are visible." //$NON-NLS-1$
-								.formatted(Integer.valueOf(area.width), Integer.valueOf(area.height)));
+								.formatted(Integer.valueOf(area.width), Integer.valueOf(area.height))));
 			}
 
 			List<Overlays.Highlight> overlays = Overlays.resolve(display, printable, highlights);
@@ -513,9 +517,9 @@ public final class ScreenshotTools {
 				ImageData data = "rootCapture".equals(method) ? DeviceScale.screenData(image, zoom) //$NON-NLS-1$
 						: DeviceScale.paintedData(image, zoom);
 				if (isBlank(data)) {
-					return failure(printable == null
+					return Encoding.done(failure(printable == null
 							? "The capture came back uniform, so this display cannot be captured through the X11 root drawable. A compositing window manager redirects window contents into an offscreen pixmap, so reading the root yields nothing. There is no fallback for the whole display; capture a part or a shell instead, which can be painted directly." //$NON-NLS-1$
-							: "The capture came back uniform through both the X11 root drawable and by painting the widget, so this display cannot be captured at all. Nothing was written; do not trust screenshots here."); //$NON-NLS-1$
+							: "The capture came back uniform through both the X11 root drawable and by painting the widget, so this display cannot be captured at all. Nothing was written; do not trust screenshots here.")); //$NON-NLS-1$
 				}
 				// before the filler is replaced, because replacing it is what makes this
 				// invisible: a paint that landed at half scale fills the top left quarter
@@ -535,8 +539,9 @@ public final class ScreenshotTools {
 				// every other field agreeing, which is the one failure this answer
 				// cannot afford: the picture is soft and nothing says why
 				int captured = area.width <= 0 ? zoom : Math.round(data.width * 100f / area.width);
-				JsonObject written = write(display, image, data, area, maxWidth, outputPath, includeBase64, overlays,
-						captured).put("method", method) //$NON-NLS-1$
+				Encoding encoding = write(display, image, data, area, maxWidth, outputPath, includeBase64, overlays,
+						captured);
+				JsonObject written = encoding.answer().put("method", method) //$NON-NLS-1$
 						.put("zoom", Integer.valueOf(captured)) //$NON-NLS-1$
 						.put("deviceZoom", Integer.valueOf(zoom)) //$NON-NLS-1$
 						.put("foreground", Boolean.valueOf(foreground)) //$NON-NLS-1$
@@ -594,7 +599,7 @@ public final class ScreenshotTools {
 									"The text caret was taken out of %d StyledText widgets for this capture and put back afterwards, so the image has no caret in it and two captures of the same state can be identical. SWT blinks the caret itself, which is why no window system setting stops it." //$NON-NLS-1$
 											.formatted(Integer.valueOf(carets.size())));
 				}
-				return written;
+				return encoding;
 			} finally {
 				image.dispose();
 			}
@@ -808,55 +813,85 @@ public final class ScreenshotTools {
 			return candidate <= maxWidth && candidate >= maxWidth * 4 / 5 ? candidate : maxWidth;
 		}
 
-		private static JsonObject write(Display display, Image image, ImageData data, Rectangle area, int maxWidth,
-				String outputPath, boolean includeBase64, List<Overlays.Highlight> overlays, int zoom) {
-			ImageData scaled = data;
+		/**
+		 * Describes the capture on the UI thread and leaves scaling and encoding to
+		 * {@link Encoding#finish()}, which the caller runs off it.
+		 */
+		private static Encoding write(Display display, Image image, ImageData data, Rectangle area, int maxWidth, String outputPath,
+				boolean includeBase64, List<Overlays.Highlight> overlays, int zoom) {
 			int snapped = crispWidth(data.width, maxWidth);
-			if (data.width > snapped) {
-				int height = Math.max(1, data.height * snapped / data.width);
-				scaled = data.scaledTo(snapped, height);
-			}
+			int width = Math.min(data.width, snapped);
+			int height = data.width > snapped ? Math.max(1, data.height * snapped / data.width) : data.height;
+			ImageData pixels = data;
 			JsonArray highlighted = null;
 			if (!overlays.isEmpty()) {
+				// labels are rendered through a GC, so an annotated capture scales here
+				pixels = width == data.width ? data : data.scaledTo(width, height);
 				// points to pixels: the zoom the widget painted at, then the downscale
-				double scale = zoom / 100.0 * scaled.width / data.width;
-				highlighted = Overlays.draw(display, scaled, overlays, scale);
+				double scale = zoom / 100.0 * width / data.width;
+				highlighted = Overlays.draw(display, pixels, overlays, scale);
 			}
-			ImageLoader loader = new ImageLoader();
-			loader.data = new ImageData[] { scaled };
-			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-			loader.save(bytes, SWT.IMAGE_PNG);
-			try {
-				Path file = outputPath != null ? Path.of(outputPath)
-						: Files.createTempFile("eclipse-screenshot-", ".png"); //$NON-NLS-1$ //$NON-NLS-2$
-				Files.write(file, bytes.toByteArray());
-				JsonObject result = new JsonObject().put("captured", true) //$NON-NLS-1$
-						.put("path", file.toAbsolutePath().toString()) //$NON-NLS-1$
-						.put("width", scaled.width) //$NON-NLS-1$
-						.put("height", scaled.height) //$NON-NLS-1$
-						// the pixels that were actually captured, not the widget's size in
-						// points. Reporting the two as if they were the same is what let a
-						// capture that kept a quarter of the window look complete
-						.put("capturedArea", data.width + "x" + data.height) //$NON-NLS-1$ //$NON-NLS-2$
-						.put("areaInPoints", area.width + "x" + area.height) //$NON-NLS-1$ //$NON-NLS-2$
-						// every number the scaling depends on, from its own source: the
-						// image as SWT sizes it, the data as it came back, and the factor
-						// actually applied. A capture that looks right in every derived
-						// field and wrong on screen is a disagreement between these, and
-						// naming them is cheaper than inferring them from the picture
-						.put("imageBounds", image.getBounds().width + "x" + image.getBounds().height) //$NON-NLS-1$ //$NON-NLS-2$
-						.put("scaleFactor", Math.round(scaled.width * 1000.0 / data.width) / 1000.0) //$NON-NLS-1$
-						.put("maxWidthSnappedTo", snapped == maxWidth ? null : Integer.valueOf(snapped)) //$NON-NLS-1$
-						.put("bytes", bytes.size()); //$NON-NLS-1$
-				if (highlighted != null) {
-					result.put("highlights", highlighted); //$NON-NLS-1$
+			JsonObject result = new JsonObject().put("captured", true) //$NON-NLS-1$
+					.put("path", null) //$NON-NLS-1$
+					.put("width", width) //$NON-NLS-1$
+					.put("height", height) //$NON-NLS-1$
+					// the pixels that were actually captured, not the widget's size in
+					// points. Reporting the two as if they were the same is what let a
+					// capture that kept a quarter of the window look complete
+					.put("capturedArea", data.width + "x" + data.height) //$NON-NLS-1$ //$NON-NLS-2$
+					.put("areaInPoints", area.width + "x" + area.height) //$NON-NLS-1$ //$NON-NLS-2$
+					// every number the scaling depends on, from its own source: the
+					// image as SWT sizes it, the data as it came back, and the factor
+					// actually applied. A capture that looks right in every derived
+					// field and wrong on screen is a disagreement between these, and
+					// naming them is cheaper than inferring them from the picture
+					.put("imageBounds", image.getBounds().width + "x" + image.getBounds().height) //$NON-NLS-1$ //$NON-NLS-2$
+					.put("scaleFactor", Math.round(width * 1000.0 / data.width) / 1000.0) //$NON-NLS-1$
+					.put("maxWidthSnappedTo", snapped == maxWidth ? null : Integer.valueOf(snapped)) //$NON-NLS-1$
+					.put("bytes", null); //$NON-NLS-1$
+			if (highlighted != null) {
+				result.put("highlights", highlighted); //$NON-NLS-1$
+			}
+			return new Encoding(result, pixels, width, height, outputPath, includeBase64);
+		}
+
+		/**
+		 * A described capture whose pixels still have to be scaled, encoded and
+		 * written, or a finished answer when {@code pixels} is null.
+		 * <p>
+		 * The PNG encoder deflates every pixel, which on a large shell holds the UI
+		 * thread long enough for the freeze monitor to report it, so it runs on the
+		 * caller's thread instead.
+		 */
+		record Encoding(JsonObject answer, ImageData pixels, int width, int height, String outputPath,
+				boolean includeBase64) {
+
+			static Encoding done(JsonObject answer) {
+				return new Encoding(answer, null, 0, 0, null, false);
+			}
+
+			JsonObject finish() {
+				if (pixels == null) {
+					return answer;
 				}
-				if (includeBase64) {
-					result.put("base64", Base64.getEncoder().encodeToString(bytes.toByteArray())); //$NON-NLS-1$
+				try {
+					ImageData scaled = pixels.width == width ? pixels : pixels.scaledTo(width, height);
+					ImageLoader loader = new ImageLoader();
+					loader.data = new ImageData[] { scaled };
+					ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+					loader.save(bytes, SWT.IMAGE_PNG);
+					Path file = outputPath != null ? Path.of(outputPath)
+							: Files.createTempFile("eclipse-screenshot-", ".png"); //$NON-NLS-1$ //$NON-NLS-2$
+					Files.write(file, bytes.toByteArray());
+					answer.put("path", file.toAbsolutePath().toString()) //$NON-NLS-1$
+							.put("bytes", bytes.size()); //$NON-NLS-1$
+					if (includeBase64) {
+						answer.put("base64", Base64.getEncoder().encodeToString(bytes.toByteArray())); //$NON-NLS-1$
+					}
+					return answer;
+				} catch (IOException | RuntimeException e) {
+					return failure("Could not write the image: " + e.getMessage()); //$NON-NLS-1$
 				}
-				return result;
-			} catch (IOException e) {
-				return failure("Could not write the image: " + e.getMessage()); //$NON-NLS-1$
 			}
 		}
 
