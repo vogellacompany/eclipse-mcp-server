@@ -21,6 +21,7 @@ Import-Package: io.modelcontextprotocol.json;version="[2.0,3)",
  org.eclipse.jetty.ee11.servlet;version="[12.1.12,13)",
  org.eclipse.jetty.server;version="[12.1.12,13)",
  org.eclipse.jetty.util.thread;version="[12.1.12,13)",
+ org.eclipse.osgi.service.datalocation;version="1.4.0",
  org.osgi.framework;version="[1.10,2)"
 Export-Package: com.vogella.eclipse.mcp.server
 Service-Component: OSGI-INF/com.vogella.eclipse.mcp.server.internal.McpServerComponent.xml

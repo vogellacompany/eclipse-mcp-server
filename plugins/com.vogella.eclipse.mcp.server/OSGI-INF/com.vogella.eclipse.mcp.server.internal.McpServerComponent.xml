@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scr:component xmlns:scr="http://www.osgi.org/xmlns/scr/v1.3.0" deactivate="deactivate" immediate="true" name="com.vogella.eclipse.mcp.server.internal.McpServerComponent">
+   <reference cardinality="1..1" field="instanceLocation" interface="org.eclipse.osgi.service.datalocation.Location" name="instanceLocation" target="(&amp;(type=osgi.instance.area)(url=*))"/>
+   <reference cardinality="1..1" field="registry" interface="org.eclipse.core.runtime.IExtensionRegistry" name="registry"/>
+   <implementation class="com.vogella.eclipse.mcp.server.internal.McpServerComponent"/>
+</scr:component>

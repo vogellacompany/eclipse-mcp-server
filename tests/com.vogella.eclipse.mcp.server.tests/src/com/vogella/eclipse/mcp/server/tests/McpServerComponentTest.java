@@ -3,6 +3,10 @@ package com.vogella.eclipse.mcp.server.tests;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+
 import org.junit.jupiter.api.Test;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
@@ -27,6 +31,20 @@ class McpServerComponentTest {
 		assertTrue(DESCRIPTOR.equals(server.getHeaders().get("Service-Component")), //$NON-NLS-1$
 				"The Service-Component header should name the generated descriptor"); //$NON-NLS-1$
 		assertNotNull(server.getEntry(DESCRIPTOR), "The generated descriptor should be packaged"); //$NON-NLS-1$
+	}
+
+	/**
+	 * The descriptor is committed and Tycho keeps it as it is, so one that PDE did not
+	 * regenerate would start the server before the workspace is chosen, and fail.
+	 */
+	@Test
+	void theDescriptorWaitsForTheInstanceLocation() throws IOException {
+		Bundle server = FrameworkUtil.getBundle(McpServerService.class);
+		try (InputStream in = server.getEntry(DESCRIPTOR).openStream()) {
+			String descriptor = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+			assertTrue(descriptor.contains("(type=osgi.instance.area)(url=*)"), //$NON-NLS-1$
+					"The descriptor should reference the instance location once it is set"); //$NON-NLS-1$
+		}
 	}
 
 	/** The component is the only thing publishing the service, so this proves it activated. */

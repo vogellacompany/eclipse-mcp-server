@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.server.internal;
 
 import org.eclipse.core.runtime.IExtensionRegistry;
+import org.eclipse.osgi.service.datalocation.Location;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.component.annotations.Activate;
@@ -27,6 +28,13 @@ public final class McpServerComponent {
 	 */
 	@Reference
 	IExtensionRegistry registry;
+
+	/**
+	 * Never read either: the preferences live in instance scope, which throws until the
+	 * workspace is chosen, and Equinox adds {@code url} to this service only once it is.
+	 */
+	@Reference(target = "(&(type=osgi.instance.area)(url=*))")
+	Location instanceLocation;
 
 	private ServiceRegistration<McpServerService> registration;
 

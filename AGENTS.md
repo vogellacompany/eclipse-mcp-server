@@ -53,8 +53,10 @@ When a core tool needs something to happen in the UI, it goes through a hook the
 **The server starts itself through a declarative service, not through the IDE's startup extension point.**
 `McpServerComponent` is an immediate DS component that publishes `McpServerService` and reconciles the preferences, so an RCP application that has no `org.eclipse.ui.startup` runs the same path the IDE does.
 That is why the bundle requires the `osgi.component` extender: an SCR-less framework then refuses to resolve it, which is loud, rather than resolving a bundle whose server never starts, which is silent.
-`OSGI-INF/*.xml` and that requirement are generated from the annotations, by `tycho-ds-plugin` in the build and by PDE in the workspace, and neither is committed; `McpServerComponentTest` fails if the descriptor stops being packaged.
+`OSGI-INF/*.xml` is generated from the annotations by PDE's DS builder and committed; regenerate it in the IDE after changing an annotation, since `tycho-ds-plugin` keeps an existing descriptor and only adds the `osgi.extender` requirement, so a stale one ships silently.
+`McpServerComponentTest` fails if the descriptor stops being packaged or loses the instance `Location` reference.
 The `@Reference` to `IExtensionRegistry` is never read and is not dead code: the tool list is built once when the server starts, so a component activating before the registry exists would serve a short list for the rest of the session.
+The `@Reference` to the instance `Location` targets `url=*` for the same reason: the preferences live in instance scope, which throws until the workspace is chosen, so without it an IDE started with the workspace chooser never starts the server.
 Reconciling lives in `McpServerLifecycle` in the server bundle so that the component and the preference page share one path, serialized by a lock, since two reconciliations can otherwise stop what the other just started.
 It must not be a job scheduling rule: starting the server can activate `org.eclipse.core.resources`, and `Workspace.open` then fails its `beginRule` inside the foreign rule and the IDE does not start.
 

@@ -8,6 +8,3 @@ bin/
 # Tycho writes these beside every module during a build
 .tycho-consumer-pom.xml
 pom.tycho
-
-# PDE generates these from the DS annotations, Tycho regenerates them at build time
-OSGI-INF/*.xml
