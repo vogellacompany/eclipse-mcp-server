@@ -4,7 +4,6 @@ import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
-import org.eclipse.core.runtime.jobs.ISchedulingRule;
 import org.eclipse.core.runtime.jobs.Job;
 
 /**
@@ -12,19 +11,13 @@ import org.eclipse.core.runtime.jobs.Job;
  */
 public final class McpServerLifecycle {
 
-	/** Two reconciliations must not overlap: one would stop what the other just started. */
-	private static final ISchedulingRule RULE = new ISchedulingRule() {
-
-		@Override
-		public boolean isConflicting(ISchedulingRule rule) {
-			return rule == this;
-		}
-
-		@Override
-		public boolean contains(ISchedulingRule rule) {
-			return rule == this;
-		}
-	};
+	/**
+	 * Two reconciliations must not overlap: one would stop what the other just
+	 * started. A lock rather than a scheduling rule, because starting the server
+	 * loads the tools, which can activate org.eclipse.core.resources, and opening
+	 * the workspace inside a foreign rule fails and takes the IDE down with it.
+	 */
+	private static final Object LOCK = new Object();
 
 	private McpServerLifecycle() {
 	}
@@ -32,7 +25,6 @@ public final class McpServerLifecycle {
 	/** Schedules the reconciliation and returns the job, so that callers can react when it is done. */
 	public static Job reconcile() {
 		Job job = new ReconcileJob();
-		job.setRule(RULE);
 		job.schedule();
 		return job;
 	}
@@ -46,6 +38,12 @@ public final class McpServerLifecycle {
 
 		@Override
 		protected IStatus run(IProgressMonitor monitor) {
+			synchronized (LOCK) {
+				return reconcile();
+			}
+		}
+
+		private static IStatus reconcile() {
 			McpServerService service = McpServerService.getInstance();
 			boolean enabled = McpPreferences.isEnabled();
 			int port = McpPreferences.getPort();
