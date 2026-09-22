@@ -57,6 +57,7 @@ That is why the bundle requires the `osgi.component` extender: an SCR-less frame
 `McpServerComponentTest` fails if the descriptor stops being packaged or loses the instance `Location` reference.
 The `@Reference` to `IExtensionRegistry` is never read and is not dead code: the tool list is built once when the server starts, so a component activating before the registry exists would serve a short list for the rest of the session.
 The `@Reference` to the instance `Location` targets `url=*` for the same reason: the preferences live in instance scope, which throws until the workspace is chosen, so without it an IDE started with the workspace chooser never starts the server.
+`activate` must not touch `Platform` or the preferences, only schedule the reconciliation job: with `-data` on the command line, as every `eclipse_restart` passes it, the component activates inside the registration of the extension registry, nested in SCR creating the `ContentTypeManager`, and loading `Platform` there leaves its content type manager null for the session, so `org.eclipse.core.resources` fails and the IDE dies on start.
 Reconciling lives in `McpServerLifecycle` in the server bundle so that the component and the preference page share one path, serialized by a lock, since two reconciliations can otherwise stop what the other just started.
 It must not be a job scheduling rule: starting the server can activate `org.eclipse.core.resources`, and `Workspace.open` then fails its `beginRule` inside the foreign rule and the IDE does not start.
 

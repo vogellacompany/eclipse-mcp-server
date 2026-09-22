@@ -9,7 +9,6 @@ import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Deactivate;
 import org.osgi.service.component.annotations.Reference;
 
-import com.vogella.eclipse.mcp.server.McpPreferences;
 import com.vogella.eclipse.mcp.server.McpServerLifecycle;
 import com.vogella.eclipse.mcp.server.McpServerService;
 
@@ -43,11 +42,9 @@ public final class McpServerComponent {
 		// declaring the service through DS would publish an instance of its own, while
 		// every caller in and outside this bundle goes through the singleton
 		registration = context.registerService(McpServerService.class, McpServerService.getInstance(), null);
-		// an opt-in server must not cost a socket, a thread pool and the activation of
-		// every tool's bundle on a start where it is switched off
-		if (McpPreferences.isEnabled()) {
-			McpServerLifecycle.reconcile();
-		}
+		// no preference read here: this can run inside the content type manager's own
+		// activation, and loading Platform then leaves it null for the whole session
+		McpServerLifecycle.reconcile();
 	}
 
 	@Deactivate
