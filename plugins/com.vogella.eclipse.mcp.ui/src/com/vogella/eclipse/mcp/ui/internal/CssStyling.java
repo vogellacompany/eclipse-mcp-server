@@ -261,6 +261,9 @@ final class CssStyling {
 	private static PreferenceOutcome stylePreferences(Object themeEngine, PreferenceRules.Rule rule) {
 		JsonObject outcome = new JsonObject().put("selector", rule.selector()) //$NON-NLS-1$
 				.put("qualifier", rule.qualifier()); //$NON-NLS-1$
+		if (rule.media() != null) {
+			outcome.put("media", rule.media()); //$NON-NLS-1$
+		}
 		JsonArray applied = new JsonArray();
 		JsonArray unchanged = new JsonArray();
 		boolean recognised = true;
@@ -293,7 +296,11 @@ final class CssStyling {
 			return new PreferenceOutcome(outcome.put("error", "Styling the preferences failed: " + e), false); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		outcome.put("appliedKeys", applied).put("unchangedKeys", unchanged); //$NON-NLS-1$ //$NON-NLS-2$
-		if (unchanged.size() > 0) {
+		if (unchanged.size() > 0 && rule.media() != null) {
+			// both skips leave the keys exactly as they were, so only the caller can tell them apart
+			outcome.put("note", "These keys kept their value, and the block sits inside @media " + rule.media() //$NON-NLS-1$
+					+ ". Either that condition does not match this IDE, which makes the engine skip the block, or the theme engine left values it did not set itself alone, which it does until the theme has changed this session. Apply the block once without the @media wrapper: if the keys then take, the condition is what excluded it."); //$NON-NLS-1$
+		} else if (unchanged.size() > 0) {
 			outcome.put("note", "These keys kept their value: the theme engine overwrites a value it did not set itself only once the theme has changed this session. Activating another theme with eclipse_set_theme opens them up."); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		return new PreferenceOutcome(outcome,

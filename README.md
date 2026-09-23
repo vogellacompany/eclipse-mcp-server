@@ -122,6 +122,7 @@ The trap is not the connection, it is *the most recent*. `eclipse_get_build_stat
 A client is counted from the session id on its requests and drops out when it ends its session or after a minute of silence, so reconnecting, which is what a client does after `eclipse_restart`, does not make it look like two.
 
 `startedAt` identifies the server process. It matters after `eclipse_restart`, which answers *before* it restarts: the old server keeps responding for a couple of seconds, so a plain reachability check succeeds against the process that is about to die. Compare `startedAt` across the reconnect to know the new one is really up.
+The server comes back on the same port with the same token, but not every client reconnects on its own: one that connects its MCP servers once per session keeps getting a refused connection and needs its user to reconnect it, in Claude Code through `/mcp`.
 
 The file is created with owner-only permissions and deleted when the server stops.
 
@@ -214,7 +215,8 @@ Read-only except the tools marked as changing something: `eclipse_organize_impor
 ### `eclipse_list_projects`
 
 Lists the projects in the workspace, with their natures and open/closed state.
-Takes `maxResults` (500), and reports `total` and `truncated`.
+Takes `maxResults` (200), and reports `total` and `truncated`.
+`summary: true` answers with `total`, `open`, `closed` and `byNature` only, which is the cheap way to ask how big a workspace is.
 
 ```json
 {"projects":[{"name":"com.example.app","open":true,
@@ -646,10 +648,11 @@ Builds the workspace or named projects.
 | `returnProblems` | boolean | `true` | Count errors and warnings once the build ended. |
 | `refresh` | boolean | `true` | Refresh from disk first, scoped to the named projects. |
 | `buildAfterClean` | boolean | `false` | Build again after a clean. |
+| `includeBuiltProjects` | boolean | `false` | List the built projects by name; `builtProjectCount` is always reported. |
 
 ```json
 {"buildId":"build-3","kind":"full","state":"done","scope":"projects","projects":["app"],
- "elapsedMillis":8412,"refreshMillis":204,"buildMillis":8208,"note":null,
+ "elapsedMillis":8412,"refreshMillis":204,"buildMillis":8208,"builtProjectCount":3,"note":null,
  "errors":2,"warnings":17,"builderFailures":[]}
 ```
 
@@ -657,6 +660,7 @@ Everything slow happens inside the job, the refresh included, so `wait: false` a
 Keep `timeoutSeconds` below that timeout; the default 25 fits under the default 30.
 
 `refreshMillis` and `buildMillis` are reported separately because on a large workspace the refresh can cost more than the build, and a single number hides that.
+The names behind `builtProjectCount` come only with `includeBuiltProjects`, on this tool and on `eclipse_get_build_status`, since a workspace build of a platform workspace names several hundred projects in every answer.
 
 A `clean` only deletes build state. With auto-build off nothing rebuilds afterwards, so the error count describes an unbuilt workspace rather than a working one; the answer then carries a `note` saying so. `buildAfterClean` rebuilds, the way the *Build immediately* checkbox of *Project > Clean* does.
 
@@ -742,6 +746,7 @@ Watching the process from outside cannot tell the quiet before the build starts 
 With `timeoutSeconds` 1 it is a status query, and unlike `eclipse_get_build_status` it belongs to no client and therefore needs no id, which makes it the way to ask whether the workspace is building while several clients are connected.
 
 It answers before the server's own call timeout runs out, with state `stillBusy` and the jobs that are still going, because a call that is abandoned mid-wait tells the caller nothing at all.
+That answer carries only `running`, the names of what is still going, instead of `jobsBefore` and `jobsAfter`, since the caller is going to ask again.
 Ask again until the state is `quiet`, which is a loop of a few calls for the build after a restart.
 
 It does **not** cover the Java index.
@@ -1863,6 +1868,7 @@ When there is no workbench, no window or no file-backed editor, the answer is `{
 Samples thread stacks at a fixed interval, to profile an operation or diagnose a freeze.
 
 `eclipse_start_sampling` takes `threads` (`ui` or `all`), `threadNames`, `intervalMillis` (100), `maxSamples` (300) and `maxDepth` (80), and returns a `sessionId`.
+With `all` or `threadNames` the selection is repeated on every tick, so a worker that starts after sampling began, such as the compiler's processing task, is sampled from the moment it exists.
 `eclipse_stop_sampling` takes that id, plus `topMethods`, `minSamples`, `includeRawSamples`, `keepRunning` and `frameFilter`.
 
 `frameFilter` restricts the aggregate to stacks containing a package prefix or a class, and is applied when reading rather than when sampling, so one session can be read from several angles with `keepRunning`. It earns its place because the top of an unfiltered IDE profile is Jetty accept loops, the AWT event pump and the reference handler, none of which is ever the answer to the question being asked.

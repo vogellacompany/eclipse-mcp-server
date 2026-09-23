@@ -13,6 +13,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 
 import com.vogella.eclipse.mcp.core.FlameGraph;
 import com.vogella.eclipse.mcp.core.json.JsonArray;
@@ -59,7 +60,7 @@ public final class SamplingRegistry {
 	public static final class Session {
 
 		private final String id;
-		private final long[] threadIds;
+		private final Function<ThreadMXBean, long[]> threadIds;
 		private final int intervalMillis;
 		private final int maxSamples;
 		private final int maxDepth;
@@ -78,7 +79,7 @@ public final class SamplingRegistry {
 		private volatile boolean stoppedByBudget;
 		private Thread sampler;
 
-		Session(String id, long[] threadIds, int intervalMillis, int maxSamples, int maxDepth) {
+		Session(String id, Function<ThreadMXBean, long[]> threadIds, int intervalMillis, int maxSamples, int maxDepth) {
 			this.id = id;
 			this.threadIds = threadIds;
 			this.intervalMillis = intervalMillis;
@@ -119,7 +120,8 @@ public final class SamplingRegistry {
 			ThreadMXBean threads = ManagementFactory.getThreadMXBean();
 			boolean cpuSupported = threads.isThreadCpuTimeSupported() && threads.isThreadCpuTimeEnabled();
 			while (running) {
-				ThreadInfo[] infos = threads.getThreadInfo(threadIds, maxDepth);
+				// resolved per tick, so a worker started after sampling began is sampled too
+				ThreadInfo[] infos = threads.getThreadInfo(threadIds.apply(threads), maxDepth);
 				long now = System.currentTimeMillis();
 				synchronized (samples) {
 					if (firstTickAt == 0) {
@@ -195,7 +197,7 @@ public final class SamplingRegistry {
 		}
 	}
 
-	public synchronized Session start(long[] threadIds, int intervalMillis, int maxSamples, int maxDepth) {
+	public synchronized Session start(Function<ThreadMXBean, long[]> threadIds, int intervalMillis, int maxSamples, int maxDepth) {
 		String id = "sampling-" + ids.incrementAndGet(); //$NON-NLS-1$
 		Session session = new Session(id, threadIds, intervalMillis, maxSamples, maxDepth);
 		sessions.put(id, session);

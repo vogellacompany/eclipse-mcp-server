@@ -59,6 +59,25 @@ class BuildToolTest {
 	}
 
 	@Test
+	@SuppressWarnings("unchecked")
+	void namesTheBuiltProjectsOnlyWhenAsked() throws Exception {
+		// a project counts as built when its build output changed, so it needs a source
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		TestFixture.addType(project, "built", "Built", "package built;\npublic class Built { }\n");
+
+		Map<String, Object> quiet = TestFixture.callAndParse(TOOL, Map.of("project", PROJECT, "kind", "full"));
+		Map<String, Object> named = TestFixture.callAndParse(TOOL,
+				Map.of("project", PROJECT, "kind", "full", "includeBuiltProjects", Boolean.TRUE));
+
+		// the list is several hundred names on a platform workspace, in every answer
+		assertFalse(quiet.containsKey("builtProjects"), "got " + quiet);
+		assertTrue(((Number) quiet.get("builtProjectCount")).intValue() > 0, "got " + quiet);
+		List<String> names = (List<String>) named.get("builtProjects");
+		assertTrue(names.contains(PROJECT), "got " + named);
+		assertEquals(names.size(), ((Number) named.get("builtProjectCount")).intValue(), "got " + named);
+	}
+
+	@Test
 	void omitsTheCountsWhenNotAskedFor() throws Exception {
 		fixture.createProject(PROJECT);
 

@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -61,5 +62,20 @@ class PreferenceRulesTest {
 
 		assertEquals(1, found.size());
 		assertEquals(0, found.get(0).size());
+	}
+
+	@Test
+	void namesTheMediaConditionAroundABlock() {
+		// a skipped @media block and the engine's no-overwrite rule both leave the keys unchanged
+		List<PreferenceRules.Rule> found = PreferenceRules.scan("""
+				@media (-eclipse-min-bundle-version: "org.eclipse.ui.editors 3.99") {
+				  IEclipsePreferences#org-eclipse-ui-editors { preferences: 'a=1'; }
+				}
+				IEclipsePreferences#org-eclipse-jdt-ui { preferences: 'b=2'; }
+				""");
+
+		assertEquals(2, found.size());
+		assertEquals("(-eclipse-min-bundle-version: \"org.eclipse.ui.editors 3.99\")", found.get(0).media());
+		assertNull(found.get(1).media());
 	}
 }

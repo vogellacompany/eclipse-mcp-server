@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -51,6 +52,25 @@ class ListProjectsToolTest {
 		assertEquals("projectFile", entry.get("natureSource"));
 		assertTrue(((List<String>) entry.get("natures")).contains("org.eclipse.jdt.core.javanature"),
 				"the nature is in .project on disk whether or not the project is open, got " + entry);
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void summaryCountsWithoutListing() throws Exception {
+		fixture.createJavaProject("mcp-list-summary-open");
+		fixture.createJavaProject("mcp-list-summary-closed").getProject().close(new NullProgressMonitor());
+
+		Map<String, Object> result = TestFixture.callAndParse("eclipse_list_projects", Map.of("summary", Boolean.TRUE));
+
+		assertFalse(result.containsKey("projects"), "got " + result);
+		int total = ((Number) result.get("total")).intValue();
+		int open = ((Number) result.get("open")).intValue();
+		int closed = ((Number) result.get("closed")).intValue();
+		assertEquals(total, open + closed, "got " + result);
+		assertTrue(open >= 1 && closed >= 1, "got " + result);
+		// the closed project's nature is read from disk, so both are counted
+		Map<String, Object> byNature = (Map<String, Object>) result.get("byNature");
+		assertTrue(((Number) byNature.get("org.eclipse.jdt.core.javanature")).intValue() >= 2, "got " + result);
 	}
 
 	@SuppressWarnings("unchecked")

@@ -70,7 +70,7 @@ public final class RefreshTool implements IMcpTool {
 				Thread.currentThread().interrupt();
 			}
 		}
-		return McpToolResult.of(GetBuildStatusTool.toJson(build).toString());
+		return McpToolResult.of(GetBuildStatusTool.toJson(build, false).toString());
 	}
 
 	private static List<String> projectNames(Map<String, Object> arguments, ToolArguments args) {

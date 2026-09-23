@@ -20,8 +20,12 @@ import java.util.regex.Pattern;
  */
 public final class PreferenceRules {
 
-	/** One block found in a snippet: its selector, its escaped id and its key=value pairs. */
-	public record Rule(String selector, String escapedId, String qualifier, Map<String, String> values) {
+	/**
+	 * One block found in a snippet: its selector, its escaped id, its key=value pairs
+	 * and the condition of the {@code @media} block around it, or null.
+	 */
+	public record Rule(String selector, String escapedId, String qualifier, Map<String, String> values,
+			String media) {
 
 		/** How many pairs the block declares. */
 		public int size() {
@@ -30,6 +34,8 @@ public final class PreferenceRules {
 	}
 
 	private static final Pattern SELECTOR = Pattern.compile("(?i)IEclipsePreferences\\s*#\\s*([\\w\\-]+)[^{]*\\{"); //$NON-NLS-1$
+
+	private static final Pattern MEDIA = Pattern.compile("(?i)@media\\s*([^{]*)\\{"); //$NON-NLS-1$
 
 	private static final Pattern PAIR = Pattern.compile("'([^'=]+)=([^']*)'"); //$NON-NLS-1$
 
@@ -53,8 +59,31 @@ public final class PreferenceRules {
 			while (pair.find()) {
 				values.put(pair.group(1).strip(), pair.group(2));
 			}
-			found.add(new Rule("IEclipsePreferences#" + escapedId, escapedId, escapedId.replace('-', '.'), values)); //$NON-NLS-1$
+			found.add(new Rule("IEclipsePreferences#" + escapedId, escapedId, escapedId.replace('-', '.'), values, //$NON-NLS-1$
+					media(css, selector.start())));
 		}
 		return found;
+	}
+
+	/** The condition of the innermost {@code @media} block containing {@code position}, or null. */
+	private static String media(String css, int position) {
+		String condition = null;
+		Matcher media = MEDIA.matcher(css);
+		while (media.find() && media.start() < position) {
+			int depth = 1;
+			int end = media.end();
+			while (end < css.length() && depth > 0) {
+				char c = css.charAt(end++);
+				if (c == '{') {
+					depth++;
+				} else if (c == '}') {
+					depth--;
+				}
+			}
+			if (position < end) {
+				condition = media.group(1).strip();
+			}
+		}
+		return condition;
 	}
 }

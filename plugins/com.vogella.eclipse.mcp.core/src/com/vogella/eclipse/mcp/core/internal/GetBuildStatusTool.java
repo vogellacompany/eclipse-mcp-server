@@ -32,7 +32,8 @@ public final class GetBuildStatusTool implements IMcpTool {
 				{
 				  "type": "object",
 				  "properties": {
-				    "buildId": {"type":"string","description":"Identifier returned by eclipse_build. Omit for the most recent build."}
+				    "buildId": {"type":"string","description":"Identifier returned by eclipse_build. Omit for the most recent build."},
+				    "includeBuiltProjects": {"type":"boolean","default":false,"description":"List the names of the projects that were built, not only builtProjectCount. A workspace build of a platform workspace names several hundred."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -40,7 +41,8 @@ public final class GetBuildStatusTool implements IMcpTool {
 
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
-		String buildId = ToolArguments.of(arguments).getString("buildId"); //$NON-NLS-1$
+		ToolArguments args = ToolArguments.of(arguments);
+		String buildId = args.getString("buildId"); //$NON-NLS-1$
 		if (buildId == null && !ClientSessions.canAssumeASingleClient()) {
 			// the refusal stands even though the job snapshot below would be
 			// unambiguous: eclipse_wait_until_quiet answers that question and belongs
@@ -65,7 +67,8 @@ public final class GetBuildStatusTool implements IMcpTool {
 							"No build has been started through eclipse_build yet. 'jobs' says what the workspace is doing on its own.") //$NON-NLS-1$
 					.toString());
 		}
-		return McpToolResult.of(toJson(build).put("jobs", jobs).toString()); //$NON-NLS-1$
+		return McpToolResult.of(
+				toJson(build, args.getBoolean("includeBuiltProjects", false)).put("jobs", jobs).toString()); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	/** {added, changed, removed} as an object, or null when that phase did not run. */
@@ -79,14 +82,12 @@ public final class GetBuildStatusTool implements IMcpTool {
 				.put("removed", Integer.valueOf(counts[2])); //$NON-NLS-1$
 	}
 
-	static JsonObject toJson(BuildRegistry.Build build) {
+	static JsonObject toJson(BuildRegistry.Build build, boolean includeBuiltProjects) {
 		JsonArray projects = new JsonArray();
 		build.projects().forEach(projects::add);
 		JsonArray failures = new JsonArray();
 		build.builderFailures().forEach(failures::add);
-		JsonArray builtProjects = new JsonArray();
-		build.builtProjects().forEach(builtProjects::add);
-		return new JsonObject().put("buildId", build.id()) //$NON-NLS-1$
+		JsonObject json = new JsonObject().put("buildId", build.id()) //$NON-NLS-1$
 				.put("kind", build.kind()) //$NON-NLS-1$
 				.put("state", build.state()) //$NON-NLS-1$
 				.put("scope", build.projects().isEmpty() ? "workspace" : "projects") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
@@ -98,10 +99,16 @@ public final class GetBuildStatusTool implements IMcpTool {
 				// branch switch and one that found nothing both finish quickly
 				.put("refreshedFiles", counts(build.refreshedFiles())) //$NON-NLS-1$
 				.put("builtFiles", counts(build.builtFiles())) //$NON-NLS-1$
-				.put("builtProjects", builtProjects) //$NON-NLS-1$
+				.put("builtProjectCount", Integer.valueOf(build.builtProjects().size())) //$NON-NLS-1$
 				.put("note", build.note()) //$NON-NLS-1$
 				.put("errors", build.errors() < 0 ? null : Integer.valueOf(build.errors())) //$NON-NLS-1$
 				.put("warnings", build.warnings() < 0 ? null : Integer.valueOf(build.warnings())) //$NON-NLS-1$
 				.put("builderFailures", failures); //$NON-NLS-1$
+		if (includeBuiltProjects) {
+			JsonArray builtProjects = new JsonArray();
+			build.builtProjects().forEach(builtProjects::add);
+			json.put("builtProjects", builtProjects); //$NON-NLS-1$
+		}
+		return json;
 	}
 }

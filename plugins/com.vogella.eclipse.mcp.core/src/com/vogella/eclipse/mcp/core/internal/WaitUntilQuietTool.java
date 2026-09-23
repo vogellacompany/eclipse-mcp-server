@@ -22,7 +22,7 @@ public final class WaitUntilQuietTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Waits until the auto-build, the manual build and the refresh jobs have finished and no other job is running, then answers what it waited for and how long each part took. Changes nothing. THIS IS THE TOOL TO CALL BEFORE TIMING ANYTHING: after a restart the workspace builds for a minute or two on its own, and a measurement taken in that window measures the build. Watching the process from outside cannot tell the quiet before the build starts from the quiet after it, which is the mistake this exists to prevent; from inside the two are different job states. waitedFor is empty when nothing was running, which is itself the answer that the IDE was already idle. WITH timeoutSeconds 1 IT IS A STATUS QUERY rather than a wait, and unlike eclipse_get_build_status it belongs to no client and therefore needs no id, which makes it the way to ask whether the workspace is building while several clients are connected. IT ANSWERS BEFORE THE SERVER'S OWN CALL TIMEOUT RUNS OUT, with state 'stillBusy' and the jobs that are still going, because a call that is abandoned mid-wait tells the caller nothing at all; ask again until the state is 'quiet', which is a loop of a few calls for the build after a restart. Raising the timeout in Preferences > General > MCP Server raises what one call can wait for. IT ALSO COVERS A TARGET PLATFORM RESOLVE started by eclipse_set_target_platform, which runs as an ordinary job and is named in waitedFor, so one wait can cover a build and a resolve together; eclipse_get_target_platform waits for that one on its own if the resolve is all that matters. It does NOT cover the Java index: JDT runs that in a queue of its own outside the job manager, and eclipse_search_types with a narrow pattern is what blocks until the index is ready."; //$NON-NLS-1$
+		return "Waits until the auto-build, the manual build and the refresh jobs have finished and no other job is running, then answers what it waited for and how long each part took. Changes nothing. THIS IS THE TOOL TO CALL BEFORE TIMING ANYTHING: after a restart the workspace builds for a minute or two on its own, and a measurement taken in that window measures the build. Watching the process from outside cannot tell the quiet before the build starts from the quiet after it, which is the mistake this exists to prevent; from inside the two are different job states. waitedFor is empty when nothing was running, which is itself the answer that the IDE was already idle. WITH timeoutSeconds 1 IT IS A STATUS QUERY rather than a wait, and unlike eclipse_get_build_status it belongs to no client and therefore needs no id, which makes it the way to ask whether the workspace is building while several clients are connected. IT ANSWERS BEFORE THE SERVER'S OWN CALL TIMEOUT RUNS OUT, with state 'stillBusy' and the jobs that are still going, because a call that is abandoned mid-wait tells the caller nothing at all; ask again until the state is 'quiet', which is a loop of a few calls for the build after a restart. That intermediate answer is kept small, 'running' with the names of what is still going instead of the full jobsBefore and jobsAfter blocks. Raising the timeout in Preferences > General > MCP Server raises what one call can wait for. IT ALSO COVERS A TARGET PLATFORM RESOLVE started by eclipse_set_target_platform, which runs as an ordinary job and is named in waitedFor, so one wait can cover a build and a resolve together; eclipse_get_target_platform waits for that one on its own if the resolve is all that matters. It does NOT cover the Java index: JDT runs that in a queue of its own outside the job manager, and eclipse_search_types with a narrow pattern is what blocks until the index is ready."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -47,19 +47,21 @@ public final class WaitUntilQuietTool implements IMcpTool {
 		long elapsed = System.currentTimeMillis() - startedAt;
 		boolean timedOut = quiet.timedOut();
 		JsonArray waited = quiet.waitedFor();
-		JsonObject after = WorkspaceJobs.snapshot();
 		// the caller asked for longer than one call may take, so the wait is not over,
 		// only this answer is
 		boolean cut = timedOut && budget < timeoutSeconds;
-		return McpToolResult.of(new JsonObject().put("state", timedOut ? cut ? "stillBusy" : "timeout" : "quiet") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+		JsonObject json = new JsonObject().put("state", timedOut ? cut ? "stillBusy" : "timeout" : "quiet") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 				.put("elapsedMillis", Long.valueOf(elapsed)) //$NON-NLS-1$
 				.put("budgetSeconds", Integer.valueOf(budget)) //$NON-NLS-1$
 				.put("requestedSeconds", Integer.valueOf(timeoutSeconds)) //$NON-NLS-1$
-				.put("waitedFor", waited) //$NON-NLS-1$
-				.put("jobsBefore", before) //$NON-NLS-1$
-				.put("jobsAfter", after) //$NON-NLS-1$
-				.put("note", note(timedOut, cut, waited.size(), budget)) //$NON-NLS-1$
-				.toString());
+				.put("waitedFor", waited); //$NON-NLS-1$
+		if (cut) {
+			// the caller is going to ask again, so what is still running is all it needs
+			json.put("running", WorkspaceJobs.running()); //$NON-NLS-1$
+		} else {
+			json.put("jobsBefore", before).put("jobsAfter", WorkspaceJobs.snapshot()); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		return McpToolResult.of(json.put("note", note(timedOut, cut, waited.size(), budget)).toString()); //$NON-NLS-1$
 	}
 
 	/**
@@ -76,7 +78,7 @@ public final class WaitUntilQuietTool implements IMcpTool {
 
 	private static String note(boolean timedOut, boolean cut, int waitedFor, int timeoutSeconds) {
 		if (cut) {
-			return "Still busy after %d seconds, which is as long as one call may take before the server abandons it. jobsAfter names what is running; call again to go on waiting, or raise the call timeout in Preferences > General > MCP Server." //$NON-NLS-1$
+			return "Still busy after %d seconds, which is as long as one call may take before the server abandons it. 'running' names what is still going; call again to go on waiting, or raise the call timeout in Preferences > General > MCP Server." //$NON-NLS-1$
 					.formatted(Integer.valueOf(timeoutSeconds));
 		}
 		if (timedOut) {

@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,7 +37,7 @@ public final class ListProjectsTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Lists the projects in the Eclipse workspace, with their natures and open/closed state. A closed project still reports its natures, read from its .project file on disk, because the Java model cannot answer for a project it has not opened. natureSource says which of the two answered, so 'has no natures' is never confused with 'could not be asked'."; //$NON-NLS-1$
+		return "Lists the projects in the Eclipse workspace, with their natures and open/closed state. A closed project still reports its natures, read from its .project file on disk, because the Java model cannot answer for a project it has not opened. natureSource says which of the two answered, so 'has no natures' is never confused with 'could not be asked'. Pass summary true for counts only (total, open, closed and projects per nature), which is the cheap answer to how big a workspace is; a platform workspace lists several hundred projects."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -45,7 +46,8 @@ public final class ListProjectsTool implements IMcpTool {
 				{
 				  "type": "object",
 				  "properties": {
-				    "maxResults": {"type":"integer","default":500,"minimum":1,"maximum":5000}
+				    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":5000},
+				    "summary":    {"type":"boolean","default":false,"description":"Answer with counts only and no per-project entries."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -53,11 +55,32 @@ public final class ListProjectsTool implements IMcpTool {
 
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
-		int maxResults = ToolArguments.of(arguments).getInt("maxResults", 500, 1, 5000); //$NON-NLS-1$
+		ToolArguments args = ToolArguments.of(arguments);
+		int maxResults = args.getInt("maxResults", 200, 1, 5000); //$NON-NLS-1$
+		boolean summary = args.getBoolean("summary", false); //$NON-NLS-1$
 		JsonArray projects = new JsonArray();
 		int total = 0;
+		int open = 0;
+		Map<String, Integer> byNature = new TreeMap<>();
 		for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
 			total++;
+			if (summary) {
+				List<String> natures = null;
+				if (project.isOpen()) {
+					open++;
+					try {
+						natures = List.of(project.getDescription().getNatureIds());
+					} catch (CoreException e) {
+						// counted without natures rather than failing a summary over one project
+					}
+				} else {
+					natures = naturesFromProjectFile(project);
+				}
+				if (natures != null) {
+					natures.forEach(nature -> byNature.merge(nature, Integer.valueOf(1), Integer::sum));
+				}
+				continue;
+			}
 			if (projects.size() >= maxResults) {
 				continue;
 			}
@@ -87,6 +110,14 @@ public final class ListProjectsTool implements IMcpTool {
 			IPath location = project.getLocation();
 			entry.put("location", location == null ? null : location.toOSString()); //$NON-NLS-1$
 			projects.add(entry);
+		}
+		if (summary) {
+			JsonObject natures = new JsonObject();
+			byNature.forEach(natures::put);
+			return McpToolResult.of(new JsonObject().put("total", Integer.valueOf(total)) //$NON-NLS-1$
+					.put("open", Integer.valueOf(open)) //$NON-NLS-1$
+					.put("closed", Integer.valueOf(total - open)) //$NON-NLS-1$
+					.put("byNature", natures).toString()); //$NON-NLS-1$
 		}
 		return McpToolResult.of(new JsonObject().put("total", Integer.valueOf(total)) //$NON-NLS-1$
 				.put("truncated", Boolean.valueOf(total > projects.size())) //$NON-NLS-1$

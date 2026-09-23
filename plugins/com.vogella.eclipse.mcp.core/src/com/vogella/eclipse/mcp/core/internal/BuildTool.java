@@ -50,6 +50,7 @@ public final class BuildTool implements IMcpTool {
 				    "timeoutSeconds": {"type":"integer","default":25,"minimum":1,"maximum":3600,"description":"How long to wait before returning with state 'running'. Capped at the server's tool call timeout less a margin, so asking for more than that returns early with the buildId and a waitNote rather than being killed as a timed out call."},
 				    "returnProblems": {"type":"boolean","default":true,"description":"Count errors and warnings once the build ended."},
 				    "refresh":        {"type":"boolean","default":true,"description":"Refresh from disk first, so that edits made outside the IDE are built. Scoped to the named projects. The refresh runs inside the job, so it never blocks a call with wait false, and its cost is reported as refreshMillis."},
+				    "includeBuiltProjects":{"type":"boolean","default":false,"description":"List the names of the projects that were built, not only builtProjectCount. A workspace build of a platform workspace names several hundred."},
 				    "buildAfterClean":{"type":"boolean","default":false,"description":"After a clean, build again, the way the 'Build immediately' checkbox of Project > Clean does. Without it a clean only deletes build state, so the error count afterwards means nothing."}
 				  },
 				  "additionalProperties": false
@@ -86,7 +87,7 @@ public final class BuildTool implements IMcpTool {
 			}
 			clamped = CallBudget.clampNote(timeoutSeconds, "eclipse_get_build_status with this buildId"); //$NON-NLS-1$
 		}
-		var json = GetBuildStatusTool.toJson(build);
+		var json = GetBuildStatusTool.toJson(build, args.getBoolean("includeBuiltProjects", false)); //$NON-NLS-1$
 		if (clamped != null && "running".equals(build.state())) { //$NON-NLS-1$
 			json.put("waitNote", clamped); //$NON-NLS-1$
 		}

@@ -55,6 +55,22 @@ final class WorkspaceJobs {
 				.put("idle", Boolean.valueOf(Job.getJobManager().isIdle())); //$NON-NLS-1$
 	}
 
+	/** The same busy families and jobs as {@link #snapshot()}, by name only. */
+	static JsonArray running() {
+		JsonArray names = new JsonArray();
+		for (Object[] family : FAMILIES) {
+			if (!state(family[1]).equals("none")) { //$NON-NLS-1$
+				names.add(family[0]);
+			}
+		}
+		for (Job job : busy()) {
+			if (!belongsToAFamily(job)) {
+				names.add(job.getName());
+			}
+		}
+		return names;
+	}
+
 	/** What a wait ran into: the parts it waited for, and whether it ran out of time. */
 	record Quiet(JsonArray waitedFor, boolean timedOut) {
 	}
@@ -66,6 +82,32 @@ final class WorkspaceJobs {
 	 */
 	static Quiet waitUntilQuiet(long deadline) {
 		JsonArray waited = new JsonArray();
+		// repeated because a job ending in the second phase can schedule a build,
+		// the auto-build after JDT's initialisation for one
+		while (true) {
+			if (!joinFamilies(deadline, waited)) {
+				return new Quiet(waited, true);
+			}
+			if (!waitForOtherJobs(deadline, waited)) {
+				return new Quiet(waited, true);
+			}
+			boolean familyBusy = false;
+			for (Object[] family : FAMILIES) {
+				familyBusy |= !state(family[1]).equals("none"); //$NON-NLS-1$
+			}
+			if (!familyBusy) {
+				return new Quiet(waited, false);
+			}
+			try {
+				Thread.sleep(50);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return new Quiet(waited, true);
+			}
+		}
+	}
+
+	private static boolean joinFamilies(long deadline, JsonArray waited) {
 		for (Object[] family : FAMILIES) {
 			long startedAt = System.currentTimeMillis();
 			boolean wasBusy = !state(family[1]).equals("none"); //$NON-NLS-1$
@@ -76,12 +118,16 @@ final class WorkspaceJobs {
 					Thread.currentThread().interrupt();
 				}
 				waited.add(entry((String) family[0], startedAt, "timeout")); //$NON-NLS-1$
-				return new Quiet(waited, true);
+				return false;
 			}
 			if (wasBusy) {
 				waited.add(entry((String) family[0], startedAt, "done")); //$NON-NLS-1$
 			}
 		}
+		return true;
+	}
+
+	private static boolean waitForOtherJobs(long deadline, JsonArray waited) {
 		// the rest is whatever else the restart brought up, and a name is the only
 		// thing that can be said about it from here
 		long startedAt = System.currentTimeMillis();
@@ -97,7 +143,7 @@ final class WorkspaceJobs {
 				if (!last.isEmpty()) {
 					waited.add(entry(String.join(", ", last), startedAt, "done")); //$NON-NLS-1$ //$NON-NLS-2$
 				}
-				return new Quiet(waited, false);
+				return true;
 			}
 			last = running;
 			try {
@@ -108,7 +154,7 @@ final class WorkspaceJobs {
 			}
 		}
 		waited.add(entry(last.isEmpty() ? "jobs" : String.join(", ", last), startedAt, "timeout")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-		return new Quiet(waited, true);
+		return false;
 	}
 
 	private static JsonObject entry(String what, long startedAt, String outcome) {

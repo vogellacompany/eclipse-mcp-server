@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
+import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.OperationCanceledException;
@@ -59,6 +60,10 @@ final class Provisioning {
 		private final String kind;
 		private final long startedAt = System.currentTimeMillis();
 		private final CountDownLatch finished = new CountDownLatch(1);
+
+		private final List<Runnable> cleanup = new ArrayList<>();
+
+		private boolean cleanedUp;
 
 		private volatile boolean running = true;
 		private volatile long endedAt;
@@ -129,6 +134,9 @@ final class Provisioning {
 		job.addJobChangeListener(new JobChangeAdapter() {
 			@Override
 			public void done(IJobChangeEvent event) {
+				// before anything is released, so an answer built by a waiter already
+				// carries what the cleanup records
+				runCleanup(operation);
 				IStatus status = event.getResult();
 				operation.state = ProvisioningStatus.stateOf(status);
 				if (status != null && status.getSeverity() != IStatus.OK) {
@@ -153,24 +161,43 @@ final class Provisioning {
 		operation.changes = changes == null ? new JsonArray() : changes;
 		operation.running = false;
 		operation.endedAt = System.currentTimeMillis();
+		runCleanup(operation);
 		operation.finished.countDown();
 		OPERATIONS.put(id, operation);
 		lastId = id;
 		return operation;
 	}
 
-	/** Runs {@code after} once the operation's job has finished, however it ended. */
+	/**
+	 * Runs {@code after} once the operation's job has finished, however it ended,
+	 * and before anyone waiting on the operation is released.
+	 */
 	static void onFinished(Operation operation, Runnable after) {
-		Thread waiter = new Thread(() -> {
-			try {
-				operation.finished.await();
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
+		boolean now;
+		synchronized (operation) {
+			now = operation.cleanedUp;
+			if (!now) {
+				operation.cleanup.add(after);
 			}
+		}
+		if (now) {
 			after.run();
-		}, "MCP provisioning cleanup " + operation.id); //$NON-NLS-1$
-		waiter.setDaemon(true);
-		waiter.start();
+		}
+	}
+
+	private static void runCleanup(Operation operation) {
+		List<Runnable> steps;
+		synchronized (operation) {
+			operation.cleanedUp = true;
+			steps = List.copyOf(operation.cleanup);
+		}
+		for (Runnable step : steps) {
+			try {
+				step.run();
+			} catch (RuntimeException e) {
+				ILog.of(Provisioning.class).error("Cleanup after " + operation.id + " failed", e); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+		}
 	}
 
 	/** Cancels a running operation. p2's jobs honour cancellation. */
