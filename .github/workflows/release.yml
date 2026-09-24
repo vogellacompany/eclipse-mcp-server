@@ -2,6 +2,8 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -9,7 +11,7 @@ on:
 permissions:
   contents: write
 
-# two dispatches must not race the gh-pages publish
+# two runs must not race the gh-pages publish; a newer pending run replaces an older one
 concurrency:
   group: release
   cancel-in-progress: false
@@ -60,17 +62,20 @@ jobs:
           # not sort above a plainly named one: 0.2.1 beats 0.2.0.202608201136.
           releng/update-composite-site.sh --only "$version" gh-pages
 
+      # one orphan commit replaces the branch, so its history never accumulates
+      # the copies of builds the site has already dropped
       - name: Publish the update site
         working-directory: gh-pages
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout --orphan publish
           git add -A
           git commit -m "Publish ${{ steps.version.outputs.value }}"
-          git push
+          git push --force origin HEAD:gh-pages
 
       - name: Attach the repository archive to the release
-        if: github.event_name == 'push'
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

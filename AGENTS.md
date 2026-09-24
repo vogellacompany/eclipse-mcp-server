@@ -124,7 +124,7 @@ accumulating as silent workarounds nobody dares remove.
 
 `.github/workflows/build.yml` runs `mvn clean verify` on every push and pull request, under `xvfb-run` because the Tycho surefire run starts a real Equinox.
 Before it existed the whole test suite ran only when somebody remembered to, and a regression could reach a release build undetected.
-`release.yml` has a `concurrency` group so two dispatches cannot race the gh-pages publish.
+`release.yml` has a `concurrency` group so two runs cannot race the gh-pages publish; a newer pending run replaces an older one, so a burst of pushes publishes the last of them.
 
 `Jenkinsfile` is the same validation for an Eclipse-style Jenkins: `mvn clean verify`, publish the JUnit results, archive the test IDE's own log and the p2 repository.
 It assumes the tool names an Eclipse JIPP instance provides, `apache-maven-latest` and `temurin-jdk25-latest`; on any other Jenkins those are what to change.
@@ -658,8 +658,8 @@ It now defaults to the target's own width, and both capture tools report when a 
 
 ## Releasing
 
-Run `gh workflow run release.yml`.
-`.github/workflows/release.yml` builds `main`, copies the p2 repository into `releases/<built version>/` on the `gh-pages` branch, regenerates the composite metadata with `releng/update-composite-site.sh` and pushes the site.
+Every push to `main` publishes: `.github/workflows/release.yml` runs on it, and `gh workflow run release.yml` republishes by hand.
+It builds `main` with the tests, so a red build publishes nothing, copies the p2 repository into `releases/<built version>/` on the `gh-pages` branch, regenerates the composite metadata with `releng/update-composite-site.sh` and pushes the site.
 It takes no version input: the directory is named after the feature jar the build produced, qualifier included, so publishing twice from the same source still lands on two different URLs.
 
 The version in the manifests is meant to stay put across ordinary changes.
@@ -676,8 +676,8 @@ Older builds stay reachable only as the repository zip attached to a tagged GitH
 Never edit `compositeContent.xml`, `compositeArtifacts.xml`, `p2.index` or `index.html` on `gh-pages` by hand; they are generated.
 Never overwrite an existing `releases/<version>/` with different content, because p2 caches repositories aggressively and a changed repository under an unchanged URL produces confusing install failures.
 
-Deleting a release directory does not shrink the branch: `gh-pages` keeps every published copy in its history, at roughly 9 MB each.
-Only a force-pushed orphan commit would reclaim that, and it would throw away the history of the site.
+`gh-pages` is one commit: every publish force-pushes a fresh orphan commit over the branch.
+With a publish per push a normal commit would keep every published copy in the branch history, at roughly 9 MB each; the site has no history worth keeping, since it carries one build and older ones live on as tagged release archives.
 
 Pushing anything under `.github/workflows/` needs a token with the `workflow` scope, or an SSH remote.
 

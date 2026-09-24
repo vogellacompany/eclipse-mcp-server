@@ -52,7 +52,7 @@ When building from source, the same repository is produced under `update-site/co
 
 ## Releasing
 
-`gh workflow run release.yml` builds `main` and publishes it to the update site, under a directory named after the qualifier of the build.
+Every push to `main` builds it and publishes it to the update site, under a directory named after the qualifier of the build; `gh workflow run release.yml` does the same by hand.
 The site keeps that build alone; the previous one is deleted.
 
 Pushing a `v<version>` tag runs the same workflow and additionally creates the GitHub release with the repository archive attached, which is the only way a downloadable zip is produced.
