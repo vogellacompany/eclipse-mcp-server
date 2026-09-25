@@ -2276,6 +2276,15 @@ On Wayland the compositor commonly ignores a posted event even when the post is 
 The two complete the content-assist workflow: `eclipse_type_text` the trigger text, `eclipse_press_key` `Ctrl+Space`, `eclipse_screenshot` the popup with a highlight on the selected `Table` row, then `eclipse_press_key` `Escape` or `eclipse_dismiss_dialog` to close it.
 `eclipse_dismiss_dialog` with no `shellTitle` now closes the content assist popup too: when no modal dialog is open it finds the transient popup, which has no title and carries the proposal `Table`, and reports `kind` as `popup` rather than `dialog`.
 
+### `eclipse_set_widget_text`
+
+**Changes the widget, and whatever its listeners do in response.**
+It enters text into a `Text`, `StyledText`, `Combo` or `CCombo` addressed by `part` or `shell` plus the `path` from `eclipse_get_widget_tree`, or selects a combo entry by `item` label or `itemIndex` and fires `Selection`.
+It drives the widget through its own API, so it needs no OS focus and works inside a modal dialog, which is where `eclipse_press_key` and `eclipse_click` refuse.
+By default it types one character at a time: KeyDown and KeyUp go to the widget's listeners and each character is inserted through the widget, so Verify and Modify fire per character; `perCharacter` false enters the text in one step.
+`mode` is `replace` (the default) or `insert` at the caret, and `pressEnter` then sends Return plus `DefaultSelection`.
+The answer reports the text afterwards and the events the widget actually delivered, counted by listeners added for the call, and a disabled or read-only widget is refused.
+
 ### `eclipse_get_text_bounds` and `eclipse_list_annotations`
 
 Both read-only, both default to the active editor and accept `part` for another open editor.

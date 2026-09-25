@@ -44,7 +44,7 @@ public final class WidgetTools {
 	private static final int DEFAULT_DEPTH = 6;
 
 	/** The root control of a part, or of a shell. */
-	private static Control rootOf(String partId, String shellTitle, boolean includeToolbar) {
+	static Control rootOf(String partId, String shellTitle, boolean includeToolbar) {
 		Display display = PlatformUI.getWorkbench().getDisplay();
 		if (partId == null || partId.isBlank()) {
 			Shell shell = ScreenshotTools.Capture.findShell(display, shellTitle);

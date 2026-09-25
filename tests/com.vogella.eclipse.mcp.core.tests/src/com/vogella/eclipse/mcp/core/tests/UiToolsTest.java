@@ -172,6 +172,24 @@ class UiToolsTest {
 				"no running workbench");
 	}
 
+	@Test
+	void settingWidgetTextChecksItsArgumentsBeforeTheUiThread() throws Exception {
+		assertRefused(TestFixture.call("eclipse_set_widget_text", Map.of("text", "x")), "'path' is required");
+		assertRefused(TestFixture.call("eclipse_set_widget_text", Map.of("path", "0")), "'text' is required");
+		assertRefused(TestFixture.call("eclipse_set_widget_text", Map.of("path", "0", "text", "x", "mode", "append")),
+				"Unknown mode");
+		assertRefused(TestFixture.call("eclipse_set_widget_text", Map.of("path", "0", "text", "x", "item", "a")),
+				"not both");
+		assertRefused(TestFixture.call("eclipse_set_widget_text",
+				Map.of("path", "0", "item", "a", "itemIndex", Integer.valueOf(1))), "not both");
+	}
+
+	@Test
+	void settingWidgetTextRefusesWithoutAWorkbench() throws Exception {
+		assertRefused(TestFixture.call("eclipse_set_widget_text", Map.of("path", "0/0/1", "text", "44")),
+				"no running workbench");
+	}
+
 	private static IFile write(IProject project, String name, String content) throws Exception {
 		IFile file = project.getFile(name);
 		file.create(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)), true,
