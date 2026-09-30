@@ -31,6 +31,9 @@ public final class EditFileTool implements IMcpTool {
 	/** Lines of the file shown around the change, so the caller can see what happened. */
 	private static final int CONTEXT_LINES = 3;
 
+	/** Occurrence lines reported for one edit; {@code replacements} still gives the full count. */
+	private static final int MAX_CHANGED_LINES = 100;
+
 	@Override
 	public String getName() {
 		return "eclipse_edit_file"; //$NON-NLS-1$
@@ -155,11 +158,19 @@ public final class EditFileTool implements IMcpTool {
 				.toString());
 	}
 
-	/** Every line an occurrence starts on, since one number cannot describe a replaceAll. */
+	/** The lines the first occurrences start on, since one number cannot describe a replaceAll. */
 	private static JsonArray changedLines(String content, String oldText) {
 		var lines = new JsonArray();
-		for (int at = content.indexOf(oldText); at >= 0; at = content.indexOf(oldText, at + oldText.length())) {
-			lines.add(Integer.valueOf(lineOf(content, at)));
+		int line = 1;
+		int counted = 0;
+		for (int at = content.indexOf(oldText); at >= 0 && lines.size() < MAX_CHANGED_LINES; at = content
+				.indexOf(oldText, at + oldText.length())) {
+			for (; counted < at; counted++) {
+				if (content.charAt(counted) == '\n') {
+					line++;
+				}
+			}
+			lines.add(Integer.valueOf(line));
 		}
 		return lines;
 	}

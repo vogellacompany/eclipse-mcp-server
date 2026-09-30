@@ -1,6 +1,8 @@
 package com.vogella.eclipse.mcp.core.internal;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -112,10 +114,14 @@ public final class GetProjectDependenciesTool implements IMcpTool {
 	 */
 	private static List<IProject> walk(IProject start, boolean forward, boolean transitive) throws CoreException {
 		List<IProject> found = new ArrayList<>();
-		List<IProject> queue = new ArrayList<>(List.of(start));
+		Deque<IProject> queue = new ArrayDeque<>(List.of(start));
 		Set<String> seen = new LinkedHashSet<>(Set.of(start.getName()));
 		while (!queue.isEmpty()) {
-			IProject current = queue.remove(0);
+			IProject current = queue.removeFirst();
+			if (forward && !current.isAccessible()) {
+				// a closed or missing project has no readable references
+				continue;
+			}
 			IProject[] neighbours;
 			try {
 				neighbours = forward ? current.getReferencedProjects() : current.getReferencingProjects();

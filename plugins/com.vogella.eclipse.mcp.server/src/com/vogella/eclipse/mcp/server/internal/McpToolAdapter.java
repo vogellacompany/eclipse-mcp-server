@@ -9,6 +9,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.NullProgressMonitor;
@@ -28,8 +29,14 @@ import io.modelcontextprotocol.spec.McpSchema.Tool;
  */
 public final class McpToolAdapter {
 
-	/** Calls that outlived their timeout and are still holding a thread. */
-	private static final Map<String, Future<McpToolResult>> ABANDONED = new LinkedHashMap<>();
+	/** Set once the tool body has returned, which {@code Future.isDone} cannot tell after a cancel. */
+	private static final class Running {
+		final AtomicBoolean started = new AtomicBoolean();
+		final AtomicBoolean finished = new AtomicBoolean();
+	}
+
+	/** Calls that outlived their timeout and whose tool body has not returned yet. */
+	private static final Map<String, Running> ABANDONED = new LinkedHashMap<>();
 
 	private McpToolAdapter() {
 	}
@@ -46,8 +53,15 @@ public final class McpToolAdapter {
 		// read per call, so that changing the preference takes effect without a restart
 		Duration timeout = McpPreferences.getCallTimeout();
 		NullProgressMonitor monitor = new NullProgressMonitor();
-		Future<McpToolResult> pending = executor
-				.submit(() -> tool.call(arguments == null ? Map.of() : arguments, monitor));
+		Running running = new Running();
+		Future<McpToolResult> pending = executor.submit(() -> {
+			running.started.set(true);
+			try {
+				return tool.call(arguments == null ? Map.of() : arguments, monitor);
+			} finally {
+				running.finished.set(true);
+			}
+		});
 		try {
 			McpToolResult result = pending.get(timeout.toSeconds(), TimeUnit.SECONDS);
 			CallToolResult.Builder answer = CallToolResult.builder().addTextContent(result.text())
@@ -64,7 +78,7 @@ public final class McpToolAdapter {
 			// unnoticed, because each one holds locks that block later work
 			monitor.setCanceled(true);
 			pending.cancel(true);
-			int abandoned = abandon(tool.getName(), pending);
+			int abandoned = abandon(tool.getName(), running);
 			return error(
 					"The tool '%s' did not finish within %d seconds. Raise the timeout in Preferences > General > MCP Server if the operation is expected to take longer.%s" //$NON-NLS-1$
 							.formatted(tool.getName(), timeout.toSeconds(), abandoned <= 1 ? "" //$NON-NLS-1$
@@ -107,9 +121,13 @@ public final class McpToolAdapter {
 	 * running. Nothing can kill a thread stuck in native code, so the containment
 	 * available is to stop the leak being invisible.
 	 */
-	private static synchronized int abandon(String name, Future<McpToolResult> pending) {
-		ABANDONED.entrySet().removeIf(entry -> entry.getValue().isDone());
-		ABANDONED.put(name + "@" + System.nanoTime(), pending); //$NON-NLS-1$
+	private static synchronized int abandon(String name, Running running) {
+		ABANDONED.entrySet().removeIf(entry -> entry.getValue().finished.get());
+		if (!running.started.get()) {
+			// cancelled before it started, so it never will
+			return ABANDONED.size();
+		}
+		ABANDONED.put(name + "@" + System.nanoTime(), running); //$NON-NLS-1$
 		if (ABANDONED.size() > 1) {
 			ILog.get().warn("%d MCP tool calls are abandoned and still running: %s" //$NON-NLS-1$
 					.formatted(Integer.valueOf(ABANDONED.size()), ABANDONED.keySet()));

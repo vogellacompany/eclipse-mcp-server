@@ -46,6 +46,8 @@ public final class TextBoundsTools {
 
 	private static final long UI_TIMEOUT_SECONDS = 15;
 
+	private static final int MAX_TEXT = 200;
+
 	private TextBoundsTools() {
 	}
 
@@ -221,7 +223,8 @@ public final class TextBoundsTools {
 					}
 					JsonObject result = locate(target, start, count);
 					result.put("line", Integer.valueOf(document.getLineOfOffset(start) + 1)) //$NON-NLS-1$
-							.put("text", document.get(start, count)) //$NON-NLS-1$
+							.put("text", document.get(start, Math.min(count, MAX_TEXT))) //$NON-NLS-1$
+							.put("textTruncated", Boolean.valueOf(count > MAX_TEXT)) //$NON-NLS-1$
 							.put("editor", target.editor().getTitle()) //$NON-NLS-1$
 							.put("textWidget", widgetPlacement(target)); //$NON-NLS-1$
 					return result;

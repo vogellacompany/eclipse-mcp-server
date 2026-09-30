@@ -29,6 +29,7 @@ class SetSelectionToolTest {
 		for (String spec : List.of("0/0/1/r4", "0/0/0/r7", "0/r2")) {
 			McpToolResult result = TestFixture.call("eclipse_set_selection",
 					Map.of("elements", List.of(spec)));
+			assertTrue(result.isError(), "got " + result.text());
 			assertFalse(result.text().contains("IllegalArgumentException"),
 					"'%s' must not escape as an exception, got %s".formatted(spec, result.text()));
 			assertFalse(result.text().contains("must have only one segment"), "got " + result.text());
@@ -42,6 +43,7 @@ class SetSelectionToolTest {
 		McpToolResult result = TestFixture.call("eclipse_set_selection",
 				Map.of("elements", List.of("some/relative/path")));
 
+		assertTrue(result.isError(), "got " + result.text());
 		assertFalse(result.text().contains("IllegalArgumentException"), "got " + result.text());
 	}
 

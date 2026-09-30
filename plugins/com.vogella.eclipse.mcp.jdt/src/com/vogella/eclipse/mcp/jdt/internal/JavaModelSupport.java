@@ -26,6 +26,7 @@ import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.Signature;
 
 import com.vogella.eclipse.mcp.core.McpToolException;
+import com.vogella.eclipse.mcp.core.WorkspaceSync;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
 /**
@@ -64,6 +65,16 @@ final class JavaModelSupport {
 			throw new McpToolException("Could not read the natures of project " + projectName, e); //$NON-NLS-1$
 		}
 		return List.of(JavaCore.create(project));
+	}
+
+	/** Reads outside edits into the workspace, so the search index does not answer from stale files. */
+	static void refresh(String projectName, IProgressMonitor monitor) throws McpToolException {
+		try {
+			WorkspaceSync.refresh(projectName == null ? ResourcesPlugin.getWorkspace().getRoot()
+					: ResourcesPlugin.getWorkspace().getRoot().getProject(projectName), monitor);
+		} catch (CoreException e) {
+			throw new McpToolException("Could not refresh the workspace", e); //$NON-NLS-1$
+		}
 	}
 
 	/**
@@ -180,15 +191,6 @@ final class JavaModelSupport {
 		return root == null || root.getPath() == null ? null : root.getPath().toString();
 	}
 
-	/**
-	 * Records where a search match actually lives.
-	 * <p>
-	 * {@code SearchMatch.getResource()} returns the project that owns the classpath
-	 * entry for a match inside a jar, so its path is a bare project name with no
-	 * file. Reported unchanged that reads as a source match in a project whose
-	 * source does not contain the type at all, which is worse than useless because
-	 * nothing in the answer marks it as second hand.
-	 */
 	/** A package-private type declared in a file named after a different type. */
 	private static IType findSecondaryType(String typeName, List<IJavaProject> projects, IProgressMonitor monitor)
 			throws McpToolException {
@@ -207,6 +209,15 @@ final class JavaModelSupport {
 		return null;
 	}
 
+	/**
+	 * Records where a search match actually lives.
+	 * <p>
+	 * {@code SearchMatch.getResource()} returns the project that owns the classpath
+	 * entry for a match inside a jar, so its path is a bare project name with no
+	 * file. Reported unchanged that reads as a source match in a project whose
+	 * source does not contain the type at all, which is worse than useless because
+	 * nothing in the answer marks it as second hand.
+	 */
 	static void describeLocation(org.eclipse.jdt.core.search.SearchMatch match, JsonObject entry) {
 		org.eclipse.core.resources.IResource resource = match.getResource();
 		IJavaElement element = match.getElement() instanceof IJavaElement found ? found : null;
@@ -311,13 +322,7 @@ final class JavaModelSupport {
 			if (all == null || range == null || range.getOffset() < 0) {
 				return -1;
 			}
-			int line = 1;
-			for (int i = 0; i < range.getOffset() && i < all.length(); i++) {
-				if (all.charAt(i) == '\n') {
-					line++;
-				}
-			}
-			return line;
+			return FileText.lineOf(all, range.getOffset());
 		} catch (JavaModelException e) {
 			return -1;
 		}

@@ -82,6 +82,9 @@ public final class ScreenshotTools {
 		CompletableFuture<T> pending = new CompletableFuture<>();
 		// asyncExec, never syncExec: a busy UI must not block the HTTP worker
 		UiThread.exec(() -> {
+			if (pending.isDone()) {
+				return;
+			}
 			try {
 				pending.complete(work.get());
 			} catch (RuntimeException e) {
@@ -94,6 +97,7 @@ public final class ScreenshotTools {
 			pending.cancel(false);
 			return McpToolResult.error("The Eclipse UI is busy, try again."); //$NON-NLS-1$
 		} catch (InterruptedException e) {
+			pending.cancel(false);
 			Thread.currentThread().interrupt();
 			return McpToolResult.error("The request was interrupted."); //$NON-NLS-1$
 		} catch (ExecutionException e) {
@@ -151,7 +155,7 @@ public final class ScreenshotTools {
 						.put("firstControl", Shells.firstControlName(shell)) //$NON-NLS-1$
 						.put("modal", Shells.isModal(shell)) //$NON-NLS-1$
 						.put("visible", shell.isVisible()) //$NON-NLS-1$
-						.put("bounds", bounds.x + "," + bounds.y + " " + bounds.width + "x" + bounds.height)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+						.put("bounds", Overlays.describe(bounds))); //$NON-NLS-1$
 			}
 			JsonArray parts = new JsonArray();
 			for (MPart part : Workbenches.e4Parts()) {
@@ -256,7 +260,7 @@ public final class ScreenshotTools {
 			String explicitTarget = args.getString("target"); //$NON-NLS-1$
 			// infer from whichever selector was given, and with none at all capture the
 			// active shell, which is what the description promises
-			String shellSpec = args.getString("shell") != null ? args.getString("shell") : args.getString("shellTitle"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			String shellSpec = Shells.spec(args);
 			String target = explicitTarget != null ? explicitTarget
 					: part != null ? "part" : "shell"; //$NON-NLS-1$ //$NON-NLS-2$
 			if ("part".equals(target) && part == null) { //$NON-NLS-1$
@@ -324,7 +328,7 @@ public final class ScreenshotTools {
 				lastPng = encoding.png().get();
 				taken++;
 				byte[] bytes = bytesOf(target0);
-				if (bytes != null && previous != null && java.util.Arrays.equals(bytes, previous)) {
+				if (bytes != null && previous != null && Arrays.equals(bytes, previous)) {
 					converged = true;
 				}
 				previous = bytes;
@@ -375,6 +379,9 @@ public final class ScreenshotTools {
 		private static Encoding onUiValue(Supplier<Encoding> work) {
 			CompletableFuture<Encoding> pending = new CompletableFuture<>();
 			UiThread.exec(() -> {
+				if (pending.isDone()) {
+					return;
+				}
 				try {
 					pending.complete(work.get());
 				} catch (RuntimeException e) {
@@ -384,9 +391,14 @@ public final class ScreenshotTools {
 			try {
 				return pending.get(UI_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
+				pending.cancel(false);
 				Thread.currentThread().interrupt();
 				return null;
-			} catch (Exception e) {
+			} catch (ExecutionException e) {
+				Throwable cause = e.getCause() == null ? e : e.getCause();
+				return Encoding.done(failure("The capture failed: " + cause)); //$NON-NLS-1$
+			} catch (TimeoutException e) {
+				pending.cancel(false);
 				return null;
 			}
 		}
@@ -446,22 +458,9 @@ public final class ScreenshotTools {
 			}
 
 			List<Overlays.Highlight> overlays = Overlays.resolve(display, printable, highlights);
-			// Inside one turn of the UI thread the screen cannot have caught up with
-			// the widgets: a shell this batch created has correct bounds and has never
-			// painted, so reading the root drawable at those bounds photographs
-			// whatever was underneath and returns it as a successful capture. This
-			// shipped that way and produced a picture of the Welcome page for a content
-			// assist popup, reported as captured true with no warning, which a
-			// regression suite then recorded as its baseline. Flush what is pending and
-			// then paint the widget itself, whose state IS current, rather than trusting
-			// the screen.
-			// Reading the screen photographs whatever is in FRONT of the target, and a
-			// window from another application is not uniform, so every check this class
-			// has passes on an image of somebody's browser. That is the one failure a
-			// caller cannot detect: settled, converged, plausible area, right zoom. On
-			// Windows the screen's own foreground window decides, since an active shell
-			// there can be active inside the process only; on GTK the compositor's
-			// activation state, since SWT marks a shell active as soon as it asks.
+			// Inside one UI turn the screen has not caught up with the widgets, and a window
+			// in front of the IDE is photographed as if it were the target; in both cases
+			// the widget is painted directly instead of reading the screen.
 			boolean foreground = NativeForeground.isForeground(display);
 			boolean occluded = !foreground && !sameTurn;
 			boolean screenUnreliable = (sameTurn || occluded) && printable != null;
@@ -487,7 +486,9 @@ public final class ScreenshotTools {
 				} finally {
 					gc.dispose();
 				}
-				if ((screenUnreliable || isBlank(DeviceScale.screenData(image, zoom))) && printable instanceof Shell shell
+				ImageData rootData = screenUnreliable ? null : DeviceScale.screenData(image, zoom);
+				boolean useWidgetPrint = screenUnreliable || isBlank(rootData);
+				if (useWidgetPrint && printable instanceof Shell shell
 						&& shell.getChildren().length > 0) {
 					// Shell.print returns blank under a compositing window manager while
 					// Composite.print does not, so paint the shell's content instead:
@@ -497,7 +498,7 @@ public final class ScreenshotTools {
 					clientArea = shell.getClientArea();
 					pieces = paintablesOf(shell);
 				}
-				if ((screenUnreliable || isBlank(DeviceScale.screenData(image, zoom))) && printable != null) {
+				if (useWidgetPrint && printable != null) {
 					final Control painted = printable;
 					final List<Paintable> composed = pieces;
 					// A compositing window manager redirects window contents into an
@@ -522,7 +523,7 @@ public final class ScreenshotTools {
 						drawer.fillRectangle(0, 0, drawnWidth, drawnHeight);
 						if (composed == null) {
 							painted.print(drawer);
-							if (Screencast.GTK) {
+							if (DeviceScale.GTK) {
 								Rectangle own2 = painted.getBounds();
 								painted.redraw(0, 0, own2.width, own2.height, true);
 							}
@@ -535,7 +536,7 @@ public final class ScreenshotTools {
 					area = new Rectangle(area.x, area.y, canvas.width(), canvas.height());
 					method = "widgetPrint"; //$NON-NLS-1$
 				}
-				ImageData data = "rootCapture".equals(method) ? DeviceScale.screenData(image, zoom) //$NON-NLS-1$
+				ImageData data = "rootCapture".equals(method) ? rootData //$NON-NLS-1$
 						: DeviceScale.paintedData(image, zoom);
 				if (isBlank(data)) {
 					return Encoding.done(failure(printable == null
@@ -566,7 +567,7 @@ public final class ScreenshotTools {
 						.put("zoom", Integer.valueOf(captured)) //$NON-NLS-1$
 						.put("deviceZoom", Integer.valueOf(zoom)) //$NON-NLS-1$
 						.put("foreground", Boolean.valueOf(foreground)) //$NON-NLS-1$
-						.put("requestedArea", describe(requested)); //$NON-NLS-1$
+						.put("requestedArea", Overlays.describe(requested)); //$NON-NLS-1$
 				if (captured < zoom) {
 					written.put("belowDeviceZoom", //$NON-NLS-1$
 							"This display paints at %d%% and the capture came back at %d%%, so the image holds fewer pixels than the screen does and its text is softer than what is on it. Use eclipse_get_display_info to see the scaling in force." //$NON-NLS-1$
@@ -758,7 +759,7 @@ public final class ScreenshotTools {
 					gc.setBackground(fill);
 					gc.fillRectangle(0, 0, w, h);
 					control.print(gc);
-					if (Screencast.GTK) {
+					if (DeviceScale.GTK) {
 						control.redraw(0, 0, at.width, at.height, true);
 					}
 				});
@@ -809,11 +810,6 @@ public final class ScreenshotTools {
 			return pieces != null && !pieces.isEmpty() ? pieces.get(0).control() : printable;
 		}
 
-		/** Bounds in the {@code x,y widthxheight} form the other tools report. */
-		private static String describe(Rectangle rectangle) {
-			return rectangle.x + "," + rectangle.y + " " + rectangle.width + "x" + rectangle.height; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-		}
-
 		/**
 		 * The width to scale to, snapped to a whole number ratio when that is close to
 		 * what was asked for.
@@ -821,11 +817,9 @@ public final class ScreenshotTools {
 		 * Resampling already rendered text by a fraction makes the glyphs mushy, and a
 		 * caller asking for 1920 from a 5370 wide capture wants a picture that reads
 		 * rather than exactly 1920 pixels. Only snaps within a fifth of the request, so
-		 * a deliberate width is still honoured. A tenth was too tight to be useful: a
-		 * 5370 wide capture asked for 2000 lands on 1790, which missed by half a
-		 * percent and left the picture mushy for nothing.
+		 * a deliberate width is still honoured.
 		 */
-		static int crispWidth(int actual, int maxWidth) {
+		public static int crispWidth(int actual, int maxWidth) {
 			if (actual <= maxWidth) {
 				return maxWidth;
 			}
@@ -908,12 +902,13 @@ public final class ScreenshotTools {
 					loader.save(bytes, SWT.IMAGE_PNG);
 					Path file = outputPath != null ? Path.of(outputPath)
 							: Files.createTempFile("eclipse-screenshot-", ".png"); //$NON-NLS-1$ //$NON-NLS-2$
-					Files.write(file, bytes.toByteArray());
-					png.set(bytes.toByteArray());
+					byte[] encoded = bytes.toByteArray();
+					Files.write(file, encoded);
+					png.set(encoded);
 					answer.put("path", file.toAbsolutePath().toString()) //$NON-NLS-1$
-							.put("bytes", bytes.size()); //$NON-NLS-1$
+							.put("bytes", encoded.length); //$NON-NLS-1$
 					if (includeBase64) {
-						answer.put("base64", Base64.getEncoder().encodeToString(bytes.toByteArray())); //$NON-NLS-1$
+						answer.put("base64", Base64.getEncoder().encodeToString(encoded)); //$NON-NLS-1$
 					}
 					return answer;
 				} catch (IOException | RuntimeException e) {
@@ -1080,11 +1075,6 @@ public final class ScreenshotTools {
 
 		static Shell findShell(Display display, String spec) {
 			return Shells.select(display, spec);
-		}
-
-		/** The monitor's zoom in percent, which is the resolution a widget paints at. */
-		static int zoomOf(Control control) {
-			return DeviceScale.zoomOf(control);
 		}
 
 		/**

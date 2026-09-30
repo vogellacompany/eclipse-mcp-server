@@ -7,10 +7,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -111,28 +107,15 @@ public final class RestartTool implements IMcpTool {
 			}
 		}
 
-		CompletableFuture<JsonObject> pending = new CompletableFuture<>();
-		Workbenches.display().asyncExec(() -> {
-			try {
-				pending.complete(prepare(save, force, splash, workspace, clean, args.has("clean"))); //$NON-NLS-1$
-			} catch (RuntimeException e) {
-				pending.completeExceptionally(e);
-			}
-		});
-		try {
-			JsonObject result = pending.get(UI_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-			return Boolean.TRUE.equals(result.remove("restarting")) //$NON-NLS-1$
-					? McpToolResult.of(result.toString())
-					: McpToolResult.error(result.toString());
-		} catch (TimeoutException e) {
-			pending.cancel(false);
-			return McpToolResult.error("The Eclipse UI is busy, try again."); //$NON-NLS-1$
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			return McpToolResult.error("The request was interrupted."); //$NON-NLS-1$
-		} catch (ExecutionException e) {
-			return McpToolResult.error("Could not restart: " + (e.getCause() == null ? e : e.getCause()));
+		UiThread.Outcome outcome = UiThread.run(UI_TIMEOUT_SECONDS,
+				() -> prepare(save, force, splash, workspace, clean, args.has("clean"))); //$NON-NLS-1$
+		if (outcome.error() != null) {
+			return McpToolResult.error("Could not restart: " + outcome.error()); //$NON-NLS-1$
 		}
+		JsonObject result = outcome.value();
+		return Boolean.TRUE.equals(result.remove("restarting")) //$NON-NLS-1$
+				? McpToolResult.of(result.toString())
+				: McpToolResult.error(result.toString());
 	}
 
 	/**

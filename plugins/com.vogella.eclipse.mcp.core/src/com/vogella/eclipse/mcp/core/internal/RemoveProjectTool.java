@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IProjectDescription;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
@@ -54,7 +55,7 @@ public final class RemoveProjectTool implements IMcpTool {
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
-		Set<String> named = new LinkedHashSet<>(strings(arguments));
+		Set<String> named = ProjectSelection.names(arguments);
 		String namePatternArg = args.getString("namePattern"); //$NON-NLS-1$
 		Pattern namePattern = namePatternArg == null ? null : Globs.compile(namePatternArg);
 		if (named.isEmpty() && namePattern == null) {
@@ -85,25 +86,22 @@ public final class RemoveProjectTool implements IMcpTool {
 		int removed = 0;
 		int refused = 0;
 		for (IProject project : selected) {
-			if (results.size() >= maxResults) {
-				break;
-			}
 			JsonObject entry = new JsonObject().put("name", project.getName()) //$NON-NLS-1$
 					.put("location", location(project)) //$NON-NLS-1$
 					.put("hasProjectFile", Boolean.valueOf(hasProjectFile(project))); //$NON-NLS-1$
-			List<String> blocking = blockingDependents(project, removing);
+			List<String> blocking = ProjectSelection.blockingDependents(project, removing);
 			if (!blocking.isEmpty()) {
 				entry.put("dependents", of(blocking)); //$NON-NLS-1$
 			}
 			if (!blocking.isEmpty() && !force) {
 				refused++;
-				results.add(entry.put("removed", Boolean.FALSE) //$NON-NLS-1$
+				report(results, maxResults, entry.put("removed", Boolean.FALSE) //$NON-NLS-1$
 						.put("refusedBecause", //$NON-NLS-1$
 								"These open projects reference it and would lose it from their build path. Pass force to remove anyway, or remove them together.")); //$NON-NLS-1$
 				continue;
 			}
 			if (dryRun) {
-				results.add(entry.put("removed", Boolean.FALSE)); //$NON-NLS-1$
+				report(results, maxResults, entry.put("removed", Boolean.FALSE)); //$NON-NLS-1$
 				continue;
 			}
 			try {
@@ -111,9 +109,9 @@ public final class RemoveProjectTool implements IMcpTool {
 				// the working tree stays
 				project.delete(false, force, monitor);
 				removed++;
-				results.add(entry.put("removed", Boolean.TRUE)); //$NON-NLS-1$
+				report(results, maxResults, entry.put("removed", Boolean.TRUE)); //$NON-NLS-1$
 			} catch (CoreException e) {
-				results.add(entry.put("removed", Boolean.FALSE).put("error", e.getMessage())); //$NON-NLS-1$ //$NON-NLS-2$
+				report(results, maxResults, entry.put("removed", Boolean.FALSE).put("error", e.getMessage())); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 		}
 
@@ -127,6 +125,13 @@ public final class RemoveProjectTool implements IMcpTool {
 			return McpToolResult.of(result.put("note", "No project matched, so nothing was removed.").toString()); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		return McpToolResult.of(result.put("note", note(dryRun, results)).toString()); //$NON-NLS-1$
+	}
+
+	/** Every selected project is acted on; only the report is capped. */
+	private static void report(JsonArray results, int maxResults, JsonObject entry) {
+		if (results.size() < maxResults) {
+			results.add(entry);
+		}
 	}
 
 	private static String note(boolean dryRun, JsonArray results) {
@@ -143,7 +148,7 @@ public final class RemoveProjectTool implements IMcpTool {
 	private static boolean hasProjectFile(IProject project) {
 		IPath location = project.getLocation();
 		return location != null
-				&& location.append(org.eclipse.core.resources.IProjectDescription.DESCRIPTION_FILE_NAME).toFile()
+				&& location.append(IProjectDescription.DESCRIPTION_FILE_NAME).toFile()
 						.isFile();
 	}
 
@@ -152,35 +157,9 @@ public final class RemoveProjectTool implements IMcpTool {
 		return location == null ? null : location.toOSString();
 	}
 
-	/** Open projects that reference this one and are not being removed with it. */
-	private static List<String> blockingDependents(IProject project, Set<String> removing) {
-		List<String> blocking = new ArrayList<>();
-		for (IProject referencing : project.getReferencingProjects()) {
-			if (!removing.contains(referencing.getName())) {
-				blocking.add(referencing.getName());
-			}
-		}
-		return blocking;
-	}
-
 	private static JsonArray of(List<String> values) {
 		JsonArray array = new JsonArray();
 		values.forEach(array::add);
 		return array;
-	}
-
-	@SuppressWarnings("unchecked")
-	private static List<String> strings(Map<String, Object> arguments) {
-		Object raw = arguments == null ? null : arguments.get("projects"); //$NON-NLS-1$
-		if (!(raw instanceof List<?> list)) {
-			return List.of();
-		}
-		List<String> values = new ArrayList<>();
-		for (Object value : list) {
-			if (value != null) {
-				values.add(String.valueOf(value).strip());
-			}
-		}
-		return values;
 	}
 }

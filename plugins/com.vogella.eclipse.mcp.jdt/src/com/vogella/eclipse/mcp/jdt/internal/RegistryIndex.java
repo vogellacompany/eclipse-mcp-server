@@ -1,8 +1,6 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
-import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -25,6 +23,7 @@ import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.OperationCanceledException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
@@ -168,7 +167,7 @@ final class RegistryIndex {
 		}
 		for (IProject project : projects) {
 			if (monitor.isCanceled()) {
-				return index;
+				throw new OperationCanceledException();
 			}
 			index.indexExtensions(project);
 			index.indexComponents(project);
@@ -240,12 +239,14 @@ final class RegistryIndex {
 	// --- plugin.xml -------------------------------------------------------
 
 	private void indexExtensionPoints(IProject project) {
-		String bundle = symbolicName(project);
+		String bundle = FileText.symbolicName(project.getFile("META-INF/MANIFEST.MF"));
 		if (bundle == null) {
 			return;
 		}
 		for (IFile file : manifestFiles(project)) {
-			Document document = parse(file);
+			// most plugin.xml files declare no point, so skip the DOM parse for them
+			String text = FileText.read(file);
+			Document document = text == null || !text.contains("extension-point") ? null : parse(file); //$NON-NLS-1$
 			if (document == null) {
 				continue;
 			}
@@ -414,7 +415,7 @@ final class RegistryIndex {
 
 	private void indexActivator(IProject project) {
 		IFile manifest = project.getFile("META-INF/MANIFEST.MF"); //$NON-NLS-1$
-		String activator = header(manifest, "Bundle-Activator"); //$NON-NLS-1$
+		String activator = FileText.manifestHeader(manifest, "Bundle-Activator"); //$NON-NLS-1$
 		if (activator != null) {
 			add(activator, new Evidence("manifest", manifest.getFullPath().toString(), "Bundle-Activator", null, //$NON-NLS-1$ //$NON-NLS-2$
 					"org.osgi.framework.BundleActivator", true)); //$NON-NLS-1$
@@ -472,7 +473,7 @@ final class RegistryIndex {
 	}
 
 	private void indexApplicationModelFile(IFile file) {
-		String content = read(file);
+		String content = FileText.read(file);
 		if (content == null || !content.contains("bundleclass://")) { //$NON-NLS-1$
 			return;
 		}
@@ -516,7 +517,7 @@ final class RegistryIndex {
 	}
 
 	private void scanReflection(IFile file) {
-		String content = read(file);
+		String content = FileText.read(file);
 		if (content == null || !content.contains("forName") && !content.contains("loadClass")) { //$NON-NLS-1$ //$NON-NLS-2$
 			return;
 		}
@@ -530,19 +531,9 @@ final class RegistryIndex {
 		Matcher any = ANY_REFLECTION.matcher(content);
 		while (any.find()) {
 			if (!literals.contains(Integer.valueOf(any.start()))) {
-				dynamicReflection.add(path + ":" + lineOf(content, any.start())); //$NON-NLS-1$
+				dynamicReflection.add(path + ":" + FileText.lineOf(content, any.start())); //$NON-NLS-1$
 			}
 		}
-	}
-
-	private static int lineOf(String content, int offset) {
-		int line = 1;
-		for (int i = 0; i < offset && i < content.length(); i++) {
-			if (content.charAt(i) == '\n') {
-				line++;
-			}
-		}
-		return line;
 	}
 
 	// --- small helpers ----------------------------------------------------
@@ -564,39 +555,9 @@ final class RegistryIndex {
 		return files;
 	}
 
-	private static String symbolicName(IProject project) {
-		String header = header(project.getFile("META-INF/MANIFEST.MF"), "Bundle-SymbolicName"); //$NON-NLS-1$ //$NON-NLS-2$
-		return header == null ? null : header.split(";", 2)[0].trim(); //$NON-NLS-1$
-	}
-
-	private static String header(IFile manifest, String name) {
-		if (!manifest.exists()) {
-			return null;
-		}
-		String content = read(manifest);
-		if (content == null) {
-			return null;
-		}
-		// manifest continuation lines start with a single space
-		for (String line : content.replace("\r\n", "\n").replace("\n ", "").split("\n")) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
-			if (line.startsWith(name + ":")) { //$NON-NLS-1$
-				return line.substring(name.length() + 1).trim();
-			}
-		}
-		return null;
-	}
-
 	private static List<String> lines(IFile file) {
-		String content = read(file);
+		String content = FileText.read(file);
 		return content == null ? List.of() : List.of(content.split("\r?\n")); //$NON-NLS-1$
-	}
-
-	private static String read(IFile file) {
-		try (InputStream in = file.getContents(true)) {
-			return new String(in.readAllBytes(), Charset.forName(file.getCharset()));
-		} catch (CoreException | IOException | IllegalArgumentException e) {
-			return null;
-		}
 	}
 
 	private static List<IResource> members(IContainer container) {

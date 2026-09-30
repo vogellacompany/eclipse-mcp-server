@@ -88,6 +88,19 @@ class FlightRecordingToolsTest {
 	}
 
 	@Test
+	void stoppingARecordingWhoseDurationIsUpStillReadsIt() throws Exception {
+		Map<String, Object> started = TestFixture.callAndParse(START,
+				Map.of("settings", "default", "durationSeconds", Integer.valueOf(1), "maxSizeMegabytes",
+						Integer.valueOf(16)));
+		assumeTrue(started.get("recordingId") != null, "this JVM does not expose jdk.jfr");
+		Thread.sleep(2500);
+
+		McpToolResult stopped = TestFixture.call(STOP, Map.of("recordingId", started.get("recordingId")));
+
+		assertTrue(!stopped.isError(), stopped.text());
+	}
+
+	@Test
 	void readingWithoutARecordingSaysWhichToolStartsOne() throws Exception {
 		// the id cannot exist: the registry hands out jfr-<counter>
 		McpToolResult result = TestFixture.call(STOP, Map.of("recordingId", "jfr-does-not-exist"));
@@ -116,7 +129,9 @@ class FlightRecordingToolsTest {
 				keep.add(block);
 			}
 		}
-		assertTrue(keep.size() > 0);
+		if (keep.isEmpty()) {
+			throw new IllegalStateException("nothing was allocated");
+		}
 	}
 
 	@SuppressWarnings("unchecked")

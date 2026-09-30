@@ -11,6 +11,8 @@ import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.debug.core.DebugPlugin;
+import org.eclipse.debug.core.ILaunch;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.launching.IVMInstall;
 import org.eclipse.jdt.launching.IVMInstallType;
@@ -69,6 +71,12 @@ class DebugLaunchEndToEndTest {
 
 	@AfterEach
 	void deleteTestProjects() throws Exception {
+		// a failed assertion must not leave the program running past the project delete
+		for (ILaunch launch : DebugPlugin.getDefault().getLaunchManager().getLaunches()) {
+			if (launch.canTerminate()) {
+				launch.terminate();
+			}
+		}
 		fixture.dispose();
 	}
 

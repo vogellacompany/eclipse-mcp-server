@@ -66,12 +66,10 @@ class OverlaysTest {
 		List<Overlays.Highlight> highlights = Overlays.resolve(null, null,
 				List.of(Map.of("bounds", "20,20 40x20", "padding", Integer.valueOf(5))));
 
-		// zoom 200 halved back: the padded points and the pixels agree again, which is
-		// what tells a padding applied before scaling from one applied after
-		Map<String, Object> drawn = first(Overlays.draw(null, image, highlights, 2.0 * 0.5).toString());
+		Map<String, Object> drawn = first(Overlays.draw(null, image, highlights, 2.0).toString());
 
 		assertEquals("15,15 50x30", drawn.get("pointsInTarget"), "got " + drawn);
-		assertEquals("15,15 50x30", drawn.get("pixels"), "got " + drawn);
+		assertEquals("30,30 100x60", drawn.get("pixels"), "got " + drawn);
 	}
 
 	@Test
@@ -92,8 +90,8 @@ class OverlaysTest {
 		List<Overlays.Highlight> highlights = Overlays.resolve(null, null,
 				List.of(Map.of("bounds", "10,5 40x20", "color", "#ff0000")));
 
-		// zoom 200 downscaled by a half: one point is one pixel
-		Map<String, Object> drawn = first(Overlays.draw(null, image, highlights, 2.0 * 0.5).toString());
+		// scale 1: one point is one pixel
+		Map<String, Object> drawn = first(Overlays.draw(null, image, highlights, 1.0).toString());
 
 		assertEquals(Boolean.TRUE, drawn.get("drawn"), "got " + drawn);
 		assertEquals("10,5 40x20", drawn.get("pixels"), "got " + drawn);

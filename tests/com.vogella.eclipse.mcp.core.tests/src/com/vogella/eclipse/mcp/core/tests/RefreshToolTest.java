@@ -1,11 +1,11 @@
 package com.vogella.eclipse.mcp.core.tests;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Map;
@@ -35,7 +35,7 @@ class RefreshToolTest {
 		// written behind the IDE's back, so the workspace does not know about it yet
 		Files.write(project.getLocation().append("outside.txt").toFile().toPath(),
 				"written by a shell".getBytes(StandardCharsets.UTF_8));
-		assertTrue(!project.getFile("outside.txt").exists(), "the workspace should not see it before the refresh");
+		assertFalse(project.getFile("outside.txt").exists(), "the workspace should not see it before the refresh");
 
 		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("project", PROJECT));
 

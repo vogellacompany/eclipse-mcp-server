@@ -1,7 +1,6 @@
 package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -147,6 +146,8 @@ class GetProblemsToolTest {
 		Map<String, Object> other = TestFixture.callAndParse("eclipse_get_problems",
 				Map.of("project", PROJECT + "-other"));
 		assertEquals(Integer.valueOf(0), other.get("total"));
+		Map<String, Object> marked = TestFixture.callAndParse("eclipse_get_problems", Map.of("project", PROJECT));
+		assertEquals(Integer.valueOf(1), marked.get("total"));
 	}
 
 	@Test
@@ -239,6 +240,33 @@ class GetProblemsToolTest {
 			description.setAutoBuilding(autoBuilding);
 			workspace.setDescription(description);
 		}
+	}
+
+	@Test
+	void rejectsAnUnknownProject() throws Exception {
+		McpToolResult result = TestFixture.call("eclipse_get_problems", Map.of("project", "mcp-no-such-project"));
+
+		assertTrue(result.isError(), result.text());
+		assertTrue(result.text().contains("mcp-no-such-project"), result.text());
+	}
+
+	@Test
+	void excludedTypesAreNotReportedAsResolvedAgainstAMarker() throws Exception {
+		IProject project = fixture.createProject(PROJECT);
+		IFile file = project.getFile("typed.txt");
+		file.create(new ByteArrayInputStream(new byte[0]), true, new NullProgressMonitor());
+		IMarker typed = file.createMarker("org.eclipse.jdt.core.problem");
+		typed.setAttribute(IMarker.SEVERITY, IMarker.SEVERITY_ERROR);
+		typed.setAttribute(IMarker.MESSAGE, "Flickers");
+		typed.setAttribute(IMarker.LINE_NUMBER, 1);
+		String marker = String.valueOf(TestFixture.callAndParse("eclipse_mark_problems", Map.of()).get("marker"));
+
+		Map<String, Object> result = TestFixture.callAndParse("eclipse_get_problems", Map.of("project", PROJECT,
+				"marker", marker, "excludeTypes", List.of("org.eclipse.jdt.core.problem")));
+
+		// the excluded type is filtered from the current side, so without the same
+		// filter on the baseline the problem would read as fixed
+		assertEquals(Integer.valueOf(0), result.get("resolvedCount"), "got " + result);
 	}
 
 	@Test

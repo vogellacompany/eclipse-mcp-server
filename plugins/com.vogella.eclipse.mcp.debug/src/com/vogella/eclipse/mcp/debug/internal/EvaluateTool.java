@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.debug.core.DebugException;
+import org.eclipse.debug.core.model.IStackFrame;
 import org.eclipse.debug.core.model.IThread;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.debug.core.IJavaDebugTarget;
@@ -75,8 +76,12 @@ public final class EvaluateTool implements IMcpTool {
 				throw new DebugSupport.Refusal(
 						"Evaluation needs a suspended thread; '%s' is not.".formatted(DebugSupport.name(thread))); //$NON-NLS-1$
 			}
-			IJavaStackFrame frame = (IJavaStackFrame) javaThread.getStackFrames()[Math
-					.min(args.getInt("frame", 0, 0, 500), Math.max(0, javaThread.getStackFrames().length - 1))]; //$NON-NLS-1$
+			IStackFrame[] stack = javaThread.getStackFrames();
+			int frameIndex = args.getInt("frame", 0, 0, 500); //$NON-NLS-1$
+			if (frameIndex >= stack.length || !(stack[frameIndex] instanceof IJavaStackFrame frame)) {
+				throw new DebugSupport.Refusal("Frame %d does not exist; '%s' has %d frames.".formatted( //$NON-NLS-1$
+						Integer.valueOf(frameIndex), DebugSupport.name(thread), Integer.valueOf(stack.length)));
+			}
 			IJavaProject project = projectOf(frame, session);
 			if (project == null) {
 				throw new DebugSupport.Refusal(

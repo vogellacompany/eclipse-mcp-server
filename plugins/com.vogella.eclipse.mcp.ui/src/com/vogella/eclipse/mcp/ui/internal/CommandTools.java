@@ -112,7 +112,7 @@ public final class CommandTools {
 			ICommandService commands = PlatformUI.getWorkbench().getService(ICommandService.class);
 			IBindingService bindings = PlatformUI.getWorkbench().getService(IBindingService.class);
 			String needle = filter == null ? null : filter.toLowerCase(Locale.ROOT);
-			List<Row> matching = new ArrayList<>();
+			List<Candidate> matching = new ArrayList<>();
 			for (Command command : commands.getDefinedCommands()) {
 				String name = nameOf(command);
 				if (name == null) {
@@ -129,26 +129,26 @@ public final class CommandTools {
 				if (handledOnly && !handled) {
 					continue;
 				}
-				matching.add(new Row(command.getId(), name, category, descriptionOf(command), handled,
-						command.isEnabled(), bindings.getBestActiveBindingFormattedFor(command.getId()),
-						includeParameters ? parametersOf(command) : null));
+				matching.add(new Candidate(command, name, category, handled));
 			}
 			matching.sort((a, b) -> {
-				int byName = String.CASE_INSENSITIVE_ORDER.compare(orEmpty(a.name()), orEmpty(b.name()));
-				return byName != 0 ? byName : String.CASE_INSENSITIVE_ORDER.compare(orEmpty(a.id()), orEmpty(b.id()));
+				int byName = String.CASE_INSENSITIVE_ORDER.compare(a.name(), b.name());
+				return byName != 0 ? byName
+						: String.CASE_INSENSITIVE_ORDER.compare(a.command().getId(), b.command().getId());
 			});
 
 			int total = matching.size();
 			JsonArray reported = new JsonArray();
-			for (Row row : matching.subList(0, Math.min(maxResults, total))) {
-				reported.add(describe(row));
+			// enablement and keybinding are the costly reads, so only the reported page pays for them
+			for (Candidate candidate : matching.subList(0, Math.min(maxResults, total))) {
+				Command command = candidate.command();
+				reported.add(describe(new Row(command.getId(), candidate.name(), candidate.category(),
+						descriptionOf(command), candidate.handled(), command.isEnabled(),
+						bindings.getBestActiveBindingFormattedFor(command.getId()),
+						includeParameters ? parametersOf(command) : null)));
 			}
 			return new JsonObject().put("commands", reported).put("total", Integer.valueOf(total)) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("truncated", Boolean.valueOf(total > reported.size())); //$NON-NLS-1$
-		}
-
-		private static String orEmpty(String text) {
-			return text == null ? "" : text; //$NON-NLS-1$
 		}
 
 		private static JsonObject describe(Row row) {
@@ -161,6 +161,9 @@ public final class CommandTools {
 			}
 			return json;
 		}
+	}
+
+	private record Candidate(Command command, String name, String category, boolean handled) {
 	}
 
 	private record Row(String id, String name, String category, String description, boolean handled, boolean enabled,
@@ -228,7 +231,8 @@ public final class CommandTools {
 			UiThread.exec(() -> {
 				try {
 					pending.complete(execute(wanted, parameters, dryRun, selection, recorder).toString());
-				} catch (RuntimeException e) {
+				} catch (Throwable e) {
+					// an Error must complete the future too, or the wait reports a dialog that is not there
 					pending.completeExceptionally(e);
 				}
 			});

@@ -2,10 +2,6 @@ package com.vogella.eclipse.mcp.ui.internal;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.e4.core.contexts.IEclipseContext;
@@ -80,27 +76,14 @@ public final class ModelVisibilityTool implements IMcpTool {
 		boolean dryRun = args.getBoolean("dryRun", true); //$NON-NLS-1$
 		int maxResults = args.getInt("maxResults", 20, 1, 200); //$NON-NLS-1$
 
-		CompletableFuture<JsonObject> pending = new CompletableFuture<>();
-		UiThread.exec(() -> {
-			try {
-				pending.complete(apply(elementId, visible, rendered, dryRun, maxResults));
-			} catch (RuntimeException e) {
-				pending.completeExceptionally(e);
-			}
-		});
-		try {
-			JsonObject result = pending.get(UI_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-			return Boolean.FALSE.equals(result.remove("ok")) ? McpToolResult.error(result.toString()) //$NON-NLS-1$
-					: McpToolResult.of(result.toString());
-		} catch (TimeoutException e) {
-			pending.cancel(false);
-			return McpToolResult.error("The Eclipse UI is busy, try again."); //$NON-NLS-1$
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			return McpToolResult.error("The request was interrupted."); //$NON-NLS-1$
-		} catch (ExecutionException e) {
-			return McpToolResult.error("Could not change the model: " + (e.getCause() == null ? e : e.getCause()));
+		UiThread.Outcome outcome = UiThread.run(UI_TIMEOUT_SECONDS,
+				() -> apply(elementId, visible, rendered, dryRun, maxResults));
+		if (outcome.error() != null) {
+			return McpToolResult.error("Could not change the model: " + outcome.error()); //$NON-NLS-1$
 		}
+		JsonObject result = outcome.value();
+		return Boolean.FALSE.equals(result.remove("ok")) ? McpToolResult.error(result.toString()) //$NON-NLS-1$
+				: McpToolResult.of(result.toString());
 	}
 
 	private static JsonObject apply(String elementId, Boolean visible, Boolean rendered, boolean dryRun,
@@ -123,9 +106,8 @@ public final class ModelVisibilityTool implements IMcpTool {
 		JsonArray elements = new JsonArray();
 		int changed = 0;
 		for (MUIElement element : found) {
-			if (elements.size() >= maxResults) {
-				break;
-			}
+			// every match is changed; maxResults only caps what is reported
+			boolean report = elements.size() < maxResults;
 			JsonObject entry = new JsonObject().put("id", element.getElementId()) //$NON-NLS-1$
 					.put("type", element.getClass().getInterfaces().length == 0 ? element.getClass().getSimpleName() //$NON-NLS-1$
 							: element.getClass().getInterfaces()[0].getSimpleName())
@@ -133,9 +115,11 @@ public final class ModelVisibilityTool implements IMcpTool {
 					.put("wasToBeRendered", Boolean.valueOf(element.isToBeRendered())); //$NON-NLS-1$
 			boolean isWindow = element instanceof org.eclipse.e4.ui.model.application.ui.basic.MWindow;
 			if (rendered != null && !rendered.booleanValue() && isWindow) {
-				elements.add(entry.put("changed", Boolean.FALSE) //$NON-NLS-1$
-						.put("refusedBecause", //$NON-NLS-1$
-								"Discarding a window's widget leaves the workbench without one, and the model remembers it. Hide the IDE with eclipse_set_ide_visibility instead, which does not persist.")); //$NON-NLS-1$
+				if (report) {
+					elements.add(entry.put("changed", Boolean.FALSE) //$NON-NLS-1$
+							.put("refusedBecause", //$NON-NLS-1$
+									"Discarding a window's widget leaves the workbench without one, and the model remembers it. Hide the IDE with eclipse_set_ide_visibility instead, which does not persist.")); //$NON-NLS-1$
+				}
 				continue;
 			}
 			if (!dryRun) {
@@ -147,9 +131,11 @@ public final class ModelVisibilityTool implements IMcpTool {
 				}
 				changed++;
 			}
-			elements.add(entry.put("changed", Boolean.valueOf(!dryRun)) //$NON-NLS-1$
-					.put("visible", visible == null ? Boolean.valueOf(element.isVisible()) : visible) //$NON-NLS-1$
-					.put("toBeRendered", rendered == null ? Boolean.valueOf(element.isToBeRendered()) : rendered)); //$NON-NLS-1$
+			if (report) {
+				elements.add(entry.put("changed", Boolean.valueOf(!dryRun)) //$NON-NLS-1$
+						.put("visible", visible == null ? Boolean.valueOf(element.isVisible()) : visible) //$NON-NLS-1$
+						.put("toBeRendered", rendered == null ? Boolean.valueOf(element.isToBeRendered()) : rendered)); //$NON-NLS-1$
+			}
 		}
 		return new JsonObject().put("elementId", elementId) //$NON-NLS-1$
 				.put("matched", Integer.valueOf(found.size())) //$NON-NLS-1$

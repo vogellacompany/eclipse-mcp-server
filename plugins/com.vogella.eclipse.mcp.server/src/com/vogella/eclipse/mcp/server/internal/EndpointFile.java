@@ -71,14 +71,7 @@ public final class EndpointFile {
 		}
 	}
 
-	/**
-	 * The workspace this server belongs to.
-	 * <p>
-	 * The token lives in the bundle state location, so it is a property of the
-	 * workspace rather than of the installation, while the port is the same for
-	 * every workspace. A client configured against one workspace therefore fails
-	 * against another with nothing in the answer saying which one it reached.
-	 */
+	/** The workspace this server serves, so a client can tell which one it reached. */
 	static String workspace() {
 		var location = Platform.getInstanceLocation();
 		URL url = location == null ? null : location.getURL();

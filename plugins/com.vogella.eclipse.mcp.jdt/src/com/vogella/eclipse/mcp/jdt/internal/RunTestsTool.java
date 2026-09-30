@@ -1,15 +1,11 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.jar.Manifest;
 
 import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.resources.IProject;
@@ -66,11 +62,6 @@ public final class RunTestsTool implements IMcpTool {
 	/** Projects named in the pre-flight before it says how many more there are. */
 	private static final int MAX_PREFLIGHT_PROJECTS = 10;
 
-	/**
-	 * The preference the "Errors in Workspace / Always launch without asking" toggle
-	 * writes. Launching with compile errors otherwise raises a modal dialog through
-	 * the debug.ui status handler, which blocks a call nobody is watching.
-	 */
 	/** Launch configuration attributes of the JUnit launcher, which are a stable contract. */
 	private static final String ATTR_CONTAINER = "org.eclipse.jdt.junit.CONTAINER"; //$NON-NLS-1$
 
@@ -167,164 +158,174 @@ public final class RunTestsTool implements IMcpTool {
 			TestRunRegistry.Run run = TestRunRegistry.getInstance()
 					.create(testClass == null ? projectName : testClass + (testMethod == null ? "" : "#" + testMethod)); //$NON-NLS-1$ //$NON-NLS-2$
 
-			ILaunchManager manager = DebugPlugin.getDefault().getLaunchManager();
-			ILaunchConfigurationType launchType = manager
-					.getLaunchConfigurationType(asPlugin ? PLUGIN_LAUNCH_TYPE : LAUNCH_TYPE);
-			if (launchType == null) {
-				return McpToolResult.error(asPlugin
-						? "This IDE has no plug-in JUnit launch configuration type, so PDE is probably not installed. Pass pluginTest false to run as plain JUnit." //$NON-NLS-1$
-						: "This IDE has no JUnit launch configuration type."); //$NON-NLS-1$
-			}
-			ILaunchConfigurationWorkingCopy configuration = launchType.newInstance(null, run.launchName());
-			configuration.setAttribute(IJavaLaunchConfigurationConstants.ATTR_PROJECT_NAME, projectName);
-			configuration.setAttribute(ATTR_TEST_KIND, kind);
-			// a run nobody is watching must not ask anything: a debugged test that
-			// suspends otherwise raises the modal perspective switch prompt
-			configuration.setAttribute(LaunchAttributes.TARGET_DEBUG_PERSPECTIVE,
-					LaunchAttributes.PERSPECTIVE_NONE);
-			configuration.setAttribute(LaunchAttributes.TARGET_RUN_PERSPECTIVE,
-					LaunchAttributes.PERSPECTIVE_NONE);
-			configuration.setAttribute(LaunchAttributes.STARTED_BY_MCP, true);
-			// launching a working copy saves it, and a saved configuration shows up in
-			// the user's Run Configurations dialog. Private keeps this server's launches
-			// out of a list that belongs to the person at the IDE.
-			configuration.setAttribute(LaunchAttributes.PRIVATE, true);
-			if (type == null) {
-				// a container runs everything under it, which is how Run As on a project works
-				configuration.setAttribute(ATTR_CONTAINER, javaProject.getHandleIdentifier());
-			} else {
-				configuration.setAttribute(IJavaLaunchConfigurationConstants.ATTR_MAIN_TYPE_NAME, testClass);
-				if (testMethod != null) {
-					configuration.setAttribute(ATTR_TEST_NAME, testMethod);
+			// a run stuck in "running" would block every later run until abandoned
+			boolean scheduled = false;
+			try {
+				ILaunchManager manager = DebugPlugin.getDefault().getLaunchManager();
+				ILaunchConfigurationType launchType = manager
+						.getLaunchConfigurationType(asPlugin ? PLUGIN_LAUNCH_TYPE : LAUNCH_TYPE);
+				if (launchType == null) {
+					TestRunRegistry.failed(run, "no launch configuration type"); //$NON-NLS-1$
+					return McpToolResult.error(asPlugin
+							? "This IDE has no plug-in JUnit launch configuration type, so PDE is probably not installed. Pass pluginTest false to run as plain JUnit." //$NON-NLS-1$
+							: "This IDE has no JUnit launch configuration type."); //$NON-NLS-1$
 				}
-			}
-			Path recordingFile = null;
-			String recording = args.getString("flightRecording", "off"); //$NON-NLS-1$ //$NON-NLS-2$
-			if (LaunchRecording.wanted(recording)) {
-				recordingFile = LaunchRecording.fileFor(run.launchName());
-				configuration.setAttribute(IJavaLaunchConfigurationConstants.ATTR_VM_ARGUMENTS,
-						LaunchRecording.appendTo(
-								configuration.getAttribute(IJavaLaunchConfigurationConstants.ATTR_VM_ARGUMENTS,
-										(String) null),
-								LaunchRecording.vmArgument(recording, recordingFile, 0)));
-			}
-			String buildFirst = args.getString("buildFirst", "auto"); //$NON-NLS-1$ //$NON-NLS-2$
-			boolean autoBuilding = ResourcesPlugin.getWorkspace().isAutoBuilding();
-			JsonObject built = asPlugin ? buildForLaunch(project, buildFirst, autoBuilding, monitor) : null;
-			JsonObject displayed = ui && asPlugin ? applyDisplay(configuration, args.getString("display")) : null; //$NON-NLS-1$
-			boolean allWorkspacePlugins = "all".equals(args.getString("workspacePlugins", "required")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-			String testBundle = symbolicName(project);
-			if (asPlugin) {
-				configurePlatform(configuration, args.getString("runtimeWorkspace"), ui, allWorkspacePlugins, //$NON-NLS-1$
-						testBundle);
-			}
-			// only for the UI application: it is the one that needs a workbench, and a
-			// workspace plug-in with unbuilt classes shadows the installed bundle and
-			// stops that workbench from starting, which reports as a run with no tests
-			JsonObject preflight = ui && asPlugin ? unbuiltWorkspacePlugins() : null;
-			// launching happens in a job: preLaunchCheck alone can take a while, and
-			// doing it here would defeat wait:false exactly as the p2 refresh once did
-			run.launchedAs(launchedAs);
-			boolean debug = args.getBoolean("debug", false); //$NON-NLS-1$
-			org.eclipse.core.runtime.jobs.Job.create("MCP test launch " + run.id(), progress -> { //$NON-NLS-1$
-				String previous = CompileErrorPrompt.suppress();
-				try {
-					org.eclipse.debug.core.ILaunch launch = configuration.launch(
-							debug ? ILaunchManager.DEBUG_MODE : ILaunchManager.RUN_MODE, null);
-					TestRunRegistry.watch(run, launch, asPlugin ? 300 : 120);
-				} catch (CoreException | RuntimeException e) {
-					// the runner bundles ship with the SDK, and JDT reports a missing one
-					// as an assertion rather than a CoreException
-					TestRunRegistry.failed(run, describe(e));
-				} finally {
-					CompileErrorPrompt.restore(previous);
+				ILaunchConfigurationWorkingCopy configuration = launchType.newInstance(null, run.launchName());
+				configuration.setAttribute(IJavaLaunchConfigurationConstants.ATTR_PROJECT_NAME, projectName);
+				configuration.setAttribute(ATTR_TEST_KIND, kind);
+				// a run nobody is watching must not ask anything: a debugged test that
+				// suspends otherwise raises the modal perspective switch prompt
+				configuration.setAttribute(LaunchAttributes.TARGET_DEBUG_PERSPECTIVE,
+						LaunchAttributes.PERSPECTIVE_NONE);
+				configuration.setAttribute(LaunchAttributes.TARGET_RUN_PERSPECTIVE,
+						LaunchAttributes.PERSPECTIVE_NONE);
+				configuration.setAttribute(LaunchAttributes.STARTED_BY_MCP, true);
+				// launching a working copy saves it, and a saved configuration shows up in
+				// the user's Run Configurations dialog. Private keeps this server's launches
+				// out of a list that belongs to the person at the IDE.
+				configuration.setAttribute(LaunchAttributes.PRIVATE, true);
+				if (type == null) {
+					// a container runs everything under it, which is how Run As on a project works
+					configuration.setAttribute(ATTR_CONTAINER, javaProject.getHandleIdentifier());
+				} else {
+					configuration.setAttribute(IJavaLaunchConfigurationConstants.ATTR_MAIN_TYPE_NAME, testClass);
+					if (testMethod != null) {
+						configuration.setAttribute(ATTR_TEST_NAME, testMethod);
+					}
 				}
-				return org.eclipse.core.runtime.Status.OK_STATUS;
-			}).schedule();
+				Path recordingFile = null;
+				String recording = args.getString("flightRecording", "off"); //$NON-NLS-1$ //$NON-NLS-2$
+				if (LaunchRecording.wanted(recording)) {
+					recordingFile = LaunchRecording.fileFor(run.launchName());
+					configuration.setAttribute(IJavaLaunchConfigurationConstants.ATTR_VM_ARGUMENTS,
+							LaunchRecording.appendTo(
+									configuration.getAttribute(IJavaLaunchConfigurationConstants.ATTR_VM_ARGUMENTS,
+											(String) null),
+									LaunchRecording.vmArgument(recording, recordingFile, 0)));
+				}
+				String buildFirst = args.getString("buildFirst", "auto"); //$NON-NLS-1$ //$NON-NLS-2$
+				boolean autoBuilding = ResourcesPlugin.getWorkspace().isAutoBuilding();
+				JsonObject built = asPlugin ? buildForLaunch(project, buildFirst, autoBuilding, monitor) : null;
+				JsonObject displayed = ui && asPlugin ? applyDisplay(configuration, args.getString("display")) : null; //$NON-NLS-1$
+				boolean allWorkspacePlugins = "all".equals(args.getString("workspacePlugins", "required")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				String testBundle = FileText.symbolicName(project.getFile("META-INF/MANIFEST.MF"));
+				if (asPlugin) {
+					configurePlatform(configuration, args.getString("runtimeWorkspace"), ui, allWorkspacePlugins, //$NON-NLS-1$
+							testBundle);
+				}
+				// only for the UI application: it is the one that needs a workbench, and a
+				// workspace plug-in with unbuilt classes shadows the installed bundle and
+				// stops that workbench from starting, which reports as a run with no tests
+				JsonObject preflight = ui && asPlugin ? unbuiltWorkspacePlugins() : null;
+				// launching happens in a job: preLaunchCheck alone can take a while, and
+				// doing it here would defeat wait:false exactly as the p2 refresh once did
+				run.launchedAs(launchedAs);
+				boolean debug = args.getBoolean("debug", false); //$NON-NLS-1$
+				org.eclipse.core.runtime.jobs.Job.create("MCP test launch " + run.id(), progress -> { //$NON-NLS-1$
+					String previous = CompileErrorPrompt.suppress();
+					try {
+						org.eclipse.debug.core.ILaunch launch = configuration.launch(
+								debug ? ILaunchManager.DEBUG_MODE : ILaunchManager.RUN_MODE, null);
+						TestRunRegistry.watch(run, launch, asPlugin ? 300 : 120);
+					} catch (CoreException | RuntimeException e) {
+						// the runner bundles ship with the SDK, and JDT reports a missing one
+						// as an assertion rather than a CoreException
+						TestRunRegistry.failed(run, describe(e));
+					} finally {
+						CompileErrorPrompt.restore(previous);
+					}
+					return org.eclipse.core.runtime.Status.OK_STATUS;
+				}).schedule();
+				scheduled = true;
 
-			// a launched platform starts far too slowly to hold a call open for
-			if (args.getBoolean("wait", !asPlugin)) { //$NON-NLS-1$
-				try {
-					run.await(args.getInt("timeoutSeconds", 25, 1, 3600)); //$NON-NLS-1$
-				} catch (InterruptedException e) {
-					Thread.currentThread().interrupt();
+				// a launched platform starts far too slowly to hold a call open for
+				if (args.getBoolean("wait", !asPlugin)) { //$NON-NLS-1$
+					try {
+						run.await(args.getInt("timeoutSeconds", 25, 1, 3600)); //$NON-NLS-1$
+					} catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+					}
 				}
+				JsonObject result = TestRunRegistry.toJson(run, args.getInt("maxResults", 50, 1, 2000), false) //$NON-NLS-1$
+						.put("testKind", kind); //$NON-NLS-1$
+				if (asPlugin && run.running()) {
+					result.put("note", //$NON-NLS-1$
+							"A second Eclipse is starting, which takes tens of seconds before the first test runs. Poll eclipse_get_test_results with this runId."); //$NON-NLS-1$
+				}
+				// report what was actually set rather than what was intended: two rounds of
+				// this were spent inferring the launch configuration from a runtime log
+				if (asPlugin) {
+					result.put("launchAttributes", new JsonObject() //$NON-NLS-1$
+							.put(IPDELauncherConstants.APPLICATION,
+									configuration.getAttribute(IPDELauncherConstants.APPLICATION, (String) null))
+							.put(IPDELauncherConstants.APP_TO_TEST,
+									configuration.getAttribute(IPDELauncherConstants.APP_TO_TEST, (String) null))
+							.put("workspacePlugins", allWorkspacePlugins ? "all" : "required") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+							.put("workspaceBundle", testBundle) //$NON-NLS-1$
+							// read back rather than echoed: the selection is only honoured
+							// when useDefault is false, and reporting the intention hid that
+							.put(IPDELauncherConstants.USE_DEFAULT,
+									configuration.getAttribute(IPDELauncherConstants.USE_DEFAULT, true))
+							// where to read the bundle list the launch actually got: config.ini
+							// always holds it as osgi.bundles, while bundles.info is written
+							// only when simpleconfigurator is in use, which the narrow set is
+							// not, so naming that file alone would name a missing one
+							.put("configurationArea", //$NON-NLS-1$
+									"%s/.metadata/.plugins/org.eclipse.pde.core/%s (config.ini holds osgi.bundles; bundles.info is written next to it only for the wide set)" //$NON-NLS-1$
+											.formatted(org.eclipse.core.resources.ResourcesPlugin.getWorkspace().getRoot()
+													.getLocation(), run.launchName()))
+							.put(IPDELauncherConstants.SELECTED_WORKSPACE_BUNDLES,
+									String.join(", ", configuration.getAttribute( //$NON-NLS-1$
+											IPDELauncherConstants.SELECTED_WORKSPACE_BUNDLES, Set.<String>of())))
+							.put(IPDELauncherConstants.RUN_IN_UI_THREAD,
+									configuration.getAttribute(IPDELauncherConstants.RUN_IN_UI_THREAD, true))
+							.put(IPDELauncherConstants.LOCATION,
+									configuration.getAttribute(IPDELauncherConstants.LOCATION, (String) null)));
+				}
+				if (preflight != null) {
+					result.put("workspacePluginErrors", preflight); //$NON-NLS-1$
+				}
+				if (built != null) {
+					result.put("buildBeforeLaunch", built); //$NON-NLS-1$
+				}
+				if (displayed != null) {
+					result.put("display", displayed); //$NON-NLS-1$
+				}
+				if (recordingFile != null) {
+					result.put("flightRecordingFile", recordingFile.toString()) //$NON-NLS-1$
+							.put("flightRecordingNote", //$NON-NLS-1$
+									LaunchRecording.note(recordingFile, 0));
+				}
+				if (asPlugin) {
+					result.put("descriptorGeneration", descriptorGeneration(project)); //$NON-NLS-1$
+				}
+				JsonArray broken = projectsWithErrors(project);
+				if (broken.size() > 0) {
+					result.put("launchedWithCompileErrors", broken) //$NON-NLS-1$
+							.put("compileErrorPromptWas", compileErrorPromptWas) //$NON-NLS-1$
+							.put("compileErrorNote", //$NON-NLS-1$
+									"These projects do not compile. Eclipse would normally ask whether to launch anyway; this server answered yes, because a dialog would block a call nobody is watching. Failures may be stale classes rather than real results."); //$NON-NLS-1$
+				}
+				if (asPlugin && !ui) {
+					result.put("headless", //$NON-NLS-1$
+							"Running the core test application, which has no workbench. Tests that need a Display fail here; pass ui true to run them in a real workbench window."); //$NON-NLS-1$
+				}
+				if (debug) {
+					result.put("debug", Boolean.TRUE).put("debugNote", //$NON-NLS-1$ //$NON-NLS-2$
+							"The tests are being debugged: the launch is a debug session, visible through eclipse_debug_status and addressable by its sessionId. Set a breakpoint first and the run suspends there; eclipse_debug_get_frames and eclipse_debug_evaluate read the state at it.");
+				}
+				if (!asPlugin && project.hasNature(PLUGIN_NATURE)) {
+					result.put("caveat", //$NON-NLS-1$
+							"'%s' is a plug-in project but was run as plain JUnit, so tests needing OSGi fail with errors such as 'The application has not been initialized', a null IExtensionRegistry or NoClassDefFoundError. Those are not test failures. Omit pluginTest to launch a platform." //$NON-NLS-1$
+									.formatted(projectName));
+				}
+				return McpToolResult.of(result.toString());
+			} catch (CoreException | RuntimeException e) {
+				if (!scheduled) {
+					TestRunRegistry.failed(run, describe(e));
+				}
+				throw e;
 			}
-			JsonObject result = TestRunRegistry.toJson(run, args.getInt("maxResults", 50, 1, 2000), false) //$NON-NLS-1$
-					.put("testKind", kind) //$NON-NLS-1$
-					;
-			if (asPlugin && run.running()) {
-				result.put("note", //$NON-NLS-1$
-						"A second Eclipse is starting, which takes tens of seconds before the first test runs. Poll eclipse_get_test_results with this runId."); //$NON-NLS-1$
-			}
-			// report what was actually set rather than what was intended: two rounds of
-			// this were spent inferring the launch configuration from a runtime log
-			if (asPlugin) {
-				result.put("launchAttributes", new JsonObject() //$NON-NLS-1$
-						.put(IPDELauncherConstants.APPLICATION,
-								configuration.getAttribute(IPDELauncherConstants.APPLICATION, (String) null))
-						.put(IPDELauncherConstants.APP_TO_TEST,
-								configuration.getAttribute(IPDELauncherConstants.APP_TO_TEST, (String) null))
-						.put("workspacePlugins", allWorkspacePlugins ? "all" : "required") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-						.put("workspaceBundle", testBundle) //$NON-NLS-1$
-						// read back rather than echoed: the selection is only honoured
-						// when useDefault is false, and reporting the intention hid that
-						.put(IPDELauncherConstants.USE_DEFAULT,
-								configuration.getAttribute(IPDELauncherConstants.USE_DEFAULT, true))
-						// where to read the bundle list the launch actually got: config.ini
-						// always holds it as osgi.bundles, while bundles.info is written
-						// only when simpleconfigurator is in use, which the narrow set is
-						// not, so naming that file alone would name a missing one
-						.put("configurationArea", //$NON-NLS-1$
-								"%s/.metadata/.plugins/org.eclipse.pde.core/%s (config.ini holds osgi.bundles; bundles.info is written next to it only for the wide set)" //$NON-NLS-1$
-										.formatted(org.eclipse.core.resources.ResourcesPlugin.getWorkspace().getRoot()
-												.getLocation(), run.launchName()))
-						.put(IPDELauncherConstants.SELECTED_WORKSPACE_BUNDLES,
-								String.join(", ", configuration.getAttribute( //$NON-NLS-1$
-										IPDELauncherConstants.SELECTED_WORKSPACE_BUNDLES, Set.<String>of())))
-						.put(IPDELauncherConstants.RUN_IN_UI_THREAD,
-								configuration.getAttribute(IPDELauncherConstants.RUN_IN_UI_THREAD, true))
-						.put(IPDELauncherConstants.LOCATION,
-								configuration.getAttribute(IPDELauncherConstants.LOCATION, (String) null)));
-			}
-			if (preflight != null) {
-				result.put("workspacePluginErrors", preflight); //$NON-NLS-1$
-			}
-			if (built != null) {
-				result.put("buildBeforeLaunch", built); //$NON-NLS-1$
-			}
-			if (displayed != null) {
-				result.put("display", displayed); //$NON-NLS-1$
-			}
-			if (recordingFile != null) {
-				result.put("flightRecordingFile", recordingFile.toString()) //$NON-NLS-1$
-						.put("flightRecordingNote", //$NON-NLS-1$
-								LaunchRecording.note(recordingFile, 0));
-			}
-			if (asPlugin) {
-				result.put("descriptorGeneration", descriptorGeneration(project)); //$NON-NLS-1$
-			}
-			JsonArray broken = projectsWithErrors(project);
-			if (broken.size() > 0) {
-				result.put("launchedWithCompileErrors", broken) //$NON-NLS-1$
-						.put("compileErrorPromptWas", compileErrorPromptWas) //$NON-NLS-1$
-						.put("compileErrorNote", //$NON-NLS-1$
-								"These projects do not compile. Eclipse would normally ask whether to launch anyway; this server answered yes, because a dialog would block a call nobody is watching. Failures may be stale classes rather than real results."); //$NON-NLS-1$
-			}
-			if (asPlugin && !ui) {
-				result.put("headless", //$NON-NLS-1$
-						"Running the core test application, which has no workbench. Tests that need a Display fail here; pass ui true to run them in a real workbench window."); //$NON-NLS-1$
-			}
-			if (debug) {
-				result.put("debug", Boolean.TRUE).put("debugNote", //$NON-NLS-1$ //$NON-NLS-2$
-						"The tests are being debugged: the launch is a debug session, visible through eclipse_debug_status and addressable by its sessionId. Set a breakpoint first and the run suspends there; eclipse_debug_get_frames and eclipse_debug_evaluate read the state at it.");
-			}
-			if (!asPlugin && project.hasNature(PLUGIN_NATURE)) {
-				result.put("caveat", //$NON-NLS-1$
-						"'%s' is a plug-in project but was run as plain JUnit, so tests needing OSGi fail with errors such as 'The application has not been initialized', a null IExtensionRegistry or NoClassDefFoundError. Those are not test failures. Omit pluginTest to launch a platform." //$NON-NLS-1$
-								.formatted(projectName));
-			}
-			return McpToolResult.of(result.toString());
 		} catch (CoreException e) {
 			// the cause's own text in the message: a bare "could not run the tests"
 			// restates the request and says nothing about what went wrong
@@ -362,11 +363,11 @@ public final class RunTestsTool implements IMcpTool {
 
 	private static boolean hasErrors(IProject project) {
 		try {
-			for (org.eclipse.core.resources.IMarker marker : project.findMarkers(
-					org.eclipse.core.resources.IMarker.PROBLEM, true,
-					org.eclipse.core.resources.IResource.DEPTH_INFINITE)) {
-				if (marker.getAttribute(org.eclipse.core.resources.IMarker.SEVERITY,
-						-1) == org.eclipse.core.resources.IMarker.SEVERITY_ERROR) {
+			for (IMarker marker : project.findMarkers(
+					IMarker.PROBLEM, true,
+					IResource.DEPTH_INFINITE)) {
+				if (marker.getAttribute(IMarker.SEVERITY,
+						-1) == IMarker.SEVERITY_ERROR) {
 					return true;
 				}
 			}
@@ -466,24 +467,6 @@ public final class RunTestsTool implements IMcpTool {
 				.put("autoBuilding", Boolean.valueOf(autoBuilding)) //$NON-NLS-1$
 				.put("note", //$NON-NLS-1$
 						"The UI test application starts a workbench. With workspacePlugins all, every workspace plug-in is on this launch's bundle list, so a workspace copy without compiled classes shadows the installed bundle and the workbench fails to start. That reports as a run with no tests rather than as an error. These are PDE's markers only, so with auto-build off they can be stale and an empty list proves nothing; build the workspace if the run comes back with total 0."); //$NON-NLS-1$
-	}
-
-	/**
-	 * The bundle symbolic name of a plug-in project, read from its manifest. The
-	 * project name is not it: a project may be named anything, and the launch
-	 * selection is by symbolic name.
-	 */
-	private static String symbolicName(IProject project) {
-		try (InputStream in = project.getFile("META-INF/MANIFEST.MF").getContents()) { //$NON-NLS-1$
-			String header = new Manifest(in).getMainAttributes().getValue("Bundle-SymbolicName"); //$NON-NLS-1$
-			if (header == null) {
-				return null;
-			}
-			int semicolon = header.indexOf(';');
-			return (semicolon < 0 ? header : header.substring(0, semicolon)).trim();
-		} catch (CoreException | IOException | RuntimeException e) {
-			return null;
-		}
 	}
 
 	/**

@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.List;
 
 import org.eclipse.core.runtime.ILog;
@@ -60,10 +61,10 @@ final class SplashBranding {
 		}
 	}
 
-	/** @return what happened, for a tool or a preference page to report */
+	/** Returns what happened, for a tool or a preference page to report, or null when nothing changed. */
 	static String apply(boolean replace) throws IOException {
 		Path config = configFile();
-		if (config == null || !Files.isReadable(config)) {
+		if (!Files.isReadable(config)) {
 			return "There is no readable config.ini for this installation, so the splash cannot be changed."; //$NON-NLS-1$
 		}
 		List<String> lines = Files.readAllLines(config, StandardCharsets.UTF_8);
@@ -119,7 +120,10 @@ final class SplashBranding {
 		Path target = splashFile();
 		Files.createDirectories(target.getParent());
 		try (InputStream in = entry.openStream()) {
-			Files.write(target, in.readAllBytes());
+			byte[] bytes = in.readAllBytes();
+			if (!Files.exists(target) || !Arrays.equals(Files.readAllBytes(target), bytes)) {
+				Files.write(target, bytes);
+			}
 		}
 		return target;
 	}
@@ -136,8 +140,7 @@ final class SplashBranding {
 	}
 
 	private static Path configFile() {
-		Path area = configurationArea();
-		return area == null ? null : area.resolve("config.ini"); //$NON-NLS-1$
+		return configurationArea().resolve("config.ini"); //$NON-NLS-1$
 	}
 
 	/** Through a temporary file, because a half written config.ini does not start. */

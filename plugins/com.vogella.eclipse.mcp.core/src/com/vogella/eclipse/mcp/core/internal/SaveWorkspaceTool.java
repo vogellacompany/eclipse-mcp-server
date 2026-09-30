@@ -14,6 +14,7 @@ import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -53,7 +54,7 @@ public final class SaveWorkspaceTool implements IMcpTool {
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		boolean full = !"snapshot".equals(args.getString("mode", "full")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-		int timeoutSeconds = args.getInt("timeoutSeconds", 25, 1, 600); //$NON-NLS-1$
+		int timeoutSeconds = CallBudget.boundedWaitSeconds(args.getInt("timeoutSeconds", 25, 1, 600)); //$NON-NLS-1$
 		if (args.getBoolean("dryRun", true)) { //$NON-NLS-1$
 			return McpToolResult.of(preview(full).toString());
 		}
@@ -172,9 +173,9 @@ public final class SaveWorkspaceTool implements IMcpTool {
 		long bytes = 0;
 		int files = 0;
 		try (var walk = Files.walk(store)) {
-			for (Path path : walk.filter(Files::isRegularFile).toList()) {
+			for (var it = walk.filter(Files::isRegularFile).iterator(); it.hasNext();) {
 				files++;
-				bytes += path.toFile().length();
+				bytes += it.next().toFile().length();
 			}
 		} catch (IOException | RuntimeException e) {
 			return json.put("note", "The history store could not be measured: " + e.getMessage()); //$NON-NLS-1$ //$NON-NLS-2$

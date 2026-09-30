@@ -1,7 +1,9 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
+import java.util.Collection;
 import java.util.Hashtable;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.eclipse.core.resources.IProject;
@@ -80,6 +82,10 @@ public final class SetJavaVersionTool implements IMcpTool {
 			}
 		}
 
+		if (compliance && !knownVersion(version)) {
+			return McpToolResult.error("'%s' is not a Java version JDT knows, for instance 25, 21 or 1.8.".formatted(version)); //$NON-NLS-1$
+		}
+
 		JsonObject result = new JsonObject().put("version", version) //$NON-NLS-1$
 				.put("scope", javaProject == null ? "workspace" : projectName) //$NON-NLS-1$ //$NON-NLS-2$
 				.put("dryRun", Boolean.valueOf(dryRun)); //$NON-NLS-1$
@@ -91,6 +97,12 @@ public final class SetJavaVersionTool implements IMcpTool {
 		}
 		result.put("note", note(dryRun, defaultVm)); //$NON-NLS-1$
 		return McpToolResult.of(result.toString());
+	}
+
+	private static boolean knownVersion(String version) {
+		Map<String, String> probe = new LinkedHashMap<>();
+		JavaCore.setComplianceOptions(version, probe);
+		return !probe.isEmpty();
 	}
 
 	private static String note(boolean dryRun, boolean defaultVm) {
@@ -117,13 +129,14 @@ public final class SetJavaVersionTool implements IMcpTool {
 	 * and generating class files for another.
 	 */
 	private static JsonObject compliance(IJavaProject javaProject, String version, ToolArguments args, boolean dryRun) {
-		Map<String, String> before = read(javaProject);
-		Map<String, String> after = new LinkedHashMap<>(before);
+		Map<String, String> after = read(javaProject, List.of(KEYS));
 		JavaCore.setComplianceOptions(version, after);
 		if (args.has("release")) { //$NON-NLS-1$
 			after.put(JavaCore.COMPILER_RELEASE, args.getBoolean("release", false) ? JavaCore.ENABLED //$NON-NLS-1$
 					: JavaCore.DISABLED);
 		}
+		// setComplianceOptions also sets keys such as assertIdentifier, which the comparison has to see too
+		Map<String, String> before = read(javaProject, after.keySet());
 		JsonObject json = new JsonObject().put("previous", of(before)).put("applied", of(after)); //$NON-NLS-1$ //$NON-NLS-2$
 		if (before.equals(after)) {
 			return json.put("changed", Boolean.FALSE) //$NON-NLS-1$
@@ -135,7 +148,12 @@ public final class SetJavaVersionTool implements IMcpTool {
 				options.putAll(after);
 				JavaCore.setOptions(options);
 			} else {
-				after.forEach(javaProject::setOption);
+				// only what differs, so values inherited from the workspace stay inherited
+				after.forEach((key, value) -> {
+					if (!value.equals(before.get(key))) {
+						javaProject.setOption(key, value);
+					}
+				});
 			}
 		}
 		return json.put("changed", Boolean.TRUE); //$NON-NLS-1$
@@ -144,9 +162,9 @@ public final class SetJavaVersionTool implements IMcpTool {
 	private static final String[] KEYS = { JavaCore.COMPILER_SOURCE, JavaCore.COMPILER_CODEGEN_TARGET_PLATFORM,
 			JavaCore.COMPILER_COMPLIANCE, JavaCore.COMPILER_RELEASE };
 
-	private static Map<String, String> read(IJavaProject javaProject) {
+	private static Map<String, String> read(IJavaProject javaProject, Collection<String> keys) {
 		Map<String, String> values = new LinkedHashMap<>();
-		for (String key : KEYS) {
+		for (String key : keys) {
 			String value = javaProject == null ? JavaCore.getOption(key) : javaProject.getOption(key, true);
 			if (value != null) {
 				values.put(key, value);

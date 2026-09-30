@@ -5,11 +5,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.eclipse.core.resources.IContainer;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IFileState;
 import org.eclipse.core.resources.IFolder;
@@ -22,7 +20,6 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
-import com.vogella.eclipse.mcp.core.WorkspaceSync;
 import com.vogella.eclipse.mcp.core.json.JsonArray;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
@@ -122,7 +119,7 @@ public final class LocalHistoryTools {
 						.put("reason", "The version is larger than maxBytes (%d).".formatted(Integer.valueOf(maxBytes))) //$NON-NLS-1$ //$NON-NLS-2$
 						.toString());
 			}
-			if (isBinary(bytes)) {
+			if (FileSupport.isBinary(bytes)) {
 				return McpToolResult.of(result.put("read", Boolean.FALSE).put("binary", Boolean.TRUE) //$NON-NLS-1$ //$NON-NLS-2$
 						.put("reason", "The version contains NUL bytes, so it is binary and is not returned as text.") //$NON-NLS-1$ //$NON-NLS-2$
 						.toString());
@@ -202,7 +199,7 @@ public final class LocalHistoryTools {
 			if (exists && file.isReadOnly()) {
 				return McpToolResult.error("'%s' is read only.".formatted(file.getFullPath())); //$NON-NLS-1$
 			}
-			List<IFolder> missing = missingParents(file);
+			List<IFolder> missing = FileSupport.missingParents(file);
 			JsonObject result = new JsonObject().put("path", file.getFullPath().toString()) //$NON-NLS-1$
 					.put("restored", describe(state)) //$NON-NLS-1$
 					.put("recreated", Boolean.valueOf(!exists)) //$NON-NLS-1$
@@ -244,10 +241,7 @@ public final class LocalHistoryTools {
 	/** An edit through the client's shell is otherwise invisible, and restoring over it would lose it unrecorded. */
 	private static void refresh(IFile file, IProgressMonitor monitor) {
 		try {
-			IResource target = file.exists() ? file : file.getParent();
-			if (target.exists()) {
-				WorkspaceSync.refresh(target, monitor);
-			}
+			FileSupport.refresh(file, monitor);
 		} catch (CoreException e) {
 			// the history is still readable
 		}
@@ -293,29 +287,10 @@ public final class LocalHistoryTools {
 
 	private static String charset(IFileState state) {
 		try {
-			return state.getCharset();
-		} catch (CoreException e) {
+			String name = state.getCharset();
+			return Charset.isSupported(name) ? name : "UTF-8"; //$NON-NLS-1$
+		} catch (CoreException | IllegalArgumentException e) {
 			return "UTF-8"; //$NON-NLS-1$
 		}
-	}
-
-	private static boolean isBinary(byte[] bytes) {
-		for (int i = 0; i < Math.min(bytes.length, 8000); i++) {
-			if (bytes[i] == 0) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/** The folders between the project and the file that do not exist, outermost first. */
-	private static List<IFolder> missingParents(IFile file) {
-		List<IFolder> missing = new ArrayList<>();
-		IContainer parent = file.getParent();
-		while (parent instanceof IFolder folder && !folder.exists()) {
-			missing.add(0, folder);
-			parent = folder.getParent();
-		}
-		return missing;
 	}
 }

@@ -72,8 +72,12 @@ public final class SetBreakpointTool implements IMcpTool {
 			return McpToolResult
 					.error("'line' and 'exception' are mutually exclusive: one call sets one kind of breakpoint."); //$NON-NLS-1$
 		}
-		if (id == null && remove && typeName == null) {
-			return McpToolResult.error("Removal needs 'id', or enough of 'type' and 'line' to match one."); //$NON-NLS-1$
+		if (remove && id == null && exception == null && (typeName == null || line <= 0)) {
+			return McpToolResult.error("Removal needs 'id', 'type' with 'line', or 'exception'."); //$NON-NLS-1$
+		}
+		String policy = args.getString("suspendPolicy"); //$NON-NLS-1$
+		if (policy != null && !"thread".equals(policy) && !"vm".equals(policy)) { //$NON-NLS-1$ //$NON-NLS-2$
+			return McpToolResult.error("'suspendPolicy' is 'thread' or 'vm', not '%s'.".formatted(policy)); //$NON-NLS-1$
 		}
 		if (!remove) {
 			if (id == null && exception == null && (typeName == null || line <= 0)) {
@@ -84,7 +88,7 @@ public final class SetBreakpointTool implements IMcpTool {
 
 		try {
 			IJavaBreakpoint existing = findExisting(id, exception != null ? exception : typeName,
-					line > 0 && exception == null ? line : -1);
+					line > 0 && exception == null ? line : -1, exception != null);
 			if (existing == null && id != null) {
 				return McpToolResult.error("No breakpoint with id '%s'. Known ids come from eclipse_list_breakpoints." //$NON-NLS-1$
 						.formatted(id));
@@ -124,7 +128,8 @@ public final class SetBreakpointTool implements IMcpTool {
 		return line > 0 ? "%s:%d".formatted(typeName, Integer.valueOf(line)) : typeName; //$NON-NLS-1$
 	}
 
-	private IJavaBreakpoint findExisting(String id, String typeName, int line) throws CoreException {
+	private static IJavaBreakpoint findExisting(String id, String typeName, int line, boolean exceptionKind)
+			throws CoreException {
 		for (IJavaBreakpoint breakpoint : ListBreakpointsTool.javaBreakpoints()) {
 			if (id != null) {
 				if (id.equals(ListBreakpointsTool.idOf(breakpoint))) {
@@ -133,6 +138,9 @@ public final class SetBreakpointTool implements IMcpTool {
 				continue;
 			}
 			if (typeName == null || !typeName.equals(breakpoint.getTypeName())) {
+				continue;
+			}
+			if (exceptionKind != breakpoint instanceof IJavaExceptionBreakpoint) {
 				continue;
 			}
 			if (line > 0 && !(breakpoint instanceof ILineBreakpoint lineBp && lineBp.getLineNumber() == line)) {
@@ -181,8 +189,6 @@ public final class SetBreakpointTool implements IMcpTool {
 			breakpoint.setSuspendPolicy(IJavaBreakpoint.SUSPEND_VM);
 		} else if ("thread".equals(policy)) { //$NON-NLS-1$
 			breakpoint.setSuspendPolicy(IJavaBreakpoint.SUSPEND_THREAD);
-		} else if (policy != null) {
-			throw new DebugSupport.Refusal("'suspendPolicy' is 'thread' or 'vm', not '%s'.".formatted(policy)); //$NON-NLS-1$
 		}
 	}
 
@@ -212,11 +218,11 @@ public final class SetBreakpointTool implements IMcpTool {
 			if (!project.isAccessible()) {
 				continue;
 			}
-			IJavaProject javaProject = JavaCore.create(project);
-			if (javaProject == null) {
-				continue;
-			}
 			try {
+				if (!project.hasNature(JavaCore.NATURE_ID)) {
+					continue;
+				}
+				IJavaProject javaProject = JavaCore.create(project);
 				IType type = javaProject.findType(typeName);
 				// a binary hit may be build output or a jar; neither gives a file to attach to,
 				// so only a source compilation unit counts as found

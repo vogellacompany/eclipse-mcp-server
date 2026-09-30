@@ -26,9 +26,6 @@ import org.eclipse.pde.core.project.IBundleProjectService;
 import org.eclipse.pde.core.project.IPackageExportDescription;
 import org.eclipse.pde.core.project.IPackageImportDescription;
 import org.eclipse.pde.core.project.IRequiredBundleDescription;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
-import org.osgi.framework.ServiceReference;
 import org.osgi.framework.Version;
 import org.osgi.framework.VersionRange;
 
@@ -99,26 +96,11 @@ public final class EditManifestTool implements IMcpTool {
 		boolean dryRun = args.getBoolean("dryRun", true); //$NON-NLS-1$
 		boolean force = args.getBoolean("force", false); //$NON-NLS-1$
 
-		// the bundle is lazily activated, so its own context only exists once it started
-		BundleContext context = FrameworkUtil.getBundle(EditManifestTool.class).getBundleContext();
-		if (context == null) {
-			context = FrameworkUtil.getBundle(IBundleProjectService.class).getBundleContext();
-		}
-		if (context == null) {
-			return McpToolResult
-					.error("Neither this bundle nor PDE is active, so the bundle project service cannot be reached."); //$NON-NLS-1$
-		}
-		ServiceReference<IBundleProjectService> reference = context.getServiceReference(IBundleProjectService.class);
-		if (reference == null) {
-			return McpToolResult.error("PDE does not offer its bundle project service in this IDE."); //$NON-NLS-1$
-		}
-		IBundleProjectService service = context.getService(reference);
 		try {
-			return edit(service, project, arguments, dryRun, force, monitor);
+			return PdeServices.with(IBundleProjectService.class, "bundle project service", //$NON-NLS-1$
+					service -> edit(service, project, arguments, dryRun, force, monitor));
 		} catch (CoreException e) {
 			throw new McpToolException("Could not edit the manifest of " + projectName, e); //$NON-NLS-1$
-		} finally {
-			context.ungetService(reference);
 		}
 	}
 
@@ -159,9 +141,9 @@ public final class EditManifestTool implements IMcpTool {
 		// who would break, computed before anything is changed
 		JsonArray blocked = new JsonArray();
 		JsonArray dependents = new JsonArray();
+		List<String> requiring = removeExports.isEmpty() ? List.of() : requirersOf(description.getSymbolicName());
 		for (String exported : removeExports) {
 			List<String> importers = importersOf(exported, description.getSymbolicName());
-			List<String> requiring = requirersOf(description.getSymbolicName());
 			if (!importers.isEmpty()) {
 				blocked.add(new JsonObject().put("removing", "Export-Package " + exported) //$NON-NLS-1$ //$NON-NLS-2$
 						.put("importedBy", array(importers))); //$NON-NLS-1$
@@ -192,9 +174,7 @@ public final class EditManifestTool implements IMcpTool {
 			}
 		}
 
-		List<IPackageExportDescription> exports = new ArrayList<>(
-				List.of(description.getPackageExports() == null ? new IPackageExportDescription[0]
-						: description.getPackageExports()));
+		List<IPackageExportDescription> exports = new ArrayList<>(exportsBefore);
 		exports.removeIf(export -> removeExports.contains(export.getName()));
 		for (Map<String, Object> entry : objects(arguments, "addExportPackage")) { //$NON-NLS-1$
 			String name = string(entry, "package"); //$NON-NLS-1$
@@ -210,9 +190,7 @@ public final class EditManifestTool implements IMcpTool {
 					!internal, friends));
 		}
 
-		List<IRequiredBundleDescription> requires = new ArrayList<>(
-				List.of(description.getRequiredBundles() == null ? new IRequiredBundleDescription[0]
-						: description.getRequiredBundles()));
+		List<IRequiredBundleDescription> requires = new ArrayList<>(requiresBefore);
 		requires.removeIf(required -> removeRequires.contains(required.getName()));
 		for (Map<String, Object> entry : objects(arguments, "addRequireBundle")) { //$NON-NLS-1$
 			String name = string(entry, "bundle"); //$NON-NLS-1$
@@ -222,9 +200,7 @@ public final class EditManifestTool implements IMcpTool {
 					Boolean.TRUE.equals(entry.get("optional")), Boolean.TRUE.equals(entry.get("reexport")))); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 
-		List<IPackageImportDescription> imports = new ArrayList<>(
-				List.of(description.getPackageImports() == null ? new IPackageImportDescription[0]
-						: description.getPackageImports()));
+		List<IPackageImportDescription> imports = new ArrayList<>(importsBefore);
 		imports.removeIf(imported -> removeImports.contains(imported.getName()));
 		for (Map<String, Object> entry : objects(arguments, "addImportPackage")) { //$NON-NLS-1$
 			String name = string(entry, "package"); //$NON-NLS-1$

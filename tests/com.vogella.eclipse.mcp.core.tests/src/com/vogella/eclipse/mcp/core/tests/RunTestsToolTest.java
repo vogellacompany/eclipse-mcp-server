@@ -1,5 +1,6 @@
 package com.vogella.eclipse.mcp.core.tests;
 
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -99,6 +100,20 @@ class RunTestsToolTest {
 		assertEquals("actual", failure.get("actual"));
 		assertNotNull(failure.get("trace"));
 		assertTrue(List.of("FAILURE", "ERROR").contains(failure.get("result")), String.valueOf(failure));
+
+		int counted = ((Number) result.get("passed")).intValue() + ((Number) result.get("failed")).intValue()
+				+ ((Number) result.get("errors")).intValue() + ((Number) result.get("ignored")).intValue();
+		// a summary that does not add up is how 38 errors were once reported as zero
+		assertEquals(((Number) result.get("total")).intValue(), counted, "the counters must account for every case: " + result);
+		assertNull(result.get("countsInconsistent"));
+		assertNull(result.get("unclassified"));
+		assertEquals("junit", result.get("launchedAs"));
+		assertNull(result.get("caveat"), "a project with no PDE nature needs no warning");
+
+		Map<String, Object> polled = TestFixture.callAndParse("eclipse_get_test_results",
+				Map.of("runId", (String) result.get("runId"), "includePassed", Boolean.TRUE));
+		assertEquals(result.get("runId"), polled.get("runId"));
+		assertEquals(2, ((List<?>) polled.get("tests")).size(), "includePassed should report both");
 	}
 
 	@Test
@@ -111,48 +126,6 @@ class RunTestsToolTest {
 		assertEquals("done", result.get("state"), String.valueOf(result));
 		assertEquals(Integer.valueOf(1), result.get("total"));
 		assertEquals(Integer.valueOf(1), result.get("passed"));
-	}
-
-	@Test
-	void theResultsToolFindsTheRunAgain() throws Exception {
-		withTests();
-		Map<String, Object> started = TestFixture.callAndParse(TOOL,
-				Map.of("project", PROJECT, "testClass", "sample.SampleTest", "timeoutSeconds", Integer.valueOf(120)));
-
-		Map<String, Object> polled = TestFixture.callAndParse("eclipse_get_test_results",
-				Map.of("runId", (String) started.get("runId"), "includePassed", Boolean.TRUE));
-
-		assertEquals(started.get("runId"), polled.get("runId"));
-		@SuppressWarnings("unchecked")
-		List<Map<String, Object>> tests = (List<Map<String, Object>>) polled.get("tests");
-		assertEquals(2, tests.size(), "includePassed should report both");
-	}
-
-	@Test
-	void theCountersAccountForEveryTest() throws Exception {
-		withTests();
-
-		Map<String, Object> result = TestFixture.callAndParse(TOOL,
-				Map.of("project", PROJECT, "testClass", "sample.SampleTest", "timeoutSeconds", Integer.valueOf(120)));
-
-		int total = ((Number) result.get("total")).intValue();
-		int counted = ((Number) result.get("passed")).intValue() + ((Number) result.get("failed")).intValue()
-				+ ((Number) result.get("errors")).intValue() + ((Number) result.get("ignored")).intValue();
-		// a summary that does not add up is how 38 errors were once reported as zero
-		assertEquals(total, counted, "the counters must account for every case: " + result);
-		assertEquals(null, result.get("countsInconsistent"));
-		assertEquals(null, result.get("unclassified"));
-	}
-
-	@Test
-	void aPlainJavaProjectRunsAsPlainJUnit() throws Exception {
-		withTests();
-
-		Map<String, Object> result = TestFixture.callAndParse(TOOL,
-				Map.of("project", PROJECT, "testClass", "sample.SampleTest", "timeoutSeconds", Integer.valueOf(120)));
-
-		assertEquals("junit", result.get("launchedAs"));
-		assertEquals(null, result.get("caveat"), "a project with no PDE nature needs no warning");
 	}
 
 	@Test

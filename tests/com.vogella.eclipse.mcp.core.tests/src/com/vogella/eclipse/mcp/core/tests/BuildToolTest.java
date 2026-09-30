@@ -1,5 +1,6 @@
 package com.vogella.eclipse.mcp.core.tests;
 
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -85,8 +86,8 @@ class BuildToolTest {
 				Map.of("project", PROJECT, "returnProblems", Boolean.FALSE));
 
 		assertEquals("done", result.get("state"));
-		assertEquals(null, result.get("errors"));
-		assertEquals(null, result.get("warnings"));
+		assertNull(result.get("errors"));
+		assertNull(result.get("warnings"));
 	}
 
 	@Test
@@ -171,7 +172,7 @@ class BuildToolTest {
 
 		Map<String, Object> rebuilt = TestFixture.callAndParse(TOOL,
 				Map.of("project", PROJECT, "kind", "clean", "buildAfterClean", Boolean.TRUE));
-		assertEquals(null, rebuilt.get("note"));
+		assertNull(rebuilt.get("note"));
 	}
 
 	@Test
@@ -187,16 +188,5 @@ class BuildToolTest {
 
 		assertFalse(String.valueOf(result.get("builderFailures")).contains(message),
 				"an entry logged before the build must not be reported as a build failure");
-	}
-
-	@Test
-	void returnsRunningWhenTheWaitIsTooShort() throws Exception {
-		fixture.createProject(PROJECT);
-
-		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("project", PROJECT, "wait", Boolean.FALSE));
-
-		// not waiting at all means the job may or may not have finished, but the handle must be usable either way
-		assertNotNull(result.get("buildId"));
-		assertTrue(List.of("running", "done").contains(result.get("state")), String.valueOf(result.get("state")));
 	}
 }

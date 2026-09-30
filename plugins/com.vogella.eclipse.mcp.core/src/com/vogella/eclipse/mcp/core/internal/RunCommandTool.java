@@ -19,7 +19,7 @@ import com.vogella.eclipse.mcp.core.json.JsonArray;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
 /**
- * Runs a command in a directory the person at the IDE allowed.
+ * Runs a command in an absolute directory and captures its output.
  */
 public final class RunCommandTool implements IMcpTool {
 

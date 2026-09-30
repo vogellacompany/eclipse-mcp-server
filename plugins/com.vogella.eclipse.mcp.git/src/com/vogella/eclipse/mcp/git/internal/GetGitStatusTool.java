@@ -3,6 +3,7 @@ package com.vogella.eclipse.mcp.git.internal;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jgit.api.Git;
@@ -31,7 +32,7 @@ public final class GetGitStatusTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Reports which branch and commit a repository is on, and whether its working tree is clean. Changes nothing. This is what a problem set or a build result has to be correlated with: comparing errors across branches without recording the commit each set belongs to is how one branch's failures get attributed to another, and doing that by hand across several switches is where the mistake happens. Needs EGit; without it the tools say so rather than guessing."; //$NON-NLS-1$
+		return "Reports which branch and commit a repository is on, and whether its working tree is clean, listing modified, staged, missing, untracked and conflicting paths. Changes nothing. This is what a problem set or a build result has to be correlated with: comparing errors across branches without recording the commit each set belongs to is how one branch's failures get attributed to another, and doing that by hand across several switches is where the mistake happens. Needs EGit; without it the tools say so rather than guessing."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -76,12 +77,22 @@ public final class GetGitStatusTool implements IMcpTool {
 					.put("state", repository.getRepositoryState().name()) //$NON-NLS-1$
 					.put("clean", Boolean.valueOf(status.isClean())) //$NON-NLS-1$
 					.put("modified", paths(status.getModified(), maxFiles)) //$NON-NLS-1$
+					.put("staged", paths(staged(status), maxFiles)) //$NON-NLS-1$
+					.put("missing", paths(status.getMissing(), maxFiles)) //$NON-NLS-1$
 					.put("untracked", paths(status.getUntracked(), maxFiles)) //$NON-NLS-1$
 					.put("conflicting", paths(status.getConflicting(), maxFiles)) //$NON-NLS-1$
 					.toString());
 		} catch (Exception e) {
 			throw new McpToolException("Could not read the status of the repository", e); //$NON-NLS-1$
 		}
+	}
+
+	/** Paths with anything in the index that differs from HEAD. */
+	private static Set<String> staged(Status status) {
+		Set<String> staged = new TreeSet<>(status.getAdded());
+		staged.addAll(status.getChanged());
+		staged.addAll(status.getRemoved());
+		return staged;
 	}
 
 	private static JsonObject paths(Set<String> values, int maxFiles) {

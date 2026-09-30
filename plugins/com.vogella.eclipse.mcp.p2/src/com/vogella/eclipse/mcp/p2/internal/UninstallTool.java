@@ -118,10 +118,10 @@ public final class UninstallTool implements IMcpTool {
 		// HeadlessTrust stays installed for the apply anyway and records a refusal
 		// if p2 asks anything, so a surprise surfaces instead of blocking
 		HeadlessTrust trust = new HeadlessTrust(false);
-		Object previousTrust = HeadlessTrust.install(agent, trust);
+		HeadlessTrust.install(agent, trust);
 		ProvisioningJob job = operation.getProvisioningJob(null);
 		if (job == null) {
-			HeadlessTrust.restore(agent, previousTrust);
+			HeadlessTrust.restore(agent, trust);
 			return McpToolResult.error("p2 produced no provisioning job for the resolved uninstall."); //$NON-NLS-1$
 		}
 		Provisioning.Operation handle = Provisioning.start("uninstall", tracked -> { //$NON-NLS-1$
@@ -130,7 +130,7 @@ public final class UninstallTool implements IMcpTool {
 		});
 		Provisioning.onFinished(handle, () -> {
 			Provisioning.setTrust(handle, trust, false);
-			HeadlessTrust.restore(agent, previousTrust);
+			HeadlessTrust.restore(agent, trust);
 		});
 		return McpToolResult.of(handle.toJson().toString());
 	}

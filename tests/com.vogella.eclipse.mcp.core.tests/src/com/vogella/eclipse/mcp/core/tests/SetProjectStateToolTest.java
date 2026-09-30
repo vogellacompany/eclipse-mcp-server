@@ -170,6 +170,21 @@ class SetProjectStateToolTest {
 	}
 
 	@Test
+	void aPlatformMismatchStillRefusesWhenAMatchingDependentStaysOpen() throws Exception {
+		IProject mismatched = fixture.createProject(PROJECT + "-a");
+		IProject dependent = fixture.createProject(PROJECT + "-b");
+		String foreignWs = "gtk".equals(Platform.getWS()) ? "win32" : "gtk";
+		writeManifest(mismatched, "Eclipse-PlatformFilter: (osgi.ws=%s)".formatted(foreignWs));
+		reference(dependent, mismatched);
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL,
+				Map.of("state", "closed", "platformMismatch", Boolean.TRUE, "dryRun", Boolean.FALSE));
+
+		assertTrue(mismatched.isOpen(), "the open dependent that does not mismatch has to block the close: " + result);
+		assertTrue(dependent.isOpen());
+	}
+
+	@Test
 	void refusesToActWithoutASelection() throws Exception {
 		McpToolResult result = TestFixture.call(TOOL, Map.of("state", "closed"));
 

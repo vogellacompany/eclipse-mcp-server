@@ -72,8 +72,7 @@ public final class CancelBuildTool implements IMcpTool {
 		if (waitSeconds > 0) {
 			awaitEnd(jobs, waitSeconds);
 		}
-		int stillRunning = jobs.find(ResourcesPlugin.FAMILY_MANUAL_BUILD).length
-				+ jobs.find(ResourcesPlugin.FAMILY_AUTO_BUILD).length;
+		int stillRunning = activeBuilds(jobs);
 		result.put("waitedSeconds", Integer.valueOf(waitSeconds)) //$NON-NLS-1$
 				.put("stillRunning", Integer.valueOf(stillRunning)) //$NON-NLS-1$
 				.put("note", note(stillRunning, platformJobs, autoBuilding)); //$NON-NLS-1$
@@ -110,12 +109,17 @@ public final class CancelBuildTool implements IMcpTool {
 		return found.length;
 	}
 
+	/** The platform's build jobs plus the ones {@code eclipse_build} started, which belong to no platform family. */
+	private static int activeBuilds(IJobManager jobs) {
+		return jobs.find(ResourcesPlugin.FAMILY_MANUAL_BUILD).length + jobs.find(ResourcesPlugin.FAMILY_AUTO_BUILD).length
+				+ BuildRegistry.getInstance().running().size();
+	}
+
 	/** Watches rather than joins: joining a build job waits for it to finish, which is the opposite of the point. */
 	private static void awaitEnd(IJobManager jobs, int waitSeconds) {
 		long deadline = System.currentTimeMillis() + waitSeconds * 1000L;
 		while (System.currentTimeMillis() < deadline) {
-			if (jobs.find(ResourcesPlugin.FAMILY_MANUAL_BUILD).length == 0
-					&& jobs.find(ResourcesPlugin.FAMILY_AUTO_BUILD).length == 0) {
+			if (activeBuilds(jobs) == 0) {
 				return;
 			}
 			try {

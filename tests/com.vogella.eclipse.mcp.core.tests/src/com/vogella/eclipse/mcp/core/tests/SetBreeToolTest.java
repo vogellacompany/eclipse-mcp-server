@@ -191,6 +191,18 @@ class SetBreeToolTest {
 		assertTrue(result.text().contains("every plug-in"), result.text());
 	}
 
+	@Test
+	void anUnknownProjectRefusesTheCallBeforeAnythingIsWritten() throws Exception {
+		IProject project = createPlugin();
+
+		McpToolResult result = TestFixture.call(TOOL,
+				Map.of("bree", TO, "projects", List.of(PROJECT, "no-such-project"), "dryRun", Boolean.FALSE));
+
+		assertTrue(result.isError());
+		assertTrue(result.text().contains("no-such-project"), result.text());
+		assertTrue(manifest(project).contains(FROM), "the valid project must not have been changed");
+	}
+
 	private IProject createPlugin() throws Exception {
 		return createPlugin(FROM);
 	}

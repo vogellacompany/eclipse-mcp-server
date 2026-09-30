@@ -1,17 +1,14 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
-import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IMember;
@@ -73,7 +70,7 @@ public final class DeleteTool implements IMcpTool {
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		List<String> typeNames = new ArrayList<>();
-		if (arguments != null && arguments.get("typeNames") instanceof List<?> list) { //$NON-NLS-1$
+		if (arguments.get("typeNames") instanceof List<?> list) { //$NON-NLS-1$
 			list.forEach(value -> typeNames.add(String.valueOf(value).trim()));
 		}
 		String typeName = args.getString("typeName"); //$NON-NLS-1$
@@ -83,11 +80,13 @@ public final class DeleteTool implements IMcpTool {
 		String memberName = args.getString("memberName"); //$NON-NLS-1$
 		boolean dryRun = args.getBoolean("dryRun", true); //$NON-NLS-1$
 		boolean force = args.getBoolean("force", false); //$NON-NLS-1$
-		IProgressMonitor progress = monitor == null ? new NullProgressMonitor() : monitor;
+		IProgressMonitor progress = monitor;
 
 		List<IJavaProject> projects;
 		try {
 			projects = JavaModelSupport.javaProjects(args.getString("project")); //$NON-NLS-1$
+			// the reference count decides whether a deletion is safe, so it must not read a stale index
+			JavaModelSupport.refresh(null, progress);
 		} catch (ToolInputException e) {
 			return McpToolResult.error(e.getMessage());
 		}
@@ -239,17 +238,20 @@ public final class DeleteTool implements IMcpTool {
 								+ status.getMessageMatchingSeverity(RefactoringStatus.ERROR));
 			}
 			status.merge(refactoring.checkAllConditions(progress));
-			if (status.hasFatalError() || status.hasError()) {
+			if (status.hasError()) {
 				return result.put("deleted", Boolean.FALSE).put("refusedBecause", //$NON-NLS-1$ //$NON-NLS-2$
 						status.getMessageMatchingSeverity(RefactoringStatus.ERROR));
 			}
 			Change change = refactoring.createChange(progress);
-			Set<String> files = new LinkedHashSet<>();
-			files.add(file.getFullPath().toString());
 			change.initializeValidationData(progress);
-			ResourcesPlugin.getWorkspace().run(new PerformChangeOperation(change), progress);
+			PerformChangeOperation operation = new PerformChangeOperation(change);
+			ResourcesPlugin.getWorkspace().run(operation, progress);
+			if (!operation.changeExecuted()) {
+				return result.put("deleted", Boolean.FALSE).put("error", //$NON-NLS-1$ //$NON-NLS-2$
+						"The delete was not applied: " + operation.getValidationStatus()); //$NON-NLS-1$
+			}
 			JsonArray affected = new JsonArray();
-			files.forEach(affected::add);
+			affected.add(file.getFullPath().toString());
 			return result.put("deleted", Boolean.TRUE).put("affectedFiles", affected); //$NON-NLS-1$ //$NON-NLS-2$
 		} catch (CoreException e) {
 			throw new McpToolException("The delete failed", e); //$NON-NLS-1$

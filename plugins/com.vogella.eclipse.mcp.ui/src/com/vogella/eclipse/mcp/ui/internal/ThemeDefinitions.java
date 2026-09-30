@@ -79,10 +79,11 @@ final class ThemeDefinitions {
 		}
 		result.put("colors", capped(colors, query.maxResults())) //$NON-NLS-1$
 				.put("fonts", capped(fonts, query.maxResults())); //$NON-NLS-1$
-		if (colors.size() > query.maxResults() || fonts.size() > query.maxResults()) {
-			result.put("truncated", Boolean.TRUE) //$NON-NLS-1$
-					.put("truncationNote", //$NON-NLS-1$
-							"Each kind is capped at maxResults separately. The counts above are the totals before the cap."); //$NON-NLS-1$
+		boolean truncated = colors.size() > query.maxResults() || fonts.size() > query.maxResults();
+		result.put("truncated", Boolean.valueOf(truncated)); //$NON-NLS-1$
+		if (truncated) {
+			result.put("truncationNote", //$NON-NLS-1$
+					"Each kind is capped at maxResults separately. The counts above are the totals before the cap."); //$NON-NLS-1$
 		}
 		if (theme == null) {
 			result.put("resolvedValueNote", //$NON-NLS-1$

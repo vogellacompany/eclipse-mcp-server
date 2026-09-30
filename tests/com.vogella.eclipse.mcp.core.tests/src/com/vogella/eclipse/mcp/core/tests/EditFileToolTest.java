@@ -129,9 +129,6 @@ class EditFileToolTest {
 	private IFile write(String name, String content) throws Exception {
 		IProject project = fixture.createProject(PROJECT);
 		IFile file = project.getFile(name);
-		if (file.exists()) {
-			file.delete(true, new NullProgressMonitor());
-		}
 		file.create(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)), true,
 				new NullProgressMonitor());
 		return file;

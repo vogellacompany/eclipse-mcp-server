@@ -27,6 +27,8 @@ final class GitHubPullRequests {
 
 	private static final String[] TOKEN_VARIABLES = { "GH_TOKEN", "GITHUB_TOKEN" }; //$NON-NLS-1$ //$NON-NLS-2$
 
+	private static final String[] ENTERPRISE_TOKEN_VARIABLES = { "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN" }; //$NON-NLS-1$ //$NON-NLS-2$
+
 	record PullRequest(String title, String state, boolean draft, String author, String headRepository,
 			String headBranch, String headSha, String baseBranch, String url) {
 	}
@@ -72,8 +74,14 @@ final class GitHubPullRequests {
 			return new Answer(null, "The remote URL '%s' is not of the form host/owner/repository, so there is no GitHub API to ask." //$NON-NLS-1$
 					.formatted(remote), false);
 		}
-		String token = token();
-		HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(timeoutSeconds))
+		String token = token(url, remote.getHost());
+		HttpRequest.Builder request;
+		try {
+			request = HttpRequest.newBuilder(URI.create(url));
+		} catch (IllegalArgumentException e) {
+			return new Answer(null, "The API URL '%s' is not a valid URI: %s".formatted(url, e.getMessage()), false); //$NON-NLS-1$
+		}
+		request = request.timeout(Duration.ofSeconds(timeoutSeconds))
 				.header("Accept", "application/vnd.github+json") //$NON-NLS-1$ //$NON-NLS-2$
 				.header("X-GitHub-Api-Version", "2022-11-28") //$NON-NLS-1$ //$NON-NLS-2$
 				.header("User-Agent", "eclipse-mcp-server") //$NON-NLS-1$ //$NON-NLS-2$
@@ -127,8 +135,23 @@ final class GitHubPullRequests {
 		return value == null ? null : String.valueOf(value);
 	}
 
-	private static String token() {
-		for (String variable : TOKEN_VARIABLES) {
+	/**
+	 * The token for this host: GH_TOKEN and GITHUB_TOKEN only go to api.github.com, and an
+	 * enterprise host gets its own variables and only when it is the GH_HOST the gh CLI uses.
+	 */
+	static String token(String url, String host) {
+		if (System.getProperty(API_PROPERTY) != null && !System.getProperty(API_PROPERTY).isBlank()) {
+			return null;
+		}
+		if (url.startsWith("https://api.github.com/")) { //$NON-NLS-1$
+			return firstSet(TOKEN_VARIABLES);
+		}
+		String ghHost = System.getenv("GH_HOST"); //$NON-NLS-1$
+		return host != null && host.equalsIgnoreCase(ghHost) ? firstSet(ENTERPRISE_TOKEN_VARIABLES) : null;
+	}
+
+	private static String firstSet(String[] variables) {
+		for (String variable : variables) {
 			String value = System.getenv(variable);
 			if (value != null && !value.isBlank()) {
 				return value.strip();

@@ -1,5 +1,6 @@
 package com.vogella.eclipse.mcp.core.tests;
 
+import static com.vogella.eclipse.mcp.core.tests.TestFixture.assertRefused;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -15,7 +16,6 @@ import org.eclipse.ui.IFileEditorInput;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.ui.internal.CompareTool;
 
 /**
@@ -101,6 +101,11 @@ class UiToolsTest {
 				"Unknown mode");
 		assertRefused(TestFixture.call("eclipse_set_ide_visibility", Map.of("visible", Boolean.FALSE)),
 				"no running workbench");
+	}
+
+	@Test
+	void closingEditorsRefusesToCloseEveryEditorByOmission() throws Exception {
+		assertRefused(TestFixture.call("eclipse_close_editor", Map.of()), "refusing to close every editor");
 	}
 
 	@Test
@@ -215,11 +220,5 @@ class UiToolsTest {
 		file.create(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)), true,
 				new NullProgressMonitor());
 		return file;
-	}
-
-	private static void assertRefused(McpToolResult result, String expected) {
-		assertTrue(result.isError(), "expected an error, got " + result.text());
-		assertTrue(result.text().toLowerCase().contains(expected.toLowerCase()),
-				"expected a message about '%s', got %s".formatted(expected, result.text()));
 	}
 }

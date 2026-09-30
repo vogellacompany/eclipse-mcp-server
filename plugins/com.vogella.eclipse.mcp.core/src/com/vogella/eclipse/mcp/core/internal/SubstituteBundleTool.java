@@ -23,6 +23,7 @@ import java.util.jar.Manifest;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
 
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.ResourcesPlugin;
@@ -35,6 +36,7 @@ import com.vogella.eclipse.mcp.core.FrameworkChanges;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
+import com.vogella.eclipse.mcp.core.json.Json;
 import com.vogella.eclipse.mcp.core.json.JsonArray;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
@@ -114,13 +116,18 @@ public final class SubstituteBundleTool implements IMcpTool {
 			// a changed bundles.info line is loaded under caches written for the old
 			// jar, so the next restart discards them
 			if (!result.isError() && !args.getBoolean("dryRun", true) //$NON-NLS-1$
-					&& List.of("restore", "repair", "substitute").contains(action)) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+					&& List.of("restore", "repair", "substitute").contains(action) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+					&& changedInstallation(result)) {
 				FrameworkChanges.markLiveChange("eclipse_substitute_bundle " + action); //$NON-NLS-1$
 			}
 			return result;
 		} catch (IOException e) {
 			return McpToolResult.error("Could not work with the installation: " + e); //$NON-NLS-1$
 		}
+	}
+
+	private static boolean changedInstallation(McpToolResult result) {
+		return !(Json.parse(result.text()) instanceof Map<?, ?> answer) || !Boolean.FALSE.equals(answer.get("restartRequired")); //$NON-NLS-1$
 	}
 
 	/**
@@ -135,9 +142,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 	 */
 	private static JsonObject status(Path configuration, Path bundlesInfo) throws IOException {
 		List<String[]> records = records(configuration);
-		List<String> lines = Files.isRegularFile(bundlesInfo)
-				? Files.readAllLines(bundlesInfo, StandardCharsets.UTF_8)
-				: List.of();
+		List<String> lines = Files.readAllLines(bundlesInfo, StandardCharsets.UTF_8);
 		JsonArray active = new JsonArray();
 		int stillSubstituted = 0;
 		for (String[] record : records) {
@@ -248,7 +253,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 		}
 		String location = bundle.getLocation();
 		boolean substituted = location != null && location.contains(JARS);
-		String state = stateOf(bundle.getState());
+		String state = InstallBundleTool.stateName(bundle.getState());
 		return new JsonObject().put("known", Boolean.TRUE) //$NON-NLS-1$
 				.put("version", String.valueOf(bundle.getVersion())) //$NON-NLS-1$
 				.put("state", state) //$NON-NLS-1$
@@ -260,17 +265,13 @@ public final class SubstituteBundleTool implements IMcpTool {
 				.put("stateNote", "RESOLVED means the bundle is wired and will run when something needs it, which is the ordinary state for a lazily activated bundle and says nothing against the substitution; what matters here is the version and the location."); //$NON-NLS-1$
 	}
 
-	/** The framework's state constants, which are a bit field of powers of two. */
-	private static String stateOf(int state) {
-		return switch (state) {
-		case org.osgi.framework.Bundle.UNINSTALLED -> "UNINSTALLED"; //$NON-NLS-1$
-		case org.osgi.framework.Bundle.INSTALLED -> "INSTALLED"; //$NON-NLS-1$
-		case org.osgi.framework.Bundle.RESOLVED -> "RESOLVED"; //$NON-NLS-1$
-		case org.osgi.framework.Bundle.STARTING -> "STARTING"; //$NON-NLS-1$
-		case org.osgi.framework.Bundle.STOPPING -> "STOPPING"; //$NON-NLS-1$
-		case org.osgi.framework.Bundle.ACTIVE -> "ACTIVE"; //$NON-NLS-1$
-		default -> String.valueOf(state);
-		};
+	private static int indexOf(List<String> lines, String bundle) {
+		for (int i = 0; i < lines.size(); i++) {
+			if (lines.get(i).startsWith(bundle + ",")) { //$NON-NLS-1$
+				return i;
+			}
+		}
+		return -1;
 	}
 
 	/** The line for a bundle, found by its name, which is the one stable field. */
@@ -306,16 +307,10 @@ public final class SubstituteBundleTool implements IMcpTool {
 		JsonArray done = new JsonArray();
 		JsonArray missed = new JsonArray();
 		for (String[] record : records) {
-			int index = -1;
-			for (int i = 0; i < lines.size(); i++) {
-				// by bundle name, not by the whole line: simpleconfigurator rewrites
-				// the version and the path form at every start, so the line written
-				// here is not the line found later
-				if (lines.get(i).startsWith(record[0] + ",")) { //$NON-NLS-1$
-					index = i;
-					break;
-				}
-			}
+			// by bundle name, not by the whole line: simpleconfigurator rewrites
+			// the version and the path form at every start, so the line written
+			// here is not the line found later
+			int index = indexOf(lines, record[0]);
 			if (index < 0) {
 				missed.add(new JsonObject().put("bundle", record[0]) //$NON-NLS-1$
 						.put("reason", "bundles.info has no line for it at all.")); //$NON-NLS-1$ //$NON-NLS-2$
@@ -655,13 +650,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 		}
 
 		List<String> lines = new ArrayList<>(Files.readAllLines(bundlesInfo, StandardCharsets.UTF_8));
-		int index = -1;
-		for (int i = 0; i < lines.size(); i++) {
-			if (lines.get(i).startsWith(symbolicName + ",")) { //$NON-NLS-1$
-				index = i;
-				break;
-			}
-		}
+		int index = indexOf(lines, symbolicName);
 		if (index < 0) {
 			return McpToolResult.error(
 					"bundles.info has no line for '%s', so this installation does not run that bundle and there is nothing to substitute." //$NON-NLS-1$
@@ -742,7 +731,8 @@ public final class SubstituteBundleTool implements IMcpTool {
 				return McpToolResult.error("'%s' has no manifest, so it is not an OSGi bundle.".formatted(source)); //$NON-NLS-1$
 			}
 			String declared = manifest.getMainAttributes().getValue("Bundle-SymbolicName"); //$NON-NLS-1$
-			version = manifest.getMainAttributes().getValue("Bundle-Version"); //$NON-NLS-1$
+			String declaredVersion = manifest.getMainAttributes().getValue("Bundle-Version"); //$NON-NLS-1$
+			version = declaredVersion == null ? "0.0.0" : declaredVersion.strip(); //$NON-NLS-1$
 			symbolicName = declared == null ? null : declared.split(";")[0].strip(); //$NON-NLS-1$
 		}
 		if (symbolicName == null) {
@@ -750,13 +740,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 		}
 
 		List<String> lines = new ArrayList<>(Files.readAllLines(bundlesInfo, StandardCharsets.UTF_8));
-		int index = -1;
-		for (int i = 0; i < lines.size(); i++) {
-			if (lines.get(i).startsWith(symbolicName + ",")) { //$NON-NLS-1$
-				index = i;
-				break;
-			}
-		}
+		int index = indexOf(lines, symbolicName);
 		if (index < 0) {
 			return McpToolResult.error(
 					"bundles.info has no line for '%s', which is what %s declares, so this installation does not run that bundle." //$NON-NLS-1$
@@ -831,7 +815,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 				if (Files.isDirectory(source)) {
 					written += copyTree(project, source, out, unreadable);
 				} else if (Files.isRegularFile(source)) {
-					written += copyOne(project, source, out);
+					written += copyOne(project, source, out, unreadable);
 				}
 			}
 		}
@@ -864,7 +848,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 			@Override
 			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
 				if (attrs.isRegularFile()) {
-					written[0] += copyOne(base, file, out);
+					written[0] += copyOne(base, file, out, unreadable);
 				}
 				return FileVisitResult.CONTINUE;
 			}
@@ -878,16 +862,24 @@ public final class SubstituteBundleTool implements IMcpTool {
 		return written[0];
 	}
 
-	private static int copyOne(Path base, Path file, JarOutputStream out) {
+	private static int copyOne(Path base, Path file, JarOutputStream out, List<String> unreadable) {
 		String name = base.relativize(file).toString().replace('\\', '/');
 		try {
 			out.putNextEntry(new ZipEntry(name));
+		} catch (ZipException e) {
+			// bin.includes names something the output folder already carries; the first one written wins
+			return 0;
+		} catch (IOException e) {
+			unreadable.add(file.toString());
+			return 0;
+		}
+		try {
 			Files.copy(file, out);
 			out.closeEntry();
 			return 1;
 		} catch (IOException e) {
-			// a duplicate entry is the usual cause, when bin.includes names something the
-			// output folder already carries; the first one written wins
+			// the entry may be truncated, so it is reported and the answer calls the jar incomplete
+			unreadable.add(file.toString());
 			return 0;
 		}
 	}

@@ -268,20 +268,20 @@ public final class KeyboardTools {
 
 	static Stroke parse(String key) {
 		List<Integer> modifiers = new ArrayList<>();
-		String[] parts = key.split("\\+"); //$NON-NLS-1$
-		String main = key;
-		for (int i = 0; i < parts.length; i++) {
-			String token = parts[i].strip();
-			Integer modifier = modifier(token);
-			if (modifier != null && i < parts.length - 1) {
-				modifiers.add(modifier);
-			} else {
-				main = token;
+		// a trailing '+' is the plus key itself, as in Ctrl++
+		boolean plusKey = key.endsWith("+"); //$NON-NLS-1$
+		int split = plusKey ? key.length() - 1 : key.lastIndexOf('+');
+		String main = plusKey ? "+" : key.substring(split + 1).strip(); //$NON-NLS-1$
+		String prefix = split <= 0 ? "" : key.substring(0, split); //$NON-NLS-1$
+		for (String token : prefix.split("\\+")) { //$NON-NLS-1$
+			if (token.isBlank()) {
+				continue;
 			}
-		}
-		// a lone '+' pressed as the last segment splits to an empty token
-		if (main.isEmpty() && key.endsWith("+")) { //$NON-NLS-1$
-			main = "+"; //$NON-NLS-1$
+			Integer modifier = modifier(token.strip());
+			if (modifier == null) {
+				throw new IllegalArgumentException("'%s' is not a known modifier in '%s'.".formatted(token.strip(), key)); //$NON-NLS-1$
+			}
+			modifiers.add(modifier);
 		}
 		int keyCode = named(main);
 		char character = 0;

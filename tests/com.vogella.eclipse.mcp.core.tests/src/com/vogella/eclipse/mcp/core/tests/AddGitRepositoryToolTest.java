@@ -11,6 +11,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IProjectDescription;
+import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.jgit.api.Git;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -136,6 +139,24 @@ class AddGitRepositoryToolTest {
 		Map<String, Object> answer = TestFixture.callAndParse(NAME, Map.of("action", "list"));
 
 		assertTrue(answer.get("registered") instanceof List, "got " + answer);
+	}
+
+	@Test
+	void aProjectAtTheRepositoryRootIsOneToConnect() throws Exception {
+		IProject project = ResourcesPlugin.getWorkspace().getRoot().getProject("mcp-git-root-project");
+		try {
+			IProjectDescription description = ResourcesPlugin.getWorkspace().newProjectDescription(project.getName());
+			description.setLocation(new org.eclipse.core.runtime.Path(directory.toString()));
+			project.create(description, null);
+			project.open(null);
+
+			Map<String, Object> answer = TestFixture.callAndParse(NAME,
+					Map.of("directory", directory.toString(), "connectProjects", Boolean.TRUE));
+
+			assertEquals(List.of(project.getName()), answer.get("projectsToConnect"), "got " + answer);
+		} finally {
+			project.delete(false, true, null);
+		}
 	}
 
 	@Test

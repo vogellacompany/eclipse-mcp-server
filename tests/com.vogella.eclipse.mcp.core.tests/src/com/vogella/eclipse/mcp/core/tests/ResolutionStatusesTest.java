@@ -22,65 +22,65 @@ import com.vogella.eclipse.mcp.p2.internal.ResolutionStatuses;
  */
 class ResolutionStatusesTest {
 
-	private static final String PLUGIN = "com.vogella.eclipse.mcp.p2.tests.fixture"; //$NON-NLS-1$
+	private static final String PLUGIN = "com.vogella.eclipse.mcp.p2.tests.fixture";
 
 	@Test
 	void collectsChildMessagesInOrderThroughNestedMultiStatuses() {
 		MultiStatus nested = new MultiStatus(PLUGIN, IStatus.ERROR, new IStatus[] {
-				new Status(IStatus.WARNING, PLUGIN, "inner one"), //$NON-NLS-1$
-				new Status(IStatus.WARNING, PLUGIN, "inner two") }, "nested", null); //$NON-NLS-1$ //$NON-NLS-2$
-		MultiStatus root = new MultiStatus(PLUGIN, IStatus.ERROR, "Operation details", null); //$NON-NLS-1$
-		root.add(new Status(IStatus.WARNING, PLUGIN, "first conflict")); //$NON-NLS-1$
+				new Status(IStatus.WARNING, PLUGIN, "inner one"),
+				new Status(IStatus.WARNING, PLUGIN, "inner two") }, "nested", null);
+		MultiStatus root = new MultiStatus(PLUGIN, IStatus.ERROR, "Operation details", null);
+		root.add(new Status(IStatus.WARNING, PLUGIN, "first conflict"));
 		root.add(nested);
 
 		// the message of the nested status is collected too, not only its leaves: p2
 		// puts the readable sentence on the intermediate level, "cannot complete the
 		// install because of a conflicting dependency", and the specifics under it
-		assertEquals(List.of("first conflict", "nested", "inner one", "inner two"), //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+		assertEquals(List.of("first conflict", "nested", "inner one", "inner two"),
 				ResolutionStatuses.explanations(root));
 	}
 
 	@Test
 	void duplicatesCollapseAndBlankMessagesAreSkipped() {
-		MultiStatus root = new MultiStatus(PLUGIN, IStatus.ERROR, "Operation details", null); //$NON-NLS-1$
-		root.add(new Status(IStatus.WARNING, PLUGIN, "same conflict")); //$NON-NLS-1$
-		root.add(new Status(IStatus.WARNING, PLUGIN, "")); //$NON-NLS-1$
-		root.add(new Status(IStatus.WARNING, PLUGIN, "   ")); //$NON-NLS-1$
-		root.add(new Status(IStatus.WARNING, PLUGIN, "same conflict")); //$NON-NLS-1$
+		MultiStatus root = new MultiStatus(PLUGIN, IStatus.ERROR, "Operation details", null);
+		root.add(new Status(IStatus.WARNING, PLUGIN, "same conflict"));
+		root.add(new Status(IStatus.WARNING, PLUGIN, ""));
+		root.add(new Status(IStatus.WARNING, PLUGIN, "   "));
+		root.add(new Status(IStatus.WARNING, PLUGIN, "same conflict"));
 
-		assertEquals(List.of("same conflict"), ResolutionStatuses.explanations(root)); //$NON-NLS-1$
+		assertEquals(List.of("same conflict"), ResolutionStatuses.explanations(root));
 	}
 
 	@Test
 	void aLeafStatusHasNoExplanations() {
-		Status leaf = new Status(IStatus.ERROR, PLUGIN, "just the message"); //$NON-NLS-1$
+		Status leaf = new Status(IStatus.ERROR, PLUGIN, "just the message");
 
 		assertTrue(ResolutionStatuses.explanations(leaf).isEmpty());
 	}
 
 	@Test
 	void failureKeepsTheTopLevelMessageAndTheHeadline() {
-		MultiStatus root = new MultiStatus(PLUGIN, IStatus.ERROR, "Operation details", null); //$NON-NLS-1$
-		root.add(new Status(IStatus.WARNING, PLUGIN, "the real reason")); //$NON-NLS-1$
+		MultiStatus root = new MultiStatus(PLUGIN, IStatus.ERROR, "Operation details", null);
+		root.add(new Status(IStatus.WARNING, PLUGIN, "the real reason"));
 
-		String text = ResolutionStatuses.failure("The install could not be resolved", root); //$NON-NLS-1$
+		String text = ResolutionStatuses.failure("The install could not be resolved", root);
 
-		assertTrue(text.startsWith("The install could not be resolved: Operation details"), "got " + text); //$NON-NLS-1$ //$NON-NLS-2$
-		assertTrue(text.contains("- the real reason"), "got " + text); //$NON-NLS-1$ //$NON-NLS-2$
+		assertTrue(text.startsWith("The install could not be resolved: Operation details"), "got " + text);
+		assertTrue(text.contains("- the real reason"), "got " + text);
 	}
 
 	@Test
 	void failureCapsTheReasonsAndSaysSo() {
-		MultiStatus root = new MultiStatus(PLUGIN, IStatus.ERROR, "Operation details", null); //$NON-NLS-1$
+		MultiStatus root = new MultiStatus(PLUGIN, IStatus.ERROR, "Operation details", null);
 		for (int i = 0; i < 25; i++) {
-			root.add(new Status(IStatus.WARNING, PLUGIN, "conflict %d".formatted(i))); //$NON-NLS-1$
+			root.add(new Status(IStatus.WARNING, PLUGIN, "conflict %d".formatted(i)));
 		}
 
-		String text = ResolutionStatuses.failure("The uninstall could not be resolved", root); //$NON-NLS-1$
+		String text = ResolutionStatuses.failure("The uninstall could not be resolved", root);
 
 		assertEquals(ResolutionStatuses.MAX_EXPLANATIONS,
-				text.split("\n- ", -1).length - 1, "got " + text); //$NON-NLS-1$ //$NON-NLS-2$
-		assertTrue(text.contains("showing 20 of 25"), "got " + text); //$NON-NLS-1$ //$NON-NLS-2$
-		assertTrue(text.contains("logged as a warning"), "got " + text); //$NON-NLS-1$ //$NON-NLS-2$
+				text.split("\n- ", -1).length - 1, "got " + text);
+		assertTrue(text.contains("showing 20 of 25"), "got " + text);
+		assertTrue(text.contains("logged as a warning"), "got " + text);
 	}
 }

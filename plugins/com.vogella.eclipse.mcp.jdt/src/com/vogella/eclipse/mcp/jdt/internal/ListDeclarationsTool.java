@@ -103,18 +103,8 @@ public final class ListDeclarationsTool implements IMcpTool {
 		int maxResults = args.getInt("maxResults", 500, 1, 5000); //$NON-NLS-1$
 
 		List<IJavaProject> projects = new ArrayList<>();
-		if (names.isEmpty() && !strings(arguments, "typeNames").isEmpty()) { //$NON-NLS-1$
-			// resolving named types does not need a project walk, so the whole
-			// workspace is the right scope and costs nothing extra
-			for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
-				IJavaProject javaProject = JavaCore.create(project);
-				if (project.isAccessible() && javaProject != null && javaProject.exists()) {
-					projects.add(javaProject);
-				}
-			}
-		} else if (names.isEmpty()) {
-			// every open Java project, as the other workspace-wide tools do. Naming
-			// projects is still worth it: this walks every compilation unit it is given
+		if (names.isEmpty()) {
+			// every open Java project; naming projects is worth it because this walks every unit it is given
 			for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
 				IJavaProject javaProject = JavaCore.create(project);
 				if (project.isAccessible() && javaProject != null && javaProject.exists()) {
@@ -137,6 +127,7 @@ public final class ListDeclarationsTool implements IMcpTool {
 
 		try {
 			List<String> typeNames = strings(arguments, "typeNames"); //$NON-NLS-1$
+			JavaModelSupport.refresh(null, monitor);
 			RegistryIndex index = RegistryIndex.build(monitor);
 			if (!typeNames.isEmpty()) {
 				return McpToolResult.of(reportNamed(typeNames, projects, index, kinds, visibility, status, deprecated, maxResults,
@@ -241,8 +232,8 @@ public final class ListDeclarationsTool implements IMcpTool {
 			int maxResults, JsonArray into, LineIndex lines, PackageExports exports, Set<String> workspaceBundles,
 			IProgressMonitor monitor) throws CoreException {
 		int matched = 0;
-		String verdict = verdict(type, index, null, monitor);
-		JsonObject api = api(type, exports, workspaceBundles);
+		String verdict = verdict(type, index, null);
+		Api api = api(type, exports, workspaceBundles);
 		if (kinds.contains("types")) { //$NON-NLS-1$
 			matched += consider(type, type.getFullyQualifiedName(), "type", verdict, index, visibility, status, //$NON-NLS-1$
 					deprecated, maxResults, into, lines, api, monitor);
@@ -267,7 +258,7 @@ public final class ListDeclarationsTool implements IMcpTool {
 	}
 
 	private int consider(IMember member, String name, String kind, String enclosingVerdict, RegistryIndex index,
-			Set<String> visibility, String status, String deprecated, int maxResults, JsonArray into, LineIndex lines, JsonObject api,
+			Set<String> visibility, String status, String deprecated, int maxResults, JsonArray into, LineIndex lines, Api api,
 			IProgressMonitor monitor) throws CoreException {
 		String visible = visibility(member.getFlags());
 		if (!visibility.isEmpty() && !visibility.contains(visible)) {
@@ -278,7 +269,7 @@ public final class ListDeclarationsTool implements IMcpTool {
 		if (!deprecation.matches(deprecated)) {
 			return 0;
 		}
-		String verdict = "type".equals(kind) ? enclosingVerdict : verdict(member, index, enclosingVerdict, monitor); //$NON-NLS-1$
+		String verdict = "type".equals(kind) ? enclosingVerdict : verdict(member, index, enclosingVerdict); //$NON-NLS-1$
 		if (!"all".equals(status) && !status.equals(verdict)) { //$NON-NLS-1$
 			return 0;
 		}
@@ -292,10 +283,11 @@ public final class ListDeclarationsTool implements IMcpTool {
 				.put("line", Integer.valueOf(line(member, resource, lines))) //$NON-NLS-1$
 				.put("visibility", visible) //$NON-NLS-1$
 				.put("registryStatus", verdict) //$NON-NLS-1$
-				.put("apiTier", api.remove("tier")) //$NON-NLS-1$ //$NON-NLS-2$
-				.put("searchIsAuthoritative", api.remove("authoritative")); //$NON-NLS-1$ //$NON-NLS-2$
-		Object friends = api.remove("friends"); //$NON-NLS-1$
-		if (friends != null) {
+				.put("apiTier", api.tier()) //$NON-NLS-1$
+				.put("searchIsAuthoritative", api.authoritative()); //$NON-NLS-1$
+		if (api.friends() != null) {
+			JsonArray friends = new JsonArray();
+			api.friends().forEach(friends::add);
 			entry.put("friends", friends); //$NON-NLS-1$
 		}
 		Object restrictions = "type".equals(kind) ? apiRestrictions((IType) member) : null; //$NON-NLS-1$
@@ -321,6 +313,9 @@ public final class ListDeclarationsTool implements IMcpTool {
 		return 1;
 	}
 
+	private record Api(String tier, boolean authoritative, List<String> friends) {
+	}
+
 	/**
 	 * What the declaring package's export says a workspace search can prove.
 	 * <p>
@@ -329,10 +324,9 @@ public final class ListDeclarationsTool implements IMcpTool {
 	 * names is itself a project here. Everything exported plainly is the opposite
 	 * case, and no number of zero results settles it.
 	 */
-	private static JsonObject api(IType type, PackageExports exports, Set<String> workspaceBundles) {
+	private static Api api(IType type, PackageExports exports, Set<String> workspaceBundles) {
 		PackageExports.Export export = exports.of(type.getJavaProject().getProject(),
 				type.getPackageFragment().getElementName());
-		JsonObject api = new JsonObject().put("tier", export.tier()); //$NON-NLS-1$
 		// x-internal counts as authoritative too. It declares that NO bundle should
 		// use the package, which is a stronger statement than an x-friends list that
 		// happens to be enumerable, so crediting the enumerable one and not the
@@ -341,13 +335,12 @@ public final class ListDeclarationsTool implements IMcpTool {
 		// says so rather than the field pretending to more than it has
 		boolean authoritative = PackageExports.NOT_EXPORTED.equals(export.tier())
 				|| PackageExports.INTERNAL.equals(export.tier());
+		List<String> friends = null;
 		if (PackageExports.FRIENDS.equals(export.tier())) {
-			JsonArray friends = new JsonArray();
-			export.friends().forEach(friends::add);
-			api.put("friends", friends); //$NON-NLS-1$
+			friends = export.friends();
 			authoritative = !export.friends().isEmpty() && workspaceBundles.containsAll(export.friends());
 		}
-		return api.put("authoritative", Boolean.valueOf(authoritative)); //$NON-NLS-1$
+		return new Api(export.tier(), authoritative, friends);
 	}
 
 	/** The bundle symbolic names this workspace has open, for the x-friends check. */
@@ -395,8 +388,7 @@ public final class ListDeclarationsTool implements IMcpTool {
 	 * framework holds the instance and calls whatever its contract says, and no
 	 * declaration list can see that.
 	 */
-	private String verdict(IMember member, RegistryIndex index, String enclosingVerdict, IProgressMonitor monitor)
-			throws CoreException {
+	private String verdict(IMember member, RegistryIndex index, String enclosingVerdict) {
 		String name = member instanceof IType type ? type.getFullyQualifiedName()
 				: name(member.getDeclaringType(), member);
 		List<RegistryIndex.Evidence> evidence = index.evidenceFor(name);
@@ -617,7 +609,7 @@ public final class ListDeclarationsTool implements IMcpTool {
 
 	private static List<String> strings(Map<String, Object> arguments, String name) {
 		List<String> values = new ArrayList<>();
-		if (arguments != null && arguments.get(name) instanceof List<?> list) {
+		if (arguments.get(name) instanceof List<?> list) {
 			for (Object value : list) {
 				if (value != null && !String.valueOf(value).isBlank()) {
 					values.add(String.valueOf(value).trim());

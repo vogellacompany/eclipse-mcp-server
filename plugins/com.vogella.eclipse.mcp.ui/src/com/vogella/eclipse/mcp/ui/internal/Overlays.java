@@ -183,7 +183,7 @@ public final class Overlays {
 		return report;
 	}
 
-	/** A {@value #OUTLINE} pixel frame just inside the rectangle, clipped to the image. */
+	/** A frame of {@code lineWidth} pixels just inside the rectangle, clipped to the image. */
 	static void outline(ImageData image, Rectangle r, int width, int height, RGB color, int lineWidth) {
 		int pixel = image.palette.getPixel(color);
 		for (int i = 0; i < lineWidth; i++) {

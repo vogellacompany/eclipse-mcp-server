@@ -1,10 +1,6 @@
 package com.vogella.eclipse.mcp.ui.internal;
 
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.swt.SWT;
@@ -63,33 +59,8 @@ public final class DismissDialogTool implements IMcpTool {
 		String button = args.getString("button"); //$NON-NLS-1$
 		boolean dryRun = args.getBoolean("dryRun", true); //$NON-NLS-1$
 
-		CompletableFuture<JsonObject> pending = new CompletableFuture<>();
-		// asyncExec even though a modal dialog is up: a modal runs a nested event loop,
-		// so queued runnables still execute, and syncExec from here could deadlock
-		UiThread.exec(() -> {
-			if (pending.isDone()) {
-				// the wait below gave up: a dialog dismissed minutes later would be a
-				// surprise, and the caller can see it is still there and ask again
-				return;
-			}
-			try {
-				pending.complete(dismiss(shellTitle, button, dryRun));
-			} catch (RuntimeException e) {
-				pending.completeExceptionally(e);
-			}
-		});
-		try {
-			return McpToolResult.of(pending.get(UI_TIMEOUT_SECONDS, TimeUnit.SECONDS).toString());
-		} catch (TimeoutException e) {
-			pending.cancel(false);
-			return McpToolResult.error(UiThread.TIMED_OUT.formatted(Long.valueOf(UI_TIMEOUT_SECONDS)));
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			return McpToolResult.error("The request was interrupted."); //$NON-NLS-1$
-		} catch (ExecutionException e) {
-			Throwable cause = e.getCause() == null ? e : e.getCause();
-			return McpToolResult.error("Could not dismiss the dialog: " + cause); //$NON-NLS-1$
-		}
+		// a modal runs a nested event loop, so queued runnables still execute
+		return UiThread.call(UI_TIMEOUT_SECONDS, () -> dismiss(shellTitle, button, dryRun));
 	}
 
 	private static JsonObject dismiss(String shellTitle, String button, boolean dryRun) {
@@ -121,10 +92,17 @@ public final class DismissDialogTool implements IMcpTool {
 			return result.put("dismissed", Boolean.FALSE) //$NON-NLS-1$
 					.put("reason", "No button labelled '%s' on this dialog.".formatted(button)); //$NON-NLS-1$ //$NON-NLS-2$
 		}
+		if (!target.isEnabled() || !target.isVisible()) {
+			return result.put("dismissed", Boolean.FALSE) //$NON-NLS-1$
+					.put("reason", "The button '%s' is disabled or hidden, so a click would not reach it.".formatted(button)); //$NON-NLS-1$ //$NON-NLS-2$
+		}
 		// read the label before pressing: the button that closes the dialog disposes
 		// itself along with the shell, so reading it afterwards throws "Widget is
 		// disposed" and reported a completed press as a failed call
 		String pressed = label(target);
+		if ((target.getStyle() & SWT.CHECK) != 0) {
+			target.setSelection(!target.getSelection());
+		}
 		// a selection event, which is what a real click sends to the dialog's listeners
 		target.notifyListeners(SWT.Selection, new Event());
 		return result.put("dismissed", Boolean.TRUE).put("action", "pressed " + pressed) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
@@ -145,22 +123,19 @@ public final class DismissDialogTool implements IMcpTool {
 			// title, is the next thing worth closing. A proposal popup carries a Table,
 			// which tells it apart from a tooltip that has none.
 			for (Shell shell : display.getShells()) {
-				if (shell.isVisible() && !isModal(shell) && shell != mainShell(display) && hasTable(shell)) {
+				if (shell.isVisible() && !isModal(shell) && !Workbenches.windowShells().contains(shell) && hasTable(shell)) {
 					return shell;
 				}
 			}
 			return null;
 		}
 		for (Shell shell : display.getShells()) {
-			if (shell.getText() != null && shell.getText().contains(title)) {
+			if (shell.isVisible() && !Workbenches.windowShells().contains(shell) && shell.getText() != null
+					&& shell.getText().contains(title)) {
 				return shell;
 			}
 		}
 		return null;
-	}
-
-	private static Shell mainShell(Display display) {
-		return Workbenches.activeWindowShell();
 	}
 
 	private static boolean hasTable(Composite parent) {

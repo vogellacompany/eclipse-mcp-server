@@ -146,7 +146,7 @@ public final class AddGitRepositoryTool implements IMcpTool {
 				continue;
 			}
 			Path location = project.getLocation().toFile().toPath().toAbsolutePath().normalize();
-			if (!location.equals(root) && location.startsWith(root)) {
+			if (location.startsWith(root)) {
 				inside.add(project);
 			}
 		}

@@ -38,15 +38,15 @@ class DebugSessionToolsTest {
 	void framesWithoutASessionSayHowToGetOne() throws Exception {
 		McpToolResult result = TestFixture.call("eclipse_debug_get_frames", Map.of());
 
-		if (result.isError()) {
-			assertTrue(result.text().contains("session"), result.text());
-		}
+		assertTrue(result.isError(), result.text());
+		assertTrue(result.text().contains("session"), result.text());
 	}
 
 	@Test
 	void evaluationNeedsAnExpression() throws Exception {
 		McpToolResult result = TestFixture.call("eclipse_debug_evaluate", Map.of("sessionId", UNKNOWN));
 		assertTrue(result.isError());
+		assertTrue(result.text().contains("'expression'"), result.text());
 	}
 
 	@Test

@@ -177,7 +177,7 @@ public final class UiThread {
 			});
 			try {
 				return pending.get(timeoutSeconds, TimeUnit.SECONDS);
-			} catch (TimeoutException e) {
+			} catch (TimeoutException | InterruptedException e) {
 				pending.cancel(false);
 				throw e;
 			} catch (ExecutionException e) {
@@ -211,6 +211,7 @@ public final class UiThread {
 			pending.cancel(false);
 			return new Outcome(null, TIMED_OUT.formatted(Long.valueOf(timeoutSeconds)));
 		} catch (InterruptedException | ExecutionException e) {
+			pending.cancel(false);
 			return new Outcome(null, failure(e));
 		}
 	}

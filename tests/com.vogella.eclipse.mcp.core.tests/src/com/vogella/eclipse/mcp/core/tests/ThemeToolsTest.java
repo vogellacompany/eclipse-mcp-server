@@ -22,7 +22,7 @@ class ThemeToolsTest {
 
 	@Test
 	void setThemeNamesItsRequiredArgument() throws Exception {
-		assertNamesItsArgument("eclipse_set_theme", Map.of(), "'theme' is required");
+		assertError("eclipse_set_theme", Map.of(), "'theme' is required");
 	}
 
 	@Test
@@ -34,9 +34,9 @@ class ThemeToolsTest {
 
 	@Test
 	void registeringAThemeNamesItsRequiredArguments() throws Exception {
-		assertNamesItsArgument("eclipse_register_theme", Map.of(), "'id'");
-		assertNamesItsArgument("eclipse_register_theme", Map.of("id", "com.example.theme"), "'label'");
-		assertNamesItsArgument("eclipse_register_theme", Map.of("id", "com.example.theme", "label", "Example"),
+		assertError("eclipse_register_theme", Map.of(), "'id'");
+		assertError("eclipse_register_theme", Map.of("id", "com.example.theme"), "'label'");
+		assertError("eclipse_register_theme", Map.of("id", "com.example.theme", "label", "Example"),
 				"'css'");
 	}
 
@@ -54,14 +54,6 @@ class ThemeToolsTest {
 	}
 
 	private static void assertError(String tool, Map<String, Object> arguments, String expected) throws Exception {
-		McpToolResult result = TestFixture.call(tool, arguments);
-		assertTrue(result.isError(), "expected an error, got " + result.text());
-		assertTrue(result.text().contains(expected),
-				"expected a message about '%s', got %s".formatted(expected, result.text()));
-	}
-
-	private static void assertNamesItsArgument(String tool, Map<String, Object> arguments, String expected)
-			throws Exception {
 		McpToolResult result = TestFixture.call(tool, arguments);
 		assertTrue(result.isError(), "expected an error, got " + result.text());
 		assertTrue(result.text().contains(expected),

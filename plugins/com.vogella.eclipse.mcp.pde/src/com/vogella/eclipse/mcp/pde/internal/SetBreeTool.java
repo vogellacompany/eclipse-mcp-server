@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.ResourcesPlugin;
@@ -21,9 +20,6 @@ import org.eclipse.jdt.launching.JavaRuntime;
 import org.eclipse.jdt.launching.environments.IExecutionEnvironment;
 import org.eclipse.pde.core.project.IBundleProjectDescription;
 import org.eclipse.pde.core.project.IBundleProjectService;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
-import org.osgi.framework.ServiceReference;
 
 import com.vogella.eclipse.mcp.core.Globs;
 import com.vogella.eclipse.mcp.core.IMcpTool;
@@ -86,12 +82,7 @@ public final class SetBreeTool implements IMcpTool {
 			return McpToolResult.error("Unknown execution environment '%s'. Known ones are %s.".formatted(bree, //$NON-NLS-1$
 					String.join(", ", knownEnvironments()))); //$NON-NLS-1$
 		}
-		Pattern namePattern;
-		try {
-			namePattern = Globs.compile(args.getString("namePattern")); //$NON-NLS-1$
-		} catch (PatternSyntaxException e) {
-			return McpToolResult.error("Could not read 'namePattern' as a glob: " + e.getMessage()); //$NON-NLS-1$
-		}
+		Pattern namePattern = Globs.compile(args.getString("namePattern")); //$NON-NLS-1$
 		Set<String> named = names(arguments);
 		if (named.isEmpty() && namePattern == null) {
 			return McpToolResult
@@ -102,25 +93,9 @@ public final class SetBreeTool implements IMcpTool {
 		boolean dryRun = args.getBoolean("dryRun", true); //$NON-NLS-1$
 		int maxResults = args.getInt("maxResults", 200, 1, 2000); //$NON-NLS-1$
 
-		// the bundle is lazily activated, so its own context only exists once it started
-		BundleContext context = FrameworkUtil.getBundle(SetBreeTool.class).getBundleContext();
-		if (context == null) {
-			context = FrameworkUtil.getBundle(IBundleProjectService.class).getBundleContext();
-		}
-		if (context == null) {
-			return McpToolResult.error("Neither this bundle nor PDE is active, so the bundle project service cannot be reached."); //$NON-NLS-1$
-		}
-		ServiceReference<IBundleProjectService> reference = context.getServiceReference(IBundleProjectService.class);
-		if (reference == null) {
-			return McpToolResult.error("PDE does not offer its bundle project service in this IDE."); //$NON-NLS-1$
-		}
-		IBundleProjectService service = context.getService(reference);
-		try {
-			return run(service, environment, named, namePattern, currentBree, updateCompliance, dryRun, maxResults,
-					monitor);
-		} finally {
-			context.ungetService(reference);
-		}
+		return PdeServices.with(IBundleProjectService.class, "bundle project service", //$NON-NLS-1$
+				service -> run(service, environment, named, namePattern, currentBree, updateCompliance, dryRun,
+						maxResults, monitor));
 	}
 
 	private McpToolResult run(IBundleProjectService service, IExecutionEnvironment environment, Set<String> named,
@@ -130,8 +105,13 @@ public final class SetBreeTool implements IMcpTool {
 		int changed = 0;
 		int skipped = 0;
 		int considered = 0;
-		List<String> unknown = new ArrayList<>(named);
 
+		// checked before anything is written, so a typo cannot fail the call after other projects changed
+		for (String name : named) {
+			if (!ResourcesPlugin.getWorkspace().getRoot().getProject(name).exists()) {
+				return McpToolResult.error("No project named '%s' in this workspace.".formatted(name)); //$NON-NLS-1$
+			}
+		}
 		for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
 			if (monitor.isCanceled()) {
 				return McpToolResult.error("The request was cancelled."); //$NON-NLS-1$
@@ -142,8 +122,12 @@ public final class SetBreeTool implements IMcpTool {
 			if (namePattern != null && !namePattern.matcher(project.getName()).matches()) {
 				continue;
 			}
-			unknown.remove(project.getName());
-			Outcome outcome = act(service, project, environment, currentBree, updateCompliance, dryRun, monitor);
+			Outcome outcome;
+			try {
+				outcome = act(service, project, environment, currentBree, updateCompliance, dryRun, monitor);
+			} catch (McpToolException e) {
+				outcome = skip(new JsonObject().put("name", project.getName()), e.getMessage()); //$NON-NLS-1$
+			}
 			if (outcome == null) {
 				continue;
 			}
@@ -156,9 +140,6 @@ public final class SetBreeTool implements IMcpTool {
 			if (reported.size() < maxResults) {
 				reported.add(outcome.json());
 			}
-		}
-		if (!unknown.isEmpty()) {
-			return McpToolResult.error("No project named '%s' in this workspace.".formatted(unknown.get(0))); //$NON-NLS-1$
 		}
 		JsonObject result = new JsonObject().put("bree", environment.getId()) //$NON-NLS-1$
 				.put("dryRun", dryRun) //$NON-NLS-1$

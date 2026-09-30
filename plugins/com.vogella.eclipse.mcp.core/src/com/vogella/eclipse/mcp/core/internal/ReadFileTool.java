@@ -14,7 +14,6 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
-import com.vogella.eclipse.mcp.core.WorkspaceSync;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
 /**
@@ -58,16 +57,18 @@ public final class ReadFileTool implements IMcpTool {
 		if (path == null) {
 			return McpToolResult.error("The argument 'path' is required."); //$NON-NLS-1$
 		}
-		IFile file = ResourcesPlugin.getWorkspace().getRoot().getFile(IPath.fromPortableString(path));
-		if (!file.exists()) {
-			return McpToolResult.error("No file at the workspace path '%s'.".formatted(path)); //$NON-NLS-1$
-		}
-		if (args.getBoolean("refresh", true)) { //$NON-NLS-1$
+		IPath workspacePath = IPath.fromPortableString(path);
+		IFile file = workspacePath.segmentCount() < 2 ? null
+				: ResourcesPlugin.getWorkspace().getRoot().getFile(workspacePath);
+		if (file != null && args.getBoolean("refresh", true)) { //$NON-NLS-1$
 			try {
-				WorkspaceSync.refresh(file, monitor);
+				FileSupport.refresh(file, monitor);
 			} catch (CoreException e) {
 				// still readable, and stale content beats no content
 			}
+		}
+		if (file == null || !file.exists()) {
+			return McpToolResult.error("No file at the workspace path '%s'.".formatted(path)); //$NON-NLS-1$
 		}
 		int maxBytes = args.getInt("maxBytes", DEFAULT_MAX_BYTES, 1, 10_000_000); //$NON-NLS-1$
 		int offset = args.getInt("offset", 1, 1, Integer.MAX_VALUE); //$NON-NLS-1$
@@ -87,14 +88,14 @@ public final class ReadFileTool implements IMcpTool {
 							.formatted(Integer.valueOf(maxBytes)))
 					.toString());
 		}
-		if (isBinary(bytes)) {
+		if (FileSupport.isBinary(bytes)) {
 			return McpToolResult.of(result.put("read", Boolean.FALSE) //$NON-NLS-1$
 					.put("binary", Boolean.TRUE) //$NON-NLS-1$
 					.put("reason", "The file contains NUL bytes, so it is binary and is not returned as text. For a PNG, JPEG, GIF or WebP use eclipse_read_image.") //$NON-NLS-1$ //$NON-NLS-2$
 					.toString());
 		}
 
-		String charset = charset(file);
+		String charset = FileSupport.charset(file);
 		String content = new String(bytes, Charset.forName(charset));
 		String[] lines = content.split("\n", -1); //$NON-NLS-1$
 		int total = lines.length;
@@ -115,23 +116,5 @@ public final class ReadFileTool implements IMcpTool {
 				.put("truncated", Boolean.valueOf(to < total || from > 0)) //$NON-NLS-1$
 				.put("content", text.toString()) //$NON-NLS-1$
 				.toString());
-	}
-
-	/** The charset Eclipse has for the file, which is what its own editors use. */
-	private static String charset(IFile file) {
-		try {
-			return file.getCharset();
-		} catch (CoreException e) {
-			return "UTF-8"; //$NON-NLS-1$
-		}
-	}
-
-	private static boolean isBinary(byte[] bytes) {
-		for (int i = 0; i < Math.min(bytes.length, 8000); i++) {
-			if (bytes[i] == 0) {
-				return true;
-			}
-		}
-		return false;
 	}
 }

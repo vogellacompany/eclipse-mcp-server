@@ -1,10 +1,6 @@
 package com.vogella.eclipse.mcp.ui.internal;
 
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.runtime.Adapters;
@@ -19,7 +15,6 @@ import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.texteditor.ITextEditor;
 
 import com.vogella.eclipse.mcp.core.IMcpTool;
-import com.vogella.eclipse.mcp.core.McpToolException;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.json.JsonArray;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
@@ -50,31 +45,11 @@ public final class GetEditorContextTool implements IMcpTool {
 	}
 
 	@Override
-	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
+	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (!PlatformUI.isWorkbenchRunning()) {
 			return McpToolResult.of(noEditor().toString());
 		}
-		CompletableFuture<JsonObject> pending = new CompletableFuture<>();
-		// never syncExec from a request thread, a busy UI would block the HTTP worker
-		UiThread.exec(() -> {
-			try {
-				pending.complete(collect());
-			} catch (RuntimeException e) {
-				pending.completeExceptionally(e);
-			}
-		});
-		try {
-			return McpToolResult.of(pending.get(UI_TIMEOUT_SECONDS, TimeUnit.SECONDS).toString());
-		} catch (TimeoutException e) {
-			pending.cancel(false);
-			return McpToolResult.error("The Eclipse UI is busy, try again"); //$NON-NLS-1$
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			return McpToolResult.error("The request was interrupted."); //$NON-NLS-1$
-		} catch (ExecutionException e) {
-			throw new McpToolException("Could not read the editor context", //$NON-NLS-1$
-					e.getCause() == null ? e : e.getCause());
-		}
+		return UiThread.call(UI_TIMEOUT_SECONDS, GetEditorContextTool::collect);
 	}
 
 	private static JsonObject collect() {
@@ -103,10 +78,8 @@ public final class GetEditorContextTool implements IMcpTool {
 	private static JsonArray openEditors(IWorkbenchPage page) {
 		JsonArray editors = new JsonArray();
 		for (IEditorReference reference : page.getEditorReferences()) {
-			IEditorPart part = reference.getEditor(false);
-			IFile file = part == null ? null : Adapters.adapt(part.getEditorInput(), IFile.class);
 			editors.add(new JsonObject().put("title", reference.getTitle()) //$NON-NLS-1$
-					.put("path", file == null ? null : file.getFullPath().toString()) //$NON-NLS-1$
+					.put("path", EditorTools.path(reference)) //$NON-NLS-1$
 					.put("dirty", reference.isDirty())); //$NON-NLS-1$
 		}
 		return editors;

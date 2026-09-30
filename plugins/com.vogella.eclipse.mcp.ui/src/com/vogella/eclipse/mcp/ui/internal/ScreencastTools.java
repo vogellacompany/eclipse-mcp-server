@@ -154,8 +154,7 @@ public final class ScreencastTools {
 			String shellTitle = args.getString("shellTitle"); //$NON-NLS-1$
 			int interval = args.getInt("intervalMillis", 500, 100, 10000); //$NON-NLS-1$
 			int maxFrames = args.getInt("maxFrames", 120, 1, 1000); //$NON-NLS-1$
-			// 0 is no cap. It used to default to 800, which resampled every 1024 wide
-			// workbench shell by 0.78 and blurred all the text in every recording
+			// 0 is no cap, which keeps every frame pixel-exact
 			int maxWidth = args.getInt("maxWidth", 0, 0, 4000); //$NON-NLS-1$
 			String caption = args.getString("caption"); //$NON-NLS-1$
 			String captionPosition = args.getString("captionPosition"); //$NON-NLS-1$
@@ -209,14 +208,7 @@ public final class ScreencastTools {
 											.formatted(Integer.valueOf(gap)));
 				});
 			}
-			Path directory;
-			try {
-				String given = args.getString("directory"); //$NON-NLS-1$
-				directory = given != null ? Files.createDirectories(Path.of(given))
-						: Files.createTempDirectory("eclipse-screencast-"); //$NON-NLS-1$
-			} catch (IOException | RuntimeException e) {
-				return McpToolResult.error("Could not create the frame directory: " + e.getMessage()); //$NON-NLS-1$
-			}
+			String given = args.getString("directory"); //$NON-NLS-1$
 			return UiThread.call(UI_TIMEOUT_SECONDS, () -> {
 				Display display = Workbenches.display();
 				Control control;
@@ -252,6 +244,13 @@ public final class ScreencastTools {
 					throw new IllegalArgumentException("The region %s lies entirely outside the %dx%d target." //$NON-NLS-1$
 							.formatted(bounds != null ? bounds : partIds.toString(), Integer.valueOf(own.width),
 									Integer.valueOf(own.height)));
+				}
+				Path directory;
+				try {
+					directory = given != null ? Files.createDirectories(Path.of(given))
+							: Files.createTempDirectory("eclipse-screencast-"); //$NON-NLS-1$
+				} catch (IOException | RuntimeException e) {
+					throw new IllegalArgumentException("Could not create the frame directory: " + e.getMessage(), e); //$NON-NLS-1$
 				}
 				Screencast.Session session = Screencast.getInstance().start(display, control, composed, described,
 						interval, maxFrames, maxWidth, directory, crop, caption, captionPosition);
@@ -332,9 +331,9 @@ public final class ScreencastTools {
 			if (!args.getBoolean("gif", true)) { //$NON-NLS-1$
 				return McpToolResult.of(result.put("gifPath", null).toString()); //$NON-NLS-1$
 			}
-			Path output = args.getString("outputPath") != null ? Path.of(args.getString("outputPath")) //$NON-NLS-1$ //$NON-NLS-2$
-					: session.directory().resolve("screencast.gif"); //$NON-NLS-1$
 			try {
+				Path output = args.getString("outputPath") != null ? Path.of(args.getString("outputPath")) //$NON-NLS-1$ //$NON-NLS-2$
+						: session.directory().resolve("screencast.gif"); //$NON-NLS-1$
 				List<ImageData> frames = new ArrayList<>();
 				int[] delays = session.delaysMillis();
 				List<Integer> kept = new ArrayList<>();

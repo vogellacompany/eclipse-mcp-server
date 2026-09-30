@@ -1,5 +1,6 @@
 package com.vogella.eclipse.mcp.core.tests;
 
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -63,7 +64,7 @@ class GetLogEntriesToolTest {
 				Map.of("messageFilter", message, "includeStackTraces", Boolean.FALSE));
 		Map<String, Object> entry = onlyEntry(result);
 
-		assertEquals(null, entry.get("stackTrace"));
+		assertNull(entry.get("stackTrace"));
 		// the throwable itself stays, it is one line and worth having
 		assertTrue(String.valueOf(entry.get("exception")).contains("boom"));
 	}

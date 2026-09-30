@@ -33,12 +33,12 @@ import com.vogella.eclipse.mcp.core.FileLocations;
  */
 public final class CommandRegistry {
 
-	/** How many finished commands stay queryable. */
 	/** The number in chcp's output, whose surrounding words are localised. */
 	private static final Pattern CODE_PAGE = Pattern.compile("\\d+"); //$NON-NLS-1$
 
 	private static Charset outputCharset;
 
+	/** How many finished commands stay queryable. */
 	private static final int HISTORY = 20;
 
 	/** Output lines kept per command. A build log is long and the useful part is at the end. */
@@ -77,6 +77,7 @@ public final class CommandRegistry {
 		private final Deque<String> lines = new ArrayDeque<>();
 
 		private volatile Process process;
+		private volatile boolean cancelRequested;
 		private volatile String state = "running"; //$NON-NLS-1$
 		private volatile int exitCode = -1;
 		private volatile long endedAt;
@@ -153,6 +154,7 @@ public final class CommandRegistry {
 
 		/** Ends the process and everything it started, which a build tool needs. */
 		public void cancel() {
+			cancelRequested = true;
 			Process running = process;
 			if (running == null) {
 				return;
@@ -193,12 +195,21 @@ public final class CommandRegistry {
 			try {
 				Process process = builder.start();
 				execution.process = process;
+				if (execution.cancelRequested) {
+					// cancel arrived before there was a process to end
+					execution.cancel();
+				}
 				try (InputStream stream = process.getInputStream()) {
 					readLines(stream, outputCharset(), execution::append);
+				} catch (IOException e) {
+					// destroying the process closes its stream under the reader
+					if (!execution.cancelRequested) {
+						throw e;
+					}
 				}
 				int code = process.waitFor();
-				execution.finish(code == 0 ? "done" : "failed", code); //$NON-NLS-1$ //$NON-NLS-2$
-			} catch (IOException e) {
+				execution.finish(execution.cancelRequested ? "cancelled" : code == 0 ? "done" : "failed", code); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			} catch (IOException | RuntimeException e) {
 				execution.append("Could not run the command: " + e.getMessage()); //$NON-NLS-1$
 				execution.finish("failed", -1); //$NON-NLS-1$
 				ILog.get().warn("The MCP command %s failed to start".formatted(execution.id()), e); //$NON-NLS-1$

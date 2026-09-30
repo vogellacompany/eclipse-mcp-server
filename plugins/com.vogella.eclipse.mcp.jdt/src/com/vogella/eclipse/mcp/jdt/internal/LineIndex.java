@@ -1,15 +1,11 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IResource;
-import org.eclipse.core.runtime.CoreException;
 
 /**
  * Turns character offsets into line numbers, reading every file at most once.
@@ -34,10 +30,8 @@ final class LineIndex {
 	}
 
 	private static int[] readLineStarts(IFile file) {
-		String content;
-		try (InputStream in = file.getContents(true)) {
-			content = new String(in.readAllBytes(), Charset.forName(file.getCharset()));
-		} catch (CoreException | IOException | IllegalArgumentException e) {
+		String content = FileText.read(file);
+		if (content == null) {
 			return UNAVAILABLE;
 		}
 		int[] starts = new int[16];

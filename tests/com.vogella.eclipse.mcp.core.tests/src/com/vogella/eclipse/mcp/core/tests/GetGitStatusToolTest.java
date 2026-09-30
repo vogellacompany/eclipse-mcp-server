@@ -82,6 +82,21 @@ class GetGitStatusToolTest {
 	}
 
 	@Test
+	void stagedAndMissingChangesAreListedNotOnlyCounted() throws Exception {
+		Files.writeString(directory.resolve("added.txt"), "new\n");
+		try (Git git = Git.open(directory.toFile())) {
+			git.add().addFilepattern("added.txt").call();
+		}
+		Files.delete(directory.resolve("tracked.txt"));
+
+		Map<String, Object> status = statusOf(Map.of("directory", directory.toString()));
+
+		assertEquals(Boolean.FALSE, status.get("clean"), "got " + status);
+		assertEquals(List.of("added.txt"), pathsOf(status, "staged"), "got " + status);
+		assertEquals(List.of("tracked.txt"), pathsOf(status, "missing"), "got " + status);
+	}
+
+	@Test
 	void maxFilesCapsTheListingButNotTheCount() throws Exception {
 		// the description promises "the counts are always complete", and a caller that
 		// reads only the listed paths would otherwise believe a truncated answer is all

@@ -92,8 +92,6 @@ public final class DebugSessionRegistry {
 
 		private volatile long terminatedAt;
 
-		private volatile long lastSuspendAt;
-
 		private volatile IThread suspendedThread;
 
 		private volatile IBreakpoint suspendBreakpoint;
@@ -135,6 +133,10 @@ public final class DebugSessionRegistry {
 
 		void failed(String message) {
 			failure = message;
+			if (terminatedAt == 0) {
+				terminatedAt = System.currentTimeMillis();
+			}
+			cancelAutoTerminate();
 			releaseQuiet();
 			registered.countDown();
 		}
@@ -213,10 +215,6 @@ public final class DebugSessionRegistry {
 			return false;
 		}
 
-		long lastSuspendAt() {
-			return lastSuspendAt;
-		}
-
 		IThread suspendedThread() {
 			return suspendedThread;
 		}
@@ -243,12 +241,19 @@ public final class DebugSessionRegistry {
 
 		private final CountDownLatch latch = new CountDownLatch(1);
 
+		private final DebugSessionRegistry owner = DebugSessionRegistry.getInstance();
+
 		void fire() {
 			latch.countDown();
 		}
 
+		/** Waits for the event and forgets the signal either way, so an expired wait leaves nothing behind. */
 		public boolean await(long seconds) throws InterruptedException {
-			return latch.await(seconds, TimeUnit.SECONDS);
+			try {
+				return latch.await(seconds, TimeUnit.SECONDS);
+			} finally {
+				owner.forget(this);
+			}
 		}
 	}
 
@@ -306,12 +311,10 @@ public final class DebugSessionRegistry {
 
 	/** Whether anything, anywhere, is currently stopped at a breakpoint or a step. */
 	public boolean anythingSuspended() {
-		synchronized (this) {
-			prune();
-			for (Session session : sessions.values()) {
-				if (!session.terminated() && session.suspended()) {
-					return true;
-				}
+		// queried outside the lock: JDI calls can be slow and the event dispatcher needs the lock
+		for (Session session : all()) {
+			if (!session.terminated() && session.suspended()) {
+				return true;
 			}
 		}
 		return false;
@@ -337,6 +340,10 @@ public final class DebugSessionRegistry {
 		SuspendSignal signal = new SuspendSignal();
 		signals.add(new Entry(session, signal));
 		return signal;
+	}
+
+	private synchronized void forget(SuspendSignal signal) {
+		signals.removeIf(entry -> entry.signal() == signal);
 	}
 
 	/** Terminates an MCP-started session once its idle time is up; never another. */
@@ -432,6 +439,11 @@ public final class DebugSessionRegistry {
 	/** Terminates the MCP-started sessions still running, on bundle stop. */
 	public synchronized void shutdown() {
 		watchdog.shutdownNow();
+		if (listening && DebugPlugin.getDefault() != null) {
+			DebugPlugin.getDefault().getLaunchManager().removeLaunchListener(launchListener);
+			DebugPlugin.getDefault().removeDebugEventListener(eventListener);
+			listening = false;
+		}
 		for (Session session : sessions.values()) {
 			if (session.startedByMcp()) {
 				terminateQuietly(session);
@@ -463,6 +475,16 @@ public final class DebugSessionRegistry {
 		eventListener = DebugSessionRegistry::handleDebugEvents;
 		DebugPlugin.getDefault().addDebugEventListener(eventListener);
 		listening = true;
+	}
+
+	/** Attaches a launch the launch job got back, for one that produced no launch event. */
+	void attachLaunched(Session session, ILaunch launched) {
+		synchronized (this) {
+			if (session.expectedConfigName() != null) {
+				pending.remove(session.expectedConfigName(), session);
+			}
+		}
+		session.attach(launched);
 	}
 
 	/** Assigns an id to every debug launch in the IDE, ours or not. */
@@ -534,7 +556,6 @@ public final class DebugSessionRegistry {
 		}
 		// record and signal only: this runs on the debug event dispatcher thread, and
 		// anything slow here stalls event processing for every other debug target
-		session.lastSuspendAt = System.currentTimeMillis();
 		session.suspendedThread = thread;
 		session.suspendBreakpoint = event.getData() instanceof IBreakpoint breakpoint ? breakpoint : null;
 		getInstance().fire(session);

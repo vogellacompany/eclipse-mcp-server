@@ -124,7 +124,7 @@ class SetPreferenceToolTest {
 				Map.of("qualifier", OTHER_QUALIFIER, "key", KEY, "value", "written"));
 
 		assertEquals("written", result.get("effective"), "got " + result);
-		assertNull(result.get("previous"), "the key did not exist before");
+		assertNull(result.get("previousValue"), "the key did not exist before");
 		assertEquals("written", InstanceScope.INSTANCE.getNode(OTHER_QUALIFIER).get(KEY, null));
 	}
 

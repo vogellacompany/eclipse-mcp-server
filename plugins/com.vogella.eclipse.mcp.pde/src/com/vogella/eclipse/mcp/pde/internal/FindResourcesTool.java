@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
@@ -27,6 +28,7 @@ import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.pde.core.target.ITargetDefinition;
 import org.eclipse.pde.core.target.TargetBundle;
 import org.osgi.framework.Bundle;
@@ -53,7 +55,7 @@ public final class FindResourcesTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Finds files by NAME across three places that no other tool here covers together: the workspace, the bundles of the active target platform, and the bundles of the running installation. Changes nothing. eclipse_search_text searches the CONTENT of workspace files, so an icon inside a jarred bundle is invisible to it, and that is the gap this closes: 'does an SVG of this name already exist anywhere in Eclipse' is answerable only by looking inside jars. Each hit says which of the three it came from, the bundle and version that holds it, the path inside that bundle, and a location the bytes can be read from; copyTo extracts the hits to a directory, which is what makes a found icon usable rather than only known about. FOR AN INVENTORY, ask several names at once with namePatterns and cut the answer down with compact or countOnly, rather than one call per name; and use scope 'installation', because 'all' returns the same picture three or four times over when the repositories are also in the workspace. A NAME MATCH IS NOT A MATCH IN MEANING: an icon called remove upstream may be a red cross where yours is a minus, so look at what you found before replacing anything with it."; //$NON-NLS-1$
+		return "Finds files by NAME across three places that no other tool here covers together: the workspace, the bundles of the active target platform, and the bundles of the running installation. Changes nothing unless copyTo is given, which WRITES FILES into that directory and overwrites files of the same name. eclipse_search_text searches the CONTENT of workspace files, so an icon inside a jarred bundle is invisible to it, and that is the gap this closes: 'does an SVG of this name already exist anywhere in Eclipse' is answerable only by looking inside jars. Each hit says which of the three it came from, the bundle and version that holds it, the path inside that bundle, and a location the bytes can be read from; copyTo extracts the hits to a directory, which is what makes a found icon usable rather than only known about. FOR AN INVENTORY, ask several names at once with namePatterns and cut the answer down with compact or countOnly, rather than one call per name; and use scope 'installation', because 'all' returns the same picture three or four times over when the repositories are also in the workspace. A NAME MATCH IS NOT A MATCH IN MEANING: an icon called remove upstream may be a red cross where yours is a minus, so look at what you found before replacing anything with it."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -95,11 +97,14 @@ public final class FindResourcesTool implements IMcpTool {
 				args.getBoolean("includeDerived", false), args.getBoolean("dedupe", false), //$NON-NLS-1$ //$NON-NLS-2$
 				args.getBoolean("compact", false), args.getBoolean("countOnly", false), //$NON-NLS-1$ //$NON-NLS-2$
 				args.getInt("maxResults", 100, 1, 1000)); //$NON-NLS-1$
+		if (monitor != null) {
+			search.monitor = monitor;
+		}
 		if (args.getString("copyTo") != null) { //$NON-NLS-1$
-			search.copyTo = Path.of(args.getString("copyTo")); //$NON-NLS-1$
 			try {
+				search.copyTo = Path.of(args.getString("copyTo")); //$NON-NLS-1$
 				Files.createDirectories(search.copyTo);
-			} catch (IOException e) {
+			} catch (IOException | InvalidPathException e) {
 				return McpToolResult.error("Could not create '%s': %s".formatted(search.copyTo, e.getMessage())); //$NON-NLS-1$
 			}
 		}
@@ -147,10 +152,13 @@ public final class FindResourcesTool implements IMcpTool {
 	private static void searchWorkspace(Search search) {
 		try {
 			ResourcesPlugin.getWorkspace().getRoot().accept((IResourceProxy proxy) -> {
+				if (search.monitor.isCanceled()) {
+					return false;
+				}
 				if (proxy.getType() != IResource.FILE) {
 					// build output holds a copy of every icon, so a search over it
 					// reports each one twice for no gain
-					return search.derived || !isBuildOutput(proxy.requestFullPath().toString());
+					return search.derived || !isBuildOutput(proxy.requestFullPath().toString() + "/"); //$NON-NLS-1$
 				}
 				String glob = search.match(proxy.getName());
 				if (glob == null || (proxy.isDerived() && !search.derived)) {
@@ -190,13 +198,17 @@ public final class FindResourcesTool implements IMcpTool {
 			return;
 		}
 		for (Bundle bundle : self.getBundleContext().getBundles()) {
-			if (search.bundleFilter != null && !bundle.getSymbolicName().contains(search.bundleFilter)) {
+			if (search.monitor.isCanceled()) {
+				return;
+			}
+			if (search.bundleFilter != null
+					&& (bundle.getSymbolicName() == null || !bundle.getSymbolicName().contains(search.bundleFilter))) {
 				continue;
 			}
 			// findEntries reads the bundle whether it is a directory or a jar, which is
 			// the whole reason this reaches an icon a content search cannot see
 			var entries = bundle.findEntries("/", "*", true); //$NON-NLS-1$ //$NON-NLS-2$
-			while (entries != null && entries.hasMoreElements()) {
+			while (entries != null && entries.hasMoreElements() && !search.monitor.isCanceled()) {
 				URL url = entries.nextElement();
 				String path = url.getPath();
 				String fileName = path.substring(path.lastIndexOf('/') + 1);
@@ -224,6 +236,9 @@ public final class FindResourcesTool implements IMcpTool {
 					return McpToolResult.of("{}"); //$NON-NLS-1$
 				}
 				for (TargetBundle bundle : definition.getBundles()) {
+					if (search.monitor.isCanceled()) {
+						break;
+					}
 					// PDE returns the bundle info from API while the type itself is
 					// internal to frameworkadmin, so the compiler refuses to name it and
 					// the three values have to be asked for reflectively
@@ -253,7 +268,7 @@ public final class FindResourcesTool implements IMcpTool {
 	private static void searchJar(File jar, String symbolicName, String version, Search search) {
 		try (ZipFile zip = new ZipFile(jar)) {
 			var entries = zip.entries();
-			while (entries.hasMoreElements()) {
+			while (entries.hasMoreElements() && !search.monitor.isCanceled()) {
 				ZipEntry entry = entries.nextElement();
 				if (entry.isDirectory()) {
 					continue;
@@ -312,6 +327,7 @@ public final class FindResourcesTool implements IMcpTool {
 		final boolean countOnly;
 		private final int maxResults;
 		Path copyTo;
+		IProgressMonitor monitor = new NullProgressMonitor();
 		final JsonArray hits = new JsonArray();
 		final Map<String, int[]> counts = new LinkedHashMap<>();
 		private final Set<String> seen = new HashSet<>();

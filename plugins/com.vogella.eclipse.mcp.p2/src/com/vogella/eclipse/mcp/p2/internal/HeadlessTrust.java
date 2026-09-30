@@ -1,10 +1,14 @@
 package com.vogella.eclipse.mcp.p2.internal;
 
 import java.security.cert.Certificate;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.bouncycastle.openpgp.PGPPublicKey;
@@ -26,7 +30,7 @@ import org.eclipse.equinox.p2.core.UIServices;
  * configure a new one through eclipse_add_repository. Whatever was accepted
  * is reported, so a trusted install is auditable rather than silent.
  */
-final class HeadlessTrust extends UIServices {
+public final class HeadlessTrust extends UIServices {
 
 	private final boolean trustUnsigned;
 
@@ -39,21 +43,27 @@ final class HeadlessTrust extends UIServices {
 
 	private volatile boolean prompted;
 
-	HeadlessTrust(boolean trustUnsigned) {
+	/** The IDE's own services, per agent, while at least one operation has its trust installed. */
+	private static final Map<IProvisioningAgent, Object> ORIGINALS = new HashMap<>();
+
+	/** The installed trusts per agent, the last one registered. */
+	private static final Map<IProvisioningAgent, Deque<HeadlessTrust>> ACTIVE = new HashMap<>();
+
+	public HeadlessTrust(boolean trustUnsigned) {
 		this.trustUnsigned = trustUnsigned;
 	}
 
-	boolean prompted() {
+	public boolean prompted() {
 		return prompted;
 	}
 
 	/** What p2 asked about, whether it was then trusted or refused, capped. */
-	synchronized List<String> prompts() {
+	public synchronized List<String> prompts() {
 		return List.copyOf(prompts);
 	}
 
 	/** How many it asked about in total, which is usually more than the list holds. */
-	synchronized int promptCount() {
+	public synchronized int promptCount() {
 		return promptCount;
 	}
 
@@ -143,18 +153,41 @@ final class HeadlessTrust extends UIServices {
 		return getUsernamePassword(location);
 	}
 
-	/** Installs this in place of the IDE's dialogs, returning what was there before. */
-	static Object install(IProvisioningAgent agent, HeadlessTrust trust) {
-		Object previous = agent.getService(UIServices.SERVICE_NAME);
-		agent.registerService(UIServices.SERVICE_NAME, trust);
-		return previous;
+	/**
+	 * Installs {@code trust} in place of the IDE's dialogs.
+	 * <p>
+	 * Overlapping operations each install their own trust, and the IDE's dialogs
+	 * come back only when the last of them has ended, whatever order they end in.
+	 */
+	public static void install(IProvisioningAgent agent, HeadlessTrust trust) {
+		synchronized (ACTIVE) {
+			Deque<HeadlessTrust> active = ACTIVE.computeIfAbsent(agent, a -> new ArrayDeque<>());
+			if (active.isEmpty()) {
+				ORIGINALS.put(agent, agent.getService(UIServices.SERVICE_NAME));
+			}
+			active.add(trust);
+			agent.registerService(UIServices.SERVICE_NAME, trust);
+		}
 	}
 
-	/** Puts the IDE's own dialogs back, so interactive updates still prompt. */
-	static void restore(IProvisioningAgent agent, Object previous) {
-		agent.unregisterService(UIServices.SERVICE_NAME, agent.getService(UIServices.SERVICE_NAME));
-		if (previous != null) {
-			agent.registerService(UIServices.SERVICE_NAME, previous);
+	/** Ends {@code trust}, handing the prompts to a still running operation's trust or back to the IDE. */
+	public static void restore(IProvisioningAgent agent, HeadlessTrust trust) {
+		synchronized (ACTIVE) {
+			Deque<HeadlessTrust> active = ACTIVE.get(agent);
+			if (active == null || !active.remove(trust)) {
+				return;
+			}
+			Object current = agent.getService(UIServices.SERVICE_NAME);
+			if (current != null) {
+				agent.unregisterService(UIServices.SERVICE_NAME, current);
+			}
+			Object next = active.isEmpty() ? ORIGINALS.remove(agent) : active.peekLast();
+			if (active.isEmpty()) {
+				ACTIVE.remove(agent);
+			}
+			if (next != null) {
+				agent.registerService(UIServices.SERVICE_NAME, next);
+			}
 		}
 	}
 }

@@ -48,7 +48,7 @@ public final class WidgetTools {
 		Display display = Workbenches.display();
 		if (partId == null || partId.isBlank()) {
 			Shell shell = ScreenshotTools.Capture.findShell(display, shellTitle);
-			return shell == null ? null : shell;
+			return shell;
 		}
 		if (!Workbenches.ide()) {
 			Control control = Workbenches.e4Part(partId);
@@ -107,15 +107,6 @@ public final class WidgetTools {
 	}
 
 	/**
-	 * The items of a widget, which are not children and are therefore invisible to a
-	 * walk over controls.
-	 * <p>
-	 * A ToolItem is an Item and not a Control, so the buttons of a view toolbar have
-	 * no place in a control hierarchy at all, while the CSS engine models each of
-	 * them as its own stylable element. Enumerating them is what lets the inspector
-	 * address one, pseudo classes included.
-	 */
-	/**
 	 * The rows of a Table or Tree, which an r prefixed path segment addresses.
 	 * <p>
 	 * A TreeItem answers its own children, so a nested row is addressable as
@@ -131,6 +122,15 @@ public final class WidgetTools {
 		};
 	}
 
+	/**
+	 * The items of a widget, which are not children and are therefore invisible to a
+	 * walk over controls.
+	 * <p>
+	 * A ToolItem is an Item and not a Control, so the buttons of a view toolbar have
+	 * no place in a control hierarchy at all, while the CSS engine models each of
+	 * them as its own stylable element. Enumerating them is what lets the inspector
+	 * address one, pseudo classes included.
+	 */
 	private static Widget[] itemsOf(Widget widget) {
 		return switch (widget) {
 		case org.eclipse.swt.widgets.ToolBar bar -> bar.getItems();
@@ -138,7 +138,6 @@ public final class WidgetTools {
 		case org.eclipse.swt.widgets.TabFolder folder -> folder.getItems();
 		case org.eclipse.swt.widgets.CoolBar bar -> bar.getItems();
 		case org.eclipse.swt.widgets.ExpandBar bar -> bar.getItems();
-		case org.eclipse.swt.widgets.Menu menu -> menu.getItems();
 		// the columns rather than the rows: a table's rows are data, its columns are
 		// what a stylesheet talks about
 		case org.eclipse.swt.widgets.Table table -> table.getColumns();
@@ -199,7 +198,7 @@ public final class WidgetTools {
 		if (rectangle == null) {
 			return null;
 		}
-		return rectangle.x + "," + rectangle.y + " " + rectangle.width + "x" + rectangle.height; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		return Overlays.describe(rectangle);
 	}
 
 	/** The control a widget hangs under, which for an item is the widget that owns it. */
@@ -248,13 +247,8 @@ public final class WidgetTools {
 		if (inShell == null) {
 			return;
 		}
-		json.put("boundsInShell", describe(inShell)) //$NON-NLS-1$
-				.put("boundsInDisplay", describe(widget == shell ? own : display.map(parent, null, own))); //$NON-NLS-1$
-	}
-
-	/** Bounds in the {@code x,y widthxheight} form every tool here reports. */
-	private static String describe(Rectangle rectangle) {
-		return rectangle.x + "," + rectangle.y + " " + rectangle.width + "x" + rectangle.height; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		json.put("boundsInShell", Overlays.describe(inShell)) //$NON-NLS-1$
+				.put("boundsInDisplay", Overlays.describe(widget == shell ? own : display.map(parent, null, own))); //$NON-NLS-1$
 	}
 
 	/** Whether a widget is a control or an item, because the two are not interchangeable. */
@@ -287,7 +281,7 @@ public final class WidgetTools {
 					    "path":       {"type":"string","description":"Start from this widget rather than the root, e.g. '0/2'."},
 					    "filter":     {"type":"string","description":"Only report widgets whose simple class name contains this text, case insensitive, e.g. 'Tree' or 'ToolBar'. The walk still descends through everything."},
 				    "includeToolbar": {"type":"boolean","default":false,"description":"Start from the surrounding part stack rather than the part. A view's toolbar is built in the stack's CTabFolder, not in the part, so it is in no plain part tree at all; this is how to reach it."},
-					    "includeItems": {"type":"boolean","default":false,"description":"Also enumerate Items, which are not Controls and are therefore in no plain walk: ToolItems, CTabItems, TabItems, CoolItems, MenuItems and the columns of a Table or Tree. Their paths carry an i prefix, as in 2/i0, and that is the only way eclipse_inspect_widget can address one. Off by default because a Menu can be large."},
+					    "includeItems": {"type":"boolean","default":false,"description":"Also enumerate Items, which are not Controls and are therefore in no plain walk: ToolItems, CTabItems, TabItems, CoolItems, ExpandItems and the columns of a Table or Tree. Their paths carry an i prefix, as in 2/i0, and that is the only way eclipse_inspect_widget can address one. Off by default to keep the tree short."},
 				    "includeRows": {"type":"boolean","default":false,"description":"Also enumerate the rows of a Table or Tree, with an r prefixed path (0/r2) that eclipse_inspect_widget, eclipse_set_selection and eclipse_expand_row accept and, beside the row bounds, boundsInShell mapped to the shell's client area so a row can be highlighted on a shell=popup screenshot, and boundsInDisplay for a click. selected marks the row the widget has selected. ONLY THE ROWS THE TREE HAS CREATED ARE ROWS: the children of a collapsed node do not exist yet and have no path, so a view that comes up collapsed reports two or three entries and looks complete. Each tree row therefore carries childCount and expanded, and a collapsed node with children says so; open it with eclipse_expand_row and ask again. The children of an expanded node ARE reported, nested under its own path. Off by default because a big Table has many rows."},
 				    "maxDepth":   {"type":"integer","default":6,"minimum":1,"maximum":30,"description":"How far down the widget hierarchy to walk. A whole workbench window is dozens of levels deep, so the default stops well short of it."},
 					    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000}
@@ -300,7 +294,7 @@ public final class WidgetTools {
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			String partId = args.getString("part"); //$NON-NLS-1$
-			String shellTitle = args.getString("shell") != null ? args.getString("shell") : args.getString("shellTitle"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			String shellTitle = Shells.spec(args);
 			String path = args.getString("path"); //$NON-NLS-1$
 			String filter = args.getString("filter"); //$NON-NLS-1$
 			int maxDepth = args.getInt("maxDepth", DEFAULT_DEPTH, 1, 30); //$NON-NLS-1$
@@ -385,10 +379,7 @@ public final class WidgetTools {
 		 * Descends into the children of an EXPANDED tree node, so a nested row has a
 		 * path of its own. A collapsed node is reported with childCount and expanded
 		 * false rather than descended into, because SWT has not created its children
-		 * yet and asking for them would answer zero either way. That distinction is
-		 * the whole point: this used to report only top level rows, so a collapsed
-		 * Outline looked like a tree with two entries and a caller had no way to tell
-		 * a leaf from a node with everything it wanted underneath it.
+		 * yet, so a caller can tell a leaf from a node it has to open first.
 		 */
 		private static void addRows(Widget widget, String path, String needle, int maxResults, JsonArray into,
 				int[] total) {
@@ -420,7 +411,7 @@ public final class WidgetTools {
 				String path, Set<Widget> selected, int maxResults, JsonArray into, int[] total) {
 			Shell shell = table.getShell();
 			for (int i = 0; i < rows.length; i++) {
-				String rowPath = (path.isEmpty() ? "" : path) + "/r" + i; //$NON-NLS-1$ //$NON-NLS-2$
+				String rowPath = path + "/r" + i; //$NON-NLS-1$ //$NON-NLS-2$
 				org.eclipse.swt.graphics.Rectangle rowBounds = rowBounds(rows[i]);
 				if (rowBounds == null) {
 					continue;
@@ -437,9 +428,9 @@ public final class WidgetTools {
 							.put("text", rows[i].getText()) //$NON-NLS-1$
 							.put("selected", Boolean.valueOf(selected.contains(rows[i]))) //$NON-NLS-1$
 							.put("bounds", //$NON-NLS-1$
-									rowBounds.x + "," + rowBounds.y + " " + rowBounds.width + "x" + rowBounds.height) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-							.put("boundsInShell", describe(inShell)) //$NON-NLS-1$
-							.put("boundsInDisplay", describe(table.getDisplay().map(table, null, rowBounds))); //$NON-NLS-1$
+									Overlays.describe(rowBounds)) //$NON-NLS-1$
+							.put("boundsInShell", Overlays.describe(inShell)) //$NON-NLS-1$
+							.put("boundsInDisplay", Overlays.describe(table.getDisplay().map(table, null, rowBounds))); //$NON-NLS-1$
 					if (node) {
 						row.put("childCount", Integer.valueOf(children)) //$NON-NLS-1$
 								.put("expanded", Boolean.valueOf(expanded)); //$NON-NLS-1$
@@ -532,7 +523,7 @@ public final class WidgetTools {
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			String partId = args.getString("part"); //$NON-NLS-1$
-			String shellTitle = args.getString("shell") != null ? args.getString("shell") : args.getString("shellTitle"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			String shellTitle = Shells.spec(args);
 			String path = args.getString("path"); //$NON-NLS-1$
 			if (path == null || path.isBlank()) {
 				return McpToolResult.error(
@@ -565,7 +556,7 @@ public final class WidgetTools {
 			int before = row.getItemCount();
 			int opened = expand ? open(row, depth) : 0;
 			if (!expand) {
-				row.setExpanded(false);
+				collapse(row);
 			}
 			return new JsonObject().put("expanded", Boolean.valueOf(row.getExpanded())) //$NON-NLS-1$
 					.put("path", path) //$NON-NLS-1$
@@ -575,6 +566,15 @@ public final class WidgetTools {
 					.put("rowsOpened", Integer.valueOf(opened)) //$NON-NLS-1$
 					.put("note", //$NON-NLS-1$
 							"The child rows exist now and did not before, so their paths are new: ask eclipse_get_widget_tree with includeRows again to read them, then eclipse_set_selection to select one."); //$NON-NLS-1$
+		}
+
+		/** Collapses a row, telling the viewer as a click on the handle does. */
+		private static void collapse(org.eclipse.swt.widgets.TreeItem row) {
+			org.eclipse.swt.widgets.Event event = new org.eclipse.swt.widgets.Event();
+			event.item = row;
+			event.widget = row.getParent();
+			row.setExpanded(false);
+			row.getParent().notifyListeners(org.eclipse.swt.SWT.Collapse, event);
 		}
 
 		/**
@@ -596,7 +596,9 @@ public final class WidgetTools {
 			row.setExpanded(true);
 			int opened = 1;
 			for (org.eclipse.swt.widgets.TreeItem child : row.getItems()) {
-				opened += open(child, depth - 1);
+				if (child.getItemCount() > 0) {
+					opened += open(child, depth - 1);
+				}
 			}
 			return opened;
 		}
@@ -637,7 +639,7 @@ public final class WidgetTools {
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			String partId = args.getString("part"); //$NON-NLS-1$
-			String shellTitle = args.getString("shell") != null ? args.getString("shell") : args.getString("shellTitle"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			String shellTitle = Shells.spec(args);
 			String path = args.getString("path"); //$NON-NLS-1$
 			if (path == null) {
 				return McpToolResult.error("The argument 'path' is required; eclipse_get_widget_tree with includeItems reports the paths."); //$NON-NLS-1$
@@ -773,7 +775,7 @@ public final class WidgetTools {
 				return McpToolResult.error("Unknown button '%s'; use left, middle or right.".formatted(args.getString("button"))); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 			String partId = args.getString("part"); //$NON-NLS-1$
-			String shellSpec = args.getString("shell") != null ? args.getString("shell") : args.getString("shellTitle"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			String shellSpec = Shells.spec(args);
 			String path = args.getString("path"); //$NON-NLS-1$
 			boolean absolute = args.has("displayX") || args.has("displayY"); //$NON-NLS-1$ //$NON-NLS-2$
 			if (absolute) {
@@ -827,7 +829,7 @@ public final class WidgetTools {
 					}
 					point = new org.eclipse.swt.graphics.Point(onScreen.x + dx, onScreen.y + dy);
 					result.put("target", target.getClass().getSimpleName()) //$NON-NLS-1$
-							.put("boundsInDisplay", describe(onScreen)); //$NON-NLS-1$
+							.put("boundsInDisplay", Overlays.describe(onScreen)); //$NON-NLS-1$
 				}
 				org.eclipse.swt.graphics.Point previous = display.getCursorLocation();
 				result.put("point", point.x + "," + point.y) //$NON-NLS-1$ //$NON-NLS-2$
@@ -936,7 +938,7 @@ public final class WidgetTools {
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			String partId = args.getString("part"); //$NON-NLS-1$
-			String shellTitle = args.getString("shell") != null ? args.getString("shell") : args.getString("shellTitle"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			String shellTitle = Shells.spec(args);
 			String path = args.getString("path"); //$NON-NLS-1$
 			String pseudo = args.getString("pseudo"); //$NON-NLS-1$
 			List<String> properties = new ArrayList<>();
@@ -952,8 +954,6 @@ public final class WidgetTools {
 
 		private static JsonObject inspect(String partId, String shellTitle, String path, List<String> properties,
 				String pseudo, boolean includeToolbar) {
-			// items included unconditionally here: a path that names one is the caller
-			// saying it wants that item, and refusing it for want of a flag is noise
 			Control root = rootOf(partId, shellTitle, includeToolbar);
 			if (root == null) {
 				return new JsonObject().put("found", Boolean.FALSE) //$NON-NLS-1$

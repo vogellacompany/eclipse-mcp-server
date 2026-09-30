@@ -57,30 +57,26 @@ public final class ListBreakpointsTool implements IMcpTool {
 		ToolArguments args = ToolArguments.of(arguments);
 		String filter = args.getString("filter"); //$NON-NLS-1$
 		int maxResults = args.getInt("maxResults", 100, 1, 2000); //$NON-NLS-1$
-		List<IBreakpoint> matching = new ArrayList<>();
-		for (IBreakpoint breakpoint : breakpointManager().getBreakpoints()) {
-			if (!(breakpoint instanceof IJavaBreakpoint javaBp)) {
-				continue;
-			}
-			String typeName = typeName(javaBp);
-			if (filter == null || (typeName != null && typeName.toLowerCase(Locale.ROOT)
-					.contains(filter.toLowerCase(Locale.ROOT)))) {
+		String needle = filter == null ? null : filter.toLowerCase(Locale.ROOT);
+		List<IJavaBreakpoint> matching = new ArrayList<>();
+		for (IJavaBreakpoint breakpoint : javaBreakpoints()) {
+			String typeName = typeName(breakpoint);
+			if (needle == null || (typeName != null && typeName.toLowerCase(Locale.ROOT).contains(needle))) {
 				matching.add(breakpoint);
 			}
 		}
 		// by type then line, so truncation keeps a readable slice rather than a random one
-		matching.sort(Comparator.comparing(bp -> String.valueOf(typeName((IJavaBreakpoint) bp))));
+		matching.sort(Comparator.comparing((IJavaBreakpoint bp) -> String.valueOf(typeName(bp)))
+				.thenComparingInt(ListBreakpointsTool::lineOf));
 		JsonArray reported = new JsonArray();
-		int reportedCount = 0;
-		for (IBreakpoint breakpoint : matching) {
+		for (IJavaBreakpoint breakpoint : matching) {
 			if (reported.size() >= maxResults) {
 				break;
 			}
-			reported.add(toJson((IJavaBreakpoint) breakpoint));
-			reportedCount++;
+			reported.add(toJson(breakpoint));
 		}
 		JsonObject result = new JsonObject().put("total", Integer.valueOf(matching.size())) //$NON-NLS-1$
-				.put("truncated", Boolean.valueOf(reportedCount < matching.size())) //$NON-NLS-1$
+				.put("truncated", Boolean.valueOf(reported.size() < matching.size())) //$NON-NLS-1$
 				.put("breakpoints", reported); //$NON-NLS-1$
 		return McpToolResult.of(result.toString());
 	}
@@ -142,6 +138,14 @@ public final class ListBreakpointsTool implements IMcpTool {
 
 	private static String suspendPolicy(IJavaBreakpoint breakpoint) throws CoreException {
 		return breakpoint.getSuspendPolicy() == IJavaBreakpoint.SUSPEND_VM ? "vm" : "thread"; //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
+	private static int lineOf(IJavaBreakpoint breakpoint) {
+		try {
+			return breakpoint instanceof ILineBreakpoint line ? line.getLineNumber() : -1;
+		} catch (CoreException e) {
+			return -1;
+		}
 	}
 
 	private static String typeName(IJavaBreakpoint breakpoint) {

@@ -52,19 +52,20 @@ public final class DebugStatusTool implements IMcpTool {
 
 		DebugSessionRegistry registry = DebugSessionRegistry.getInstance();
 		boolean timedOut = false;
-		if (sessionId == null && waitSeconds > 0 && !registry.anythingSuspended()) {
-			DebugSessionRegistry.SuspendSignal signal = registry.onNextSuspend(null);
+		DebugSessionRegistry.Session named = sessionId == null ? null : registry.find(sessionId);
+		boolean alreadySuspended = named == null ? registry.anythingSuspended() : named.suspended();
+		if ((sessionId == null || named != null) && waitSeconds > 0 && !alreadySuspended) {
+			DebugSessionRegistry.SuspendSignal signal = registry.onNextSuspend(named);
 			try {
-				signal.await(CallBudget.boundedWaitSeconds(waitSeconds));
+				timedOut = !signal.await(CallBudget.boundedWaitSeconds(waitSeconds));
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
-			timedOut = !registry.anythingSuspended();
 		}
 
 		List<DebugSessionRegistry.Session> selected;
 		if (sessionId != null) {
-			DebugSessionRegistry.Session session = registry.find(sessionId);
+			DebugSessionRegistry.Session session = named;
 			if (session == null) {
 				return McpToolResult.error("No debug session '%s'. Known ids, oldest first: %s".formatted( //$NON-NLS-1$
 						sessionId, String.join(", ", registry.ids()))); //$NON-NLS-1$
@@ -80,16 +81,14 @@ public final class DebugStatusTool implements IMcpTool {
 			}
 		}
 		JsonArray sessions = new JsonArray();
-		int reported = 0;
 		for (DebugSessionRegistry.Session session : selected) {
-			if (reported >= maxResults) {
+			if (sessions.size() >= maxResults) {
 				break;
 			}
 			sessions.add(DebugSupport.sessionJson(session, maxResults));
-			reported++;
 		}
 		JsonObject json = new JsonObject().put("total", Integer.valueOf(selected.size())) //$NON-NLS-1$
-				.put("truncated", Boolean.valueOf(reported < selected.size())) //$NON-NLS-1$
+				.put("truncated", Boolean.valueOf(sessions.size() < selected.size())) //$NON-NLS-1$
 				.put("sessions", sessions); //$NON-NLS-1$
 		if (timedOut) {
 			json.put("timedOut", Boolean.TRUE).put("waitNote", //$NON-NLS-1$ //$NON-NLS-2$

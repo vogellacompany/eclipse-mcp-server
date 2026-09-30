@@ -7,7 +7,6 @@ import java.util.Map;
 
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.IProgressMonitor;
-import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.IPerspectiveDescriptor;
@@ -169,9 +168,10 @@ public final class WindowTools implements IMcpTool {
 		// captured before the close, because the shell is disposed by it
 		String title = target.getShell() == null ? null : target.getShell().getText();
 		boolean wasActive = target.equals(PlatformUI.getWorkbench().getActiveWorkbenchWindow());
-		target.close();
-		return new JsonObject().put("closed", Boolean.TRUE).put("title", title) //$NON-NLS-1$ //$NON-NLS-2$
+		boolean closed = target.close();
+		JsonObject result = new JsonObject().put("closed", Boolean.valueOf(closed)).put("title", title) //$NON-NLS-1$ //$NON-NLS-2$
 				.put("wasActive", Boolean.valueOf(wasActive)).put("windows", windows()); //$NON-NLS-1$ //$NON-NLS-2$
+		return closed ? result : result.put("reason", "The window refused to close, for example because a save prompt was cancelled."); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	private static JsonObject titles(IWorkbenchWindow window) {
@@ -198,12 +198,8 @@ public final class WindowTools implements IMcpTool {
 			Shell shell = window.getShell();
 			array.add(new JsonObject().put("title", shell == null ? null : shell.getText()) //$NON-NLS-1$
 					.put("active", Boolean.valueOf(window.equals(active))) //$NON-NLS-1$
-					.put("bounds", shell == null ? null : describe(shell.getBounds()))); //$NON-NLS-1$
+					.put("bounds", shell == null ? null : Overlays.describe(shell.getBounds()))); //$NON-NLS-1$
 		}
 		return array;
-	}
-
-	private static String describe(Rectangle bounds) {
-		return bounds.x + "," + bounds.y + " " + bounds.width + "x" + bounds.height; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 	}
 }

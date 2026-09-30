@@ -4,6 +4,7 @@ import java.util.Map;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -40,7 +41,7 @@ public final class WaitUntilQuietTool implements IMcpTool {
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		int timeoutSeconds = ToolArguments.of(arguments).getInt("timeoutSeconds", 120, 1, 900); //$NON-NLS-1$
-		int budget = Math.min(timeoutSeconds, callTimeoutSeconds() - 3);
+		int budget = CallBudget.boundedWaitSeconds(timeoutSeconds);
 		JsonObject before = WorkspaceJobs.snapshot();
 		long startedAt = System.currentTimeMillis();
 		WorkspaceJobs.Quiet quiet = WorkspaceJobs.waitUntilQuiet(startedAt + Math.max(1, budget) * 1000L);
@@ -62,18 +63,6 @@ public final class WaitUntilQuietTool implements IMcpTool {
 			json.put("jobsBefore", before).put("jobsAfter", WorkspaceJobs.snapshot()); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		return McpToolResult.of(json.put("note", note(timedOut, cut, waited.size(), budget)).toString()); //$NON-NLS-1$
-	}
-
-	/**
-	 * The server's own call timeout, read by name.
-	 * <p>
-	 * Reading the preference rather than the server's own class keeps this bundle
-	 * free of the bundle that depends on it; the answer is only used to stop waiting
-	 * before the call is abandoned.
-	 */
-	private static int callTimeoutSeconds() {
-		return org.eclipse.core.runtime.Platform.getPreferencesService()
-				.getInt("com.vogella.eclipse.mcp.server", "callTimeoutSeconds", 30, null); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	private static String note(boolean timedOut, boolean cut, int waitedFor, int timeoutSeconds) {

@@ -11,6 +11,8 @@ import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Shell;
 
+import com.vogella.eclipse.mcp.core.ToolArguments;
+
 /**
  * Picks a shell without depending on its title, which several shells share.
  * <p>
@@ -25,6 +27,12 @@ final class Shells {
 	private static final Pattern BOUNDS = Pattern.compile("(-?\\d+),(-?\\d+)\\s+(\\d+)x(\\d+)"); //$NON-NLS-1$
 
 	private Shells() {
+	}
+
+	/** The {@code shell} argument, else {@code shellTitle}, which is what {@link #select} resolves. */
+	static String spec(ToolArguments args) {
+		String shell = args.getString("shell"); //$NON-NLS-1$
+		return shell != null ? shell : args.getString("shellTitle"); //$NON-NLS-1$
 	}
 
 	/** The shells in the order {@code eclipse_list_ui_targets} reports them. */

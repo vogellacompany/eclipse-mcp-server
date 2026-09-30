@@ -13,6 +13,7 @@ import org.eclipse.equinox.p2.operations.ProvisioningSession;
 import org.eclipse.equinox.p2.operations.Update;
 import org.eclipse.equinox.p2.operations.UpdateOperation;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -71,11 +72,10 @@ public final class UpdateTool implements IMcpTool {
 		operation.setProvisioningContext(Provisioning.scope(agent, locations));
 		IStatus resolution = operation.resolveModal(monitor);
 		Update[] possible = operation.getPossibleUpdates();
-		boolean widened = false;
 		if (locations != null && (possible == null || possible.length == 0)) {
 			// the scope was the repositories holding the installed version, and an
 			// update lives somewhere else by definition
-			widened = Provisioning.widenToAllRepositories(agent, operation, monitor);
+			Provisioning.widenToAllRepositories(agent, operation, monitor);
 			possible = operation.getPossibleUpdates();
 		}
 		if (possible == null || possible.length == 0) {
@@ -138,10 +138,10 @@ public final class UpdateTool implements IMcpTool {
 		// installed after the dry run returns, so a dry run never swaps the IDE's dialogs
 		boolean trustUnsigned = args.getBoolean("trustUnsigned", true); //$NON-NLS-1$
 		HeadlessTrust trust = new HeadlessTrust(trustUnsigned);
-		Object previousTrust = HeadlessTrust.install(agent, trust);
+		HeadlessTrust.install(agent, trust);
 		ProvisioningJob job = operation.getProvisioningJob(null);
 		if (job == null) {
-			HeadlessTrust.restore(agent, previousTrust);
+			HeadlessTrust.restore(agent, trust);
 			return McpToolResult.error("p2 produced no provisioning job for the resolved update."); //$NON-NLS-1$
 		}
 		Provisioning.Operation handle = Provisioning.start("update", tracked -> { //$NON-NLS-1$
@@ -150,16 +150,19 @@ public final class UpdateTool implements IMcpTool {
 		});
 		Provisioning.onFinished(handle, () -> {
 			Provisioning.setTrust(handle, trust, trustUnsigned);
-			HeadlessTrust.restore(agent, previousTrust);
+			HeadlessTrust.restore(agent, trust);
 		});
+		String waitNote = null;
 		if (args.getBoolean("wait", false)) { //$NON-NLS-1$
+			int requested = args.getInt("timeoutSeconds", 25, 1, 3600); //$NON-NLS-1$
 			try {
-				handle.await(args.getInt("timeoutSeconds", 25, 1, 3600)); //$NON-NLS-1$
+				handle.await(CallBudget.boundedWaitSeconds(requested));
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
+			waitNote = CallBudget.clampNote(requested, "eclipse_get_provisioning_status"); //$NON-NLS-1$
 		}
-		return McpToolResult.of(handle.toJson().toString());
+		return McpToolResult.of(handle.toJson().put("waitNote", waitNote).toString()); //$NON-NLS-1$
 	}
 
 	/**

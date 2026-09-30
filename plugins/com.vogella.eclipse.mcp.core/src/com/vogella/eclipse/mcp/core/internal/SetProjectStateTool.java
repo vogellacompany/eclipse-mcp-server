@@ -67,7 +67,7 @@ public final class SetProjectStateTool implements IMcpTool {
 		} catch (PatternSyntaxException e) {
 			return McpToolResult.error("Could not read 'namePattern' as a glob: " + e.getMessage()); //$NON-NLS-1$
 		}
-		Set<String> named = names(arguments);
+		Set<String> named = ProjectSelection.names(arguments);
 		boolean platformMismatch = args.getBoolean("platformMismatch", false); //$NON-NLS-1$
 		if (named.isEmpty() && namePattern == null && !platformMismatch) {
 			return McpToolResult
@@ -93,7 +93,11 @@ public final class SetProjectStateTool implements IMcpTool {
 			}
 		}
 
-		Set<String> closingTogether = closingTogether(candidates, state, force);
+		List<IProject> selection = candidates;
+		if (platformMismatch) {
+			selection = candidates.stream().filter(project -> PlatformFilters.evaluate(project).mismatch()).toList();
+		}
+		Set<String> closingTogether = closingTogether(selection, state, force);
 		JsonArray reported = new JsonArray();
 		int changed = 0;
 		int skipped = 0;
@@ -170,24 +174,13 @@ public final class SetProjectStateTool implements IMcpTool {
 			shrank = false;
 			for (String name : List.copyOf(closing)) {
 				IProject project = ResourcesPlugin.getWorkspace().getRoot().getProject(name);
-				if (!blockingDependents(project, closing).isEmpty()) {
+				if (!ProjectSelection.blockingDependents(project, closing).isEmpty()) {
 					closing.remove(name);
 					shrank = true;
 				}
 			}
 		}
 		return closing;
-	}
-
-	/** The open dependents that will still be open after this batch. */
-	private static List<String> blockingDependents(IProject project, Set<String> closing) {
-		List<String> blocking = new ArrayList<>();
-		for (IProject referencing : project.getReferencingProjects()) {
-			if (!closing.contains(referencing.getName())) {
-				blocking.add(referencing.getName());
-			}
-		}
-		return blocking;
 	}
 
 	/** Returns {@code null} when the project is not part of the selection at all. */
@@ -241,18 +234,5 @@ public final class SetProjectStateTool implements IMcpTool {
 			return skip(entry, previous, "Eclipse refused: " + e.getMessage()); //$NON-NLS-1$
 		}
 		return done(entry, project.isOpen() ? "open" : "closed"); //$NON-NLS-1$ //$NON-NLS-2$
-	}
-
-	private static Set<String> names(Map<String, Object> arguments) {
-		Set<String> names = new LinkedHashSet<>();
-		if (arguments != null && arguments.get("projects") instanceof List<?> list) { //$NON-NLS-1$
-			for (Object entry : list) {
-				String name = String.valueOf(entry).trim();
-				if (!name.isEmpty()) {
-					names.add(name);
-				}
-			}
-		}
-		return names;
 	}
 }

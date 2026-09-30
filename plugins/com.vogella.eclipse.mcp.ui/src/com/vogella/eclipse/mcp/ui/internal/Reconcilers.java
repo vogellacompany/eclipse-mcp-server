@@ -42,9 +42,11 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
  * seconds at a time with large Java editors open. A probe that still runs past
  * its budget stops and counts the editors it did not reach as unreadable.
  */
-final class Reconcilers {
+public final class Reconcilers {
 
 	private static final String ABSTRACT_RECONCILER = "org.eclipse.jface.text.reconciler.AbstractReconciler"; //$NON-NLS-1$
+
+	private static final String SOURCE_VIEWER = "org.eclipse.jface.text.source.SourceViewer"; //$NON-NLS-1$
 
 	private static final String JAVA_RECONCILER = "org.eclipse.jdt.internal.ui.javaeditor.JavaReconciler"; //$NON-NLS-1$
 
@@ -62,7 +64,7 @@ final class Reconcilers {
 	}
 
 	/** What one editor's reconciler was found to be doing. */
-	private enum Verdict {
+	public enum Verdict {
 		/** No reconciler, so not a text editor this applies to. */
 		NONE, IDLE, BUSY,
 		/** An internal that moved, or a read that failed: deliberately not idle. */
@@ -145,12 +147,15 @@ final class Reconcilers {
 		return (System.nanoTime() - startedNanos) / 1_000_000L;
 	}
 
-	private static Verdict verdict(Object editor) {
+	/** What one editor's reconciler is doing, {@code UNREADABLE} when an internal this reads has moved. */
+	public static Verdict verdict(Object editor) {
 		try {
-			Object viewer = invoke(editor, "getSourceViewer"); //$NON-NLS-1$
-			if (viewer == null) {
+			Method getViewer = method(editor, "getSourceViewer"); //$NON-NLS-1$
+			Object viewer = getViewer == null ? null : getViewer.invoke(editor);
+			if (viewer == null || !isAssignable(viewer, SOURCE_VIEWER)) {
 				return Verdict.NONE;
 			}
+			// past this point a missing member means the internals moved, not "no reconciler"
 			Object reconciler = field(viewer, "fReconciler"); //$NON-NLS-1$
 			if (reconciler == null || !isAssignable(reconciler, ABSTRACT_RECONCILER)) {
 				return Verdict.NONE;
@@ -195,14 +200,21 @@ final class Reconcilers {
 
 	/** A field anywhere up the hierarchy, since every one of these is declared privately. */
 	private static Object field(Object owner, String name) throws ReflectiveOperationException {
-		Field field = FIELDS.computeIfAbsent(new Key(owner.getClass(), name), Reconcilers::findField).orElse(null);
-		return field == null ? null : field.get(owner);
+		Field field = FIELDS.computeIfAbsent(new Key(owner.getClass(), name), Reconcilers::findField)
+				.orElseThrow(() -> new NoSuchFieldException(name));
+		return field.get(owner);
 	}
 
 	private static Object invoke(Object owner, String name) throws ReflectiveOperationException {
-		Method method = METHODS.computeIfAbsent(new Key(owner.getClass(), name), Reconcilers::findMethod)
-				.orElse(null);
-		return method == null ? null : method.invoke(owner);
+		Method method = method(owner, name);
+		if (method == null) {
+			throw new NoSuchMethodException(name);
+		}
+		return method.invoke(owner);
+	}
+
+	private static Method method(Object owner, String name) {
+		return METHODS.computeIfAbsent(new Key(owner.getClass(), name), Reconcilers::findMethod).orElse(null);
 	}
 
 	private static Optional<Field> findField(Key key) {

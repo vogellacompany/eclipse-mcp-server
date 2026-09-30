@@ -8,7 +8,6 @@ import java.util.Map;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
-import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.equinox.p2.core.IProvisioningAgent;
 import org.eclipse.equinox.p2.metadata.IInstallableUnit;
 import org.eclipse.equinox.p2.operations.InstallOperation;
@@ -19,6 +18,7 @@ import org.eclipse.equinox.p2.query.QueryUtil;
 import org.eclipse.equinox.p2.repository.metadata.IMetadataRepository;
 import org.eclipse.equinox.p2.repository.metadata.IMetadataRepositoryManager;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -80,7 +80,7 @@ public final class InstallTool implements IMcpTool {
 		if (repository != null) {
 			URI uri;
 			try {
-				uri = new URI(repository);
+				uri = new URI(repository.strip());
 			} catch (URISyntaxException e) {
 				return McpToolResult.error("'%s' is not a URL.".formatted(repository)); //$NON-NLS-1$
 			}
@@ -103,12 +103,12 @@ public final class InstallTool implements IMcpTool {
 		List<IInstallableUnit> found = new ArrayList<>();
 		for (URI uri : search) {
 			try {
-				IMetadataRepository metadata = manager.loadRepository(uri, new NullProgressMonitor());
+				IMetadataRepository metadata = manager.loadRepository(uri, monitor);
 				IQueryResult<IInstallableUnit> result = metadata
 						.query(version == null ? QueryUtil.createLatestQuery(QueryUtil.createIUQuery(unitId))
 								: QueryUtil.createIUQuery(unitId,
 										org.eclipse.equinox.p2.metadata.Version.create(version)),
-								new NullProgressMonitor());
+								monitor);
 				result.forEach(found::add);
 			} catch (org.eclipse.equinox.p2.core.ProvisionException e) {
 				// an unreachable repository is not a reason to fail the whole search
@@ -134,10 +134,10 @@ public final class InstallTool implements IMcpTool {
 		}
 		boolean trustUnsigned = args.getBoolean("trustUnsigned", true); //$NON-NLS-1$
 		HeadlessTrust trust = new HeadlessTrust(trustUnsigned);
-		Object previousTrust = HeadlessTrust.install(agent, trust);
+		HeadlessTrust.install(agent, trust);
 		ProvisioningJob job = operation.getProvisioningJob(null);
 		if (job == null) {
-			HeadlessTrust.restore(agent, previousTrust);
+			HeadlessTrust.restore(agent, trust);
 			return McpToolResult.error("p2 produced no provisioning job for the resolved install."); //$NON-NLS-1$
 		}
 		Provisioning.Operation handle = Provisioning.start("install", tracked -> { //$NON-NLS-1$
@@ -146,15 +146,18 @@ public final class InstallTool implements IMcpTool {
 		});
 		Provisioning.onFinished(handle, () -> {
 			Provisioning.setTrust(handle, trust, trustUnsigned);
-			HeadlessTrust.restore(agent, previousTrust);
+			HeadlessTrust.restore(agent, trust);
 		});
+		String waitNote = null;
 		if (args.getBoolean("wait", false)) { //$NON-NLS-1$
+			int requested = args.getInt("timeoutSeconds", 25, 1, 3600); //$NON-NLS-1$
 			try {
-				handle.await(args.getInt("timeoutSeconds", 25, 1, 3600)); //$NON-NLS-1$
+				handle.await(CallBudget.boundedWaitSeconds(requested));
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
+			waitNote = CallBudget.clampNote(requested, "eclipse_get_provisioning_status"); //$NON-NLS-1$
 		}
-		return McpToolResult.of(handle.toJson().toString());
+		return McpToolResult.of(handle.toJson().put("waitNote", waitNote).toString()); //$NON-NLS-1$
 	}
 }

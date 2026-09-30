@@ -219,20 +219,36 @@ class ListDeclarationsToolTest {
 	@Test
 	void theApiTierSaysWhatAWorkspaceSearchCanProve() throws Exception {
 		fixtureProject();
+		Map<String, Object> all = TestFixture.callAndParse(TOOL, Map.of("project", PROJECT, "maxResults", 5000));
 
 		// exported plainly: consumers may exist anywhere, so no search settles it
-		assertEquals("public-api", declaration("published.Api").get("apiTier"));
-		assertEquals(Boolean.FALSE, declaration("published.Api").get("searchIsAuthoritative"));
+		assertEquals("public-api", find(all, "published.Api").get("apiTier"));
+		assertEquals(Boolean.FALSE, find(all, "published.Api").get("searchIsAuthoritative"));
 
 		// not exported at all: there is nowhere else a reference could be
-		Map<String, Object> hidden = declaration("hidden.NotExported");
+		Map<String, Object> hidden = find(all, "hidden.NotExported");
 		assertEquals("not-exported", hidden.get("apiTier"));
 		assertEquals(Boolean.TRUE, hidden.get("searchIsAuthoritative"));
 
 		// x-internal declares that no bundle should use the package at all, which is a
 		// stronger statement than an enumerable x-friends list, so it is authoritative too
-		assertEquals("internal-api", declaration("registry.Unused").get("apiTier"));
-		assertEquals(Boolean.TRUE, declaration("registry.Unused").get("searchIsAuthoritative"));
+		assertEquals("internal-api", find(all, "registry.Unused").get("apiTier"));
+		assertEquals(Boolean.TRUE, find(all, "registry.Unused").get("searchIsAuthoritative"));
+	}
+
+	@Test
+	void everyMemberCarriesTheApiTierOfItsPackage() throws Exception {
+		fixtureProject();
+		Map<String, Object> result = TestFixture.callAndParse(TOOL,
+				Map.of("project", PROJECT, "kinds", List.of("types", "methods", "fields"), "maxResults", 5000));
+
+		List<?> all = declarations(result);
+		assertTrue(all.size() > 2, "the fixture should declare several members, got " + all.size());
+		for (Object entry : all) {
+			Map<?, ?> map = (Map<?, ?>) entry;
+			assertNotNull(map.get("apiTier"), "no apiTier on " + map);
+			assertNotNull(map.get("searchIsAuthoritative"), "no searchIsAuthoritative on " + map);
+		}
 	}
 
 	@Test

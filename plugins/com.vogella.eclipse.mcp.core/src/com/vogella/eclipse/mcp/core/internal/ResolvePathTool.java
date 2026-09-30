@@ -147,8 +147,8 @@ public final class ResolvePathTool implements IMcpTool {
 			IPath inside = path.removeFirstSegments(location.segmentCount());
 			best = inside.isEmpty() ? project : project.findMember(inside);
 			if (best == null) {
-				// on disk but not in the resource tree, which a refresh would fix
-				best = project;
+				// on disk but not in the resource tree yet: a handle, so the location stays the requested one
+				best = project.getFile(inside);
 			}
 		}
 		return best;

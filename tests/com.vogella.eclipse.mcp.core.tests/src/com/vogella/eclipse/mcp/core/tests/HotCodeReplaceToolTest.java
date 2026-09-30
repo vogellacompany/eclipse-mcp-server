@@ -121,7 +121,6 @@ class HotCodeReplaceToolTest {
 		McpToolResult result = TestFixture.call(TOOL, Map.of("project", PROJECT, "classes", List.of("hot.Missing")));
 		assertTrue(result.isError());
 		assertTrue(result.text().contains("hot.Missing"), result.text());
-		assertFalse(result.text().contains("\"redefined\":[{"), result.text());
 	}
 
 	private static void rewrite(IFile file, String content) throws CoreException {

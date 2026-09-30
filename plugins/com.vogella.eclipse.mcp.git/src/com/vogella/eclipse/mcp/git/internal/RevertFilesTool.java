@@ -72,25 +72,27 @@ public final class RevertFilesTool implements IMcpTool {
 			return McpToolResult.error("Give 'paths' as a non-empty array of files to revert."); //$NON-NLS-1$
 		}
 		boolean dryRun = args.getBoolean("dryRun", true); //$NON-NLS-1$
-		try {
-			return revert(paths, args.getString("project"), args.getString("directory"), dryRun); //$NON-NLS-1$ //$NON-NLS-2$
-		} catch (IOException | CoreException | RuntimeException e) {
-			return McpToolResult.error("Could not revert: " + e); //$NON-NLS-1$
-		}
+		return revert(paths, args.getString("project"), args.getString("directory"), dryRun); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
-	private static McpToolResult revert(List<String> paths, String project, String directory, boolean dryRun)
-			throws IOException, CoreException {
+	private static McpToolResult revert(List<String> paths, String project, String directory, boolean dryRun) {
 		JsonArray files = new JsonArray();
 		int wouldChange = 0;
 		int reverted = 0;
 		int refused = 0;
 		for (String requested : paths) {
-			JsonObject entry = one(requested, project, directory, dryRun);
+			JsonObject entry;
+			try {
+				entry = one(requested, project, directory, dryRun);
+			} catch (IOException | CoreException | RuntimeException e) {
+				// one failing path must not hide what earlier paths already changed
+				entry = new JsonObject().put("path", requested).put("state", "failed") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+						.put("reason", String.valueOf(e)); //$NON-NLS-1$
+			}
 			files.add(entry);
 			String state = String.valueOf(entry.remove("state")); //$NON-NLS-1$
 			entry.put("state", state); //$NON-NLS-1$
-			if ("refused".equals(state)) { //$NON-NLS-1$
+			if ("refused".equals(state) || "failed".equals(state)) { //$NON-NLS-1$ //$NON-NLS-2$
 				refused++;
 			} else if ("reverted".equals(state)) { //$NON-NLS-1$
 				reverted++;
@@ -118,6 +120,9 @@ public final class RevertFilesTool implements IMcpTool {
 		File onDisk = workspaceFile != null && workspaceFile.getLocation() != null
 				? workspaceFile.getLocation().toFile()
 				: new File(requested);
+		if (workspaceFile == null) {
+			workspaceFile = fileAt(onDisk);
+		}
 		if (onDisk.isDirectory()) {
 			return entry.put("state", "refused") //$NON-NLS-1$ //$NON-NLS-2$
 					.put("reason", "That is a directory. Name the files to revert."); //$NON-NLS-1$ //$NON-NLS-2$
@@ -225,6 +230,17 @@ public final class RevertFilesTool implements IMcpTool {
 			return null;
 		}
 		return tree.relativize(target).toString().replace(File.separatorChar, '/');
+	}
+
+	/** The workspace file that lives at this filesystem location, or {@code null}. */
+	private static IFile fileAt(File file) {
+		IFile[] found = ResourcesPlugin.getWorkspace().getRoot().findFilesForLocationURI(file.toURI());
+		for (IFile candidate : found) {
+			if (candidate.getProject().isAccessible()) {
+				return candidate;
+			}
+		}
+		return null;
 	}
 
 	/** The workspace file for a workspace path, or {@code null} when it is not one. */

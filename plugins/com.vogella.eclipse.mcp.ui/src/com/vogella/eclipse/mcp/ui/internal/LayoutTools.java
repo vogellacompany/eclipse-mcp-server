@@ -100,16 +100,12 @@ public final class LayoutTools {
 			Rectangle after = shell.getBounds();
 			return new JsonObject().put("changed", Boolean.TRUE) //$NON-NLS-1$
 					.put("title", shell.getText()) //$NON-NLS-1$
-					.put("previousBounds", describe(before)) //$NON-NLS-1$
+					.put("previousBounds", Overlays.describe(before)) //$NON-NLS-1$
 					.put("previousMaximized", Boolean.valueOf(wasMaximized)) //$NON-NLS-1$
-					.put("bounds", describe(after)) //$NON-NLS-1$
+					.put("bounds", Overlays.describe(after)) //$NON-NLS-1$
 					.put("maximized", Boolean.valueOf(shell.getMaximized())) //$NON-NLS-1$
 					.put("note", //$NON-NLS-1$
 							"Pass previousBounds and previousMaximized back to put the window as it was."); //$NON-NLS-1$
-		}
-
-		private static String describe(Rectangle bounds) {
-			return bounds.x + "," + bounds.y + " " + bounds.width + "x" + bounds.height; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		}
 
 		private static Integer optional(Map<String, Object> arguments, String name) {

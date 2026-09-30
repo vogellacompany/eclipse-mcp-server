@@ -6,7 +6,6 @@ import org.eclipse.core.runtime.IProgressMonitor;
 
 import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.IMcpTool;
-import com.vogella.eclipse.mcp.core.McpToolException;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
@@ -45,7 +44,7 @@ public final class GetCommandOutputTool implements IMcpTool {
 	}
 
 	@Override
-	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
+	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String id = args.getString("commandId"); //$NON-NLS-1$
 		CommandRegistry registry = CommandRegistry.getInstance();
@@ -62,14 +61,17 @@ public final class GetCommandOutputTool implements IMcpTool {
 			execution.cancel();
 		}
 		int requested = args.getInt("timeoutSeconds", 25, 1, 3600); //$NON-NLS-1$
-		if (args.getBoolean("wait", false)) { //$NON-NLS-1$
+		boolean wait = args.getBoolean("wait", false); //$NON-NLS-1$
+		if (wait) {
 			execution.await(CallBudget.boundedWaitSeconds(requested) * 1000L);
 		}
 		int tail = args.getInt("tailLines", DEFAULT_TAIL, 1, 2000); //$NON-NLS-1$
 		JsonObject json = RunCommandTool.CommandOutput.describe(execution, tail);
-		if (execution.isRunning()) {
-			json.put("note", CallBudget.clampNote(requested, //$NON-NLS-1$
-					"this tool again with the same commandId")); //$NON-NLS-1$
+		if (wait && execution.isRunning()) {
+			String clamped = CallBudget.clampNote(requested, "this tool again with the same commandId"); //$NON-NLS-1$
+			if (clamped != null) {
+				json.put("note", clamped); //$NON-NLS-1$
+			}
 		}
 		return McpToolResult.of(json.toString());
 	}

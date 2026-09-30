@@ -116,4 +116,12 @@ class SamplingAggregateTest {
 		}
 		assertEquals("T.deeper", top.get(0).get("frame"), "got " + top);
 	}
+
+	@Test
+	void poolThreadsAndRunningJobsShareOneBranch() {
+		assertEquals("Worker-N", SamplingRegistry.threadGroup("Worker-19: Indexing"));
+		assertEquals("pool-N", SamplingRegistry.threadGroup("pool-7"));
+		assertEquals("main", SamplingRegistry.threadGroup("main"));
+		assertEquals("unnamed", SamplingRegistry.threadGroup(null));
+	}
 }

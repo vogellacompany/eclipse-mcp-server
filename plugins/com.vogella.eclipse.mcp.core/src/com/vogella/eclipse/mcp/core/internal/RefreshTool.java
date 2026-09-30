@@ -9,9 +9,11 @@ import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.IProgressMonitor;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
+import com.vogella.eclipse.mcp.core.json.JsonObject;
 
 /**
  * Reads changes made outside the IDE into the workspace, without building.
@@ -65,12 +67,17 @@ public final class RefreshTool implements IMcpTool {
 				.start(new BuildRegistry.Request(BuildRegistry.REFRESH, projects, false, true, false));
 		if (wait) {
 			try {
-				build.await(timeoutSeconds, TimeUnit.SECONDS);
+				build.await(CallBudget.boundedWaitSeconds(timeoutSeconds), TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
 		}
-		return McpToolResult.of(GetBuildStatusTool.toJson(build, false).toString());
+		JsonObject json = GetBuildStatusTool.toJson(build, false);
+		String clamped = wait ? CallBudget.clampNote(timeoutSeconds, "eclipse_get_build_status with this buildId") : null; //$NON-NLS-1$
+		if (clamped != null && "running".equals(build.state())) { //$NON-NLS-1$
+			json.put("waitNote", clamped); //$NON-NLS-1$
+		}
+		return McpToolResult.of(json.toString());
 	}
 
 	private static List<String> projectNames(Map<String, Object> arguments, ToolArguments args) {
@@ -79,12 +86,9 @@ public final class RefreshTool implements IMcpTool {
 		if (single != null) {
 			names.add(single);
 		}
-		if (arguments != null && arguments.get("projects") instanceof List<?> list) { //$NON-NLS-1$
-			for (Object entry : list) {
-				String name = String.valueOf(entry).trim();
-				if (!name.isEmpty() && !names.contains(name)) {
-					names.add(name);
-				}
+		for (String name : ProjectSelection.names(arguments)) {
+			if (!names.contains(name)) {
+				names.add(name);
 			}
 		}
 		return names;

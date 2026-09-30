@@ -84,13 +84,12 @@ public final class ContextMenuTool implements IMcpTool {
 			}
 			show(menu, shown);
 			JsonArray items = new JsonArray();
-			// counted at every depth, like total, because the top level array holds
-			// only the top level and comparing the two called an untruncated answer
-			// truncated whenever a submenu was walked
+			// counted at every depth, because the top level array holds only the top
+			// level; past the cap the submenus of skipped items are not opened, so total is
+			// then a lower bound
 			int[] total = { 0 };
 			int[] emitted = { 0 };
 			Menu start = menu;
-			String reported = path;
 			if (path != null && !path.isBlank()) {
 				start = submenu(menu, path, shown);
 				if (start == null) {
@@ -104,7 +103,7 @@ public final class ContextMenuTool implements IMcpTool {
 			walk(start, 0, maxDepth, maxResults, items, total, emitted, shown);
 			return new JsonObject().put("part", part.getSite().getId()) //$NON-NLS-1$
 					.put("found", Boolean.TRUE) //$NON-NLS-1$
-					.put("path", reported) //$NON-NLS-1$
+					.put("path", path) //$NON-NLS-1$
 					.put("total", Integer.valueOf(total[0])) //$NON-NLS-1$
 					.put("reported", Integer.valueOf(emitted[0])) //$NON-NLS-1$
 					.put("truncated", Boolean.valueOf(total[0] > emitted[0])) //$NON-NLS-1$

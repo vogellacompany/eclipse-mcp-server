@@ -39,10 +39,6 @@ public final class UiDispatch {
 		}
 	}
 
-	public static boolean isRegistered() {
-		return executor != null;
-	}
-
 	/** Runs the work on the UI thread when one is registered, inline otherwise. */
 	public static <T> T call(Callable<T> work, int timeoutSeconds) throws Exception {
 		Executor current = executor;

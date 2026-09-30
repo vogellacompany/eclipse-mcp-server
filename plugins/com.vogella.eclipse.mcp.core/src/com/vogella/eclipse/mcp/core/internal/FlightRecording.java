@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
+import jdk.jfr.RecordingState;
 import jdk.jfr.consumer.RecordedEvent;
 import jdk.jfr.consumer.RecordedFrame;
 import jdk.jfr.consumer.RecordedThread;
@@ -57,6 +58,21 @@ final class FlightRecording {
 			Path dumpOnExitTo) throws IOException, ParseFailure {
 		Configuration configuration = configuration(settings);
 		Recording recording = new Recording(configuration);
+		try {
+			configure(recording, name, maxAgeSeconds, maxSizeBytes, durationSeconds, dumpOnExitTo);
+			recording.start();
+		} catch (IOException | RuntimeException e) {
+			recording.close();
+			throw e;
+		}
+		String id = "jfr-" + IDS.incrementAndGet(); //$NON-NLS-1$
+		RECORDINGS.put(id, recording);
+		mostRecent = id;
+		return id;
+	}
+
+	private static void configure(Recording recording, String name, long maxAgeSeconds, long maxSizeBytes,
+			long durationSeconds, Path dumpOnExitTo) throws IOException {
 		recording.setName(name == null ? "MCP flight recording" : name); //$NON-NLS-1$
 		// to disk with a bounded age and size: a recording nobody stops must cost a
 		// known amount of disk rather than growing until somebody notices
@@ -77,11 +93,6 @@ final class FlightRecording {
 			recording.setDestination(dumpOnExitTo);
 			recording.setDumpOnExit(true);
 		}
-		recording.start();
-		String id = "jfr-" + IDS.incrementAndGet(); //$NON-NLS-1$
-		RECORDINGS.put(id, recording);
-		mostRecent = id;
-		return id;
 	}
 
 	private static Configuration configuration(String settings) throws IOException, ParseFailure {
@@ -106,15 +117,6 @@ final class FlightRecording {
 		return mostRecent;
 	}
 
-	static boolean isRunning(String id) {
-		Recording recording = RECORDINGS.get(id);
-		return recording != null && recording.getState() == jdk.jfr.RecordingState.RUNNING;
-	}
-
-	static List<String> ids() {
-		return new ArrayList<>(RECORDINGS.keySet());
-	}
-
 	/**
 	 * Writes what has been recorded so far to {@code file}, and stops the recording
 	 * unless {@code keepRunning}. Dumping a running recording is supported, which
@@ -127,7 +129,10 @@ final class FlightRecording {
 		}
 		recording.dump(file);
 		if (!keepRunning) {
-			recording.stop();
+			// a recording with a duration has stopped by itself, and stopping it again throws
+			if (recording.getState() == RecordingState.RUNNING) {
+				recording.stop();
+			}
 			recording.close();
 			RECORDINGS.remove(id);
 		}
@@ -135,16 +140,8 @@ final class FlightRecording {
 
 	/**
 	 * Reads one dump and aggregates it: where the bytes were allocated, where the
-	 * time was spent, and what the collector did.
-	 */
-	static JsonObject aggregate(Path file, Aggregation options) throws IOException {
-		return aggregate(file, options, null);
-	}
-
-	/**
-	 * The same, additionally filling {@code flame} with the allocation stacks so that
-	 * a page can draw them. Filled here rather than from a second pass, because
-	 * parsing a recording is the expensive part and it is already being done.
+	 * time was spent, and what the collector did. When {@code flame} is given it is
+	 * filled with the allocation stacks in the same pass.
 	 */
 	static JsonObject aggregate(Path file, Aggregation options, FlameGraph.Builder flame) throws IOException {
 		Map<String, long[]> byClass = new HashMap<>();

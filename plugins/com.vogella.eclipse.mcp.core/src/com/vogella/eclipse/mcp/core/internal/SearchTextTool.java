@@ -110,7 +110,7 @@ public final class SearchTextTool implements IMcpTool {
 			}
 			roots.add(resource);
 		}
-		for (String name : names(arguments)) {
+		for (String name : ProjectSelection.names(arguments)) {
 			IProject project = ResourcesPlugin.getWorkspace().getRoot().getProject(name);
 			if (!project.isAccessible()) {
 				return McpToolResult.error("No open project named '%s' in this workspace.".formatted(name)); //$NON-NLS-1$
@@ -124,7 +124,7 @@ public final class SearchTextTool implements IMcpTool {
 		// the traversal set comes from the resource tree, so a file created outside
 		// the IDE is invisible to the search and a deleted one is searched as a ghost.
 		// The scope is what has to be refreshed, not the files it finds
-		if (ToolArguments.of(arguments).getBoolean("refresh", true)) { //$NON-NLS-1$
+		if (args.getBoolean("refresh", true)) { //$NON-NLS-1$
 			for (IResource root : roots) {
 				try {
 					WorkspaceSync.refresh(root, monitor);
@@ -160,12 +160,11 @@ public final class SearchTextTool implements IMcpTool {
 
 	/**
 	 * Reports one line per match. The line is found by walking out from the match
-	 * rather than by splitting the file, so a hit in a large file costs the length
-	 * of its line and not the length of the file.
+	 * rather than by splitting the file.
 	 */
 	private static final class Collector extends TextSearchRequestor {
 
-		/** Keyed by physical location and offset, so one file counts once. */
+		/** Keyed by physical location and offset, so one file counts once; matches past the cap map to null. */
 		private final Map<String, JsonObject> distinct = new LinkedHashMap<>();
 
 		private final Map<String, JsonArray> alsoVisibleAs = new HashMap<>();
@@ -228,7 +227,14 @@ public final class SearchTextTool implements IMcpTool {
 			String key = location + "@" + offset; //$NON-NLS-1$
 			if (distinct.containsKey(key)) {
 				collapsed++;
-				alsoVisibleAs.computeIfAbsent(key, ignored -> new JsonArray()).add(path);
+				if (distinct.get(key) != null) {
+					alsoVisibleAs.computeIfAbsent(key, ignored -> new JsonArray()).add(path);
+				}
+				return true;
+			}
+			if (distinct.size() >= maxResults) {
+				// only counted: the answer carries maxResults matches, the rest just feeds total
+				distinct.put(key, null);
 				return true;
 			}
 			int start = offset;
@@ -280,17 +286,5 @@ public final class SearchTextTool implements IMcpTool {
 			int index = Arrays.binarySearch(lineStarts, offset);
 			return index >= 0 ? index + 1 : -index - 1;
 		}
-	}
-
-	private static List<String> names(Map<String, Object> arguments) {
-		List<String> names = new ArrayList<>();
-		if (arguments != null && arguments.get("projects") instanceof List<?> list) { //$NON-NLS-1$
-			for (Object value : list) {
-				if (value != null && !String.valueOf(value).isBlank()) {
-					names.add(String.valueOf(value).trim());
-				}
-			}
-		}
-		return names;
 	}
 }

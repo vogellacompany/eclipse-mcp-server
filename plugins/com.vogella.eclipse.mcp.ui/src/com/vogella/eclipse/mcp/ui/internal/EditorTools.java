@@ -190,7 +190,7 @@ public final class EditorTools {
 	}
 
 	/** The workspace path the editor shows, or {@code null} for anything not file backed. */
-	private static String path(IEditorReference reference) {
+	static String path(IEditorReference reference) {
 		try {
 			if (reference.getEditorInput() instanceof org.eclipse.ui.IFileEditorInput input) {
 				return input.getFile().getFullPath().toString();

@@ -157,6 +157,29 @@ class BreakpointToolsTest {
 	}
 
 	@Test
+	void removingWithoutALineIsRefusedAndDeletesNothing() throws Exception {
+		TestFixture.callAndParse("eclipse_set_breakpoint", Map.of("type", "sample.Main", "line", Integer.valueOf(4)));
+		TestFixture.callAndParse("eclipse_set_breakpoint", Map.of("type", "sample.Main", "line", Integer.valueOf(5)));
+
+		McpToolResult result = TestFixture.call("eclipse_set_breakpoint",
+				Map.of("type", "sample.Main", "remove", Boolean.TRUE));
+
+		assertTrue(result.isError(), result.text());
+		Map<String, Object> listed = TestFixture.callAndParse("eclipse_list_breakpoints", Map.of());
+		assertEquals(2, ((Number) listed.get("total")).intValue(), String.valueOf(listed));
+	}
+
+	@Test
+	void anInvalidSuspendPolicyIsRefusedBeforeAnythingIsCreated() throws Exception {
+		McpToolResult result = TestFixture.call("eclipse_set_breakpoint",
+				Map.of("type", "sample.Main", "line", Integer.valueOf(4), "suspendPolicy", "bogus"));
+
+		assertTrue(result.isError(), result.text());
+		Map<String, Object> listed = TestFixture.callAndParse("eclipse_list_breakpoints", Map.of());
+		assertEquals(0, ((Number) listed.get("total")).intValue(), String.valueOf(listed));
+	}
+
+	@Test
 	void refusesArgumentsThatNameNothing() throws Exception {
 		McpToolResult nothing = TestFixture.call("eclipse_set_breakpoint", Map.of());
 		assertTrue(nothing.isError());

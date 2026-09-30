@@ -1,8 +1,5 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -10,7 +7,6 @@ import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
-import org.eclipse.core.runtime.CoreException;
 
 /**
  * What a bundle's {@code Export-Package} header says about who may use a package.
@@ -66,7 +62,7 @@ final class PackageExports {
 		if (!manifest.exists()) {
 			return exports;
 		}
-		String header = header(manifest, "Export-Package"); //$NON-NLS-1$
+		String header = FileText.manifestHeader(manifest, "Export-Package"); //$NON-NLS-1$
 		if (header == null) {
 			return exports;
 		}
@@ -133,21 +129,5 @@ final class PackageExports {
 		return value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"") //$NON-NLS-1$ //$NON-NLS-2$
 				? value.substring(1, value.length() - 1)
 				: value;
-	}
-
-	private static String header(IFile manifest, String name) {
-		String content;
-		try (InputStream in = manifest.getContents(true)) {
-			content = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-		} catch (CoreException | IOException e) {
-			return null;
-		}
-		// continuation lines start with a single space
-		for (String line : content.replace("\r\n", "\n").replace("\n ", "").split("\n")) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
-			if (line.startsWith(name + ":")) { //$NON-NLS-1$
-				return line.substring(name.length() + 1).trim();
-			}
-		}
-		return null;
 	}
 }

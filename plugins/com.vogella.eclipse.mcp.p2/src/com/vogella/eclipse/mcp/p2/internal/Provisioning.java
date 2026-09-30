@@ -206,8 +206,9 @@ final class Provisioning {
 		if (job == null || !operation.running) {
 			return false;
 		}
-		job.cancel();
+		// before the cancel, so the done listener's final state overwrites it and never the reverse
 		operation.state = "cancelling"; //$NON-NLS-1$
+		job.cancel();
 		return true;
 	}
 
@@ -345,14 +346,6 @@ final class Provisioning {
 	}
 
 	/**
-	 * The repositories that can supply {@code units}, resolved through composite
-	 * children and references.
-	 * <p>
-	 * Asking p2 which locations matter beats refreshing every configured site: an
-	 * IDE with a dozen of them pays a network round trip for each, and a targeted
-	 * check only ever needed one.
-	 */
-	/**
 	 * Retries an operation against every enabled repository.
 	 * <p>
 	 * Scoping to the repositories that can supply a unit finds where the INSTALLED
@@ -360,10 +353,8 @@ final class Provisioning {
 	 * whose child location changes per release, the child the current version came
 	 * from is exactly the one that will never hold a newer one. So a scoped
 	 * resolution finding nothing is not an answer, it is a reason to look properly.
-	 *
-	 * @return whether the retry was needed
 	 */
-	static boolean widenToAllRepositories(IProvisioningAgent agent,
+	static void widenToAllRepositories(IProvisioningAgent agent,
 			org.eclipse.equinox.p2.operations.ProfileChangeOperation operation, IProgressMonitor monitor) {
 		// the metadata was refreshed for the scoped repositories only, so the enabled
 		// ones, the composite among them, are still whatever p2 had cached. Widening
@@ -372,9 +363,16 @@ final class Provisioning {
 		describeRepositories(agent, true, null, monitor);
 		operation.setProvisioningContext(new ProvisioningContext(agent));
 		operation.resolveModal(monitor);
-		return true;
 	}
 
+	/**
+	 * The repositories that can supply {@code units}, resolved through composite
+	 * children and references.
+	 * <p>
+	 * Asking p2 which locations matter beats refreshing every configured site: an
+	 * IDE with a dozen of them pays a network round trip for each, and a targeted
+	 * check only ever needed one.
+	 */
 	static URI[] sourcesFor(IProvisioningAgent agent,
 			Collection<org.eclipse.equinox.p2.metadata.IInstallableUnit> units, IProgressMonitor monitor) {
 		if (units.isEmpty()) {

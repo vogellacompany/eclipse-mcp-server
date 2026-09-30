@@ -1,7 +1,8 @@
 package com.vogella.eclipse.mcp.p2.internal;
 
-import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.eclipse.core.runtime.IStatus;
 
@@ -9,6 +10,9 @@ import org.eclipse.core.runtime.IStatus;
  * Turns the status a provisioning job ends with into what the client is told.
  */
 public final class ProvisioningStatus {
+
+	/** Enough of a status tree to say what happened, without the whole of it. */
+	private static final int MAX_LINES = 40;
 
 	private ProvisioningStatus() {
 	}
@@ -29,21 +33,16 @@ public final class ProvisioningStatus {
 	}
 
 	/**
-	 * The text of a status, taking the children when it has none of its own.
+	 * The text of a status, taking the children when it has none of its own, or null when there is none.
 	 * <p>
 	 * A p2 operation answers with a MultiStatus whose own message is empty, so
 	 * reporting {@code getMessage()} alone says nothing about what happened.
-	 *
-	 * @return the text, or null when there is none
 	 */
-	/** Enough of a status tree to say what happened, without the whole of it. */
-	private static final int MAX_LINES = 40;
-
 	public static String describe(IStatus status) {
 		if (status == null) {
 			return null;
 		}
-		List<String> lines = new ArrayList<>();
+		Set<String> lines = new LinkedHashSet<>();
 		collect(status, lines);
 		if (lines.isEmpty()) {
 			return null;
@@ -52,7 +51,7 @@ public final class ProvisioningStatus {
 		// came to 122,510 characters in one report and blew the caller's limit. The
 		// first lines are the ones that say what happened
 		int kept = Math.min(lines.size(), MAX_LINES);
-		String text = String.join("\n", lines.subList(0, kept)); //$NON-NLS-1$
+		String text = String.join("\n", List.copyOf(lines).subList(0, kept)); //$NON-NLS-1$
 		if (kept < lines.size()) {
 			text += "\n... and %d more line(s), left out because a status tree of this size is not readable." //$NON-NLS-1$
 					.formatted(Integer.valueOf(lines.size() - kept));
@@ -60,12 +59,9 @@ public final class ProvisioningStatus {
 		return text;
 	}
 
-	private static void collect(IStatus status, List<String> lines) {
-		if (lines.size() > MAX_LINES) {
-			return;
-		}
+	private static void collect(IStatus status, Set<String> lines) {
 		String message = status.getMessage();
-		if (message != null && !message.isBlank() && !lines.contains(message)) {
+		if (message != null && !message.isBlank()) {
 			lines.add(message);
 		}
 		for (IStatus child : status.getChildren()) {

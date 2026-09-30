@@ -16,6 +16,7 @@ import org.eclipse.jdt.debug.eval.IAstEvaluationEngine;
 import org.eclipse.jdt.debug.eval.IEvaluationListener;
 import org.eclipse.jdt.debug.eval.IEvaluationResult;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
 /**
@@ -52,6 +53,8 @@ final class GracefulClose {
 	/** Queued rather than called: the evaluation is not on the target's UI thread. */
 	private static final String CLOSE_WORKBENCH = "org.eclipse.swt.widgets.Display.getDefault().asyncExec(() -> org.eclipse.ui.PlatformUI.getWorkbench().close())"; //$NON-NLS-1$
 
+	private static final int EVALUATION_SECONDS = 15;
+
 	private GracefulClose() {
 	}
 
@@ -63,6 +66,13 @@ final class GracefulClose {
 	static JsonObject close(DebugSessionRegistry.Session session, int waitSeconds, boolean fallback, String breakpointSpec,
 			int breakpointWaitSeconds) throws DebugException, InterruptedException {
 		JsonObject json = new JsonObject().put("sessionId", session.id()); //$NON-NLS-1$
+		long started = System.nanoTime();
+		if (breakpointWaitSeconds > CallBudget.maxWaitSeconds() || waitSeconds > CallBudget.maxWaitSeconds()) {
+			json.put("waitNote", //$NON-NLS-1$
+					"A wait was cut to what fits in one call. The application may still be starting: call close again when it has come up."); //$NON-NLS-1$
+			breakpointWaitSeconds = CallBudget.boundedWaitSeconds(breakpointWaitSeconds);
+			waitSeconds = CallBudget.boundedWaitSeconds(waitSeconds);
+		}
 		ILaunch launchValue = session.launch();
 		IDebugTarget target = DebugSupport.target(session);
 		if (!(target instanceof IJavaDebugTarget)) {
@@ -79,6 +89,9 @@ final class GracefulClose {
 					return json;
 				}
 				thread = awaitBreakpoint(target, breakpointWaitSeconds);
+				// what the breakpoint wait used is gone from the exit wait
+				waitSeconds = (int) Math.max(1, Math.min(waitSeconds,
+						CallBudget.maxWaitSeconds() - (System.nanoTime() - started) / 1_000_000_000L - EVALUATION_SECONDS));
 				if (thread == null) {
 					return refuse(json.put("breakpoint", spec) //$NON-NLS-1$
 							.put("breakpointHit", Boolean.FALSE), //$NON-NLS-1$
@@ -118,7 +131,11 @@ final class GracefulClose {
 						"No workspace project supplies the types of the suspended frame, so the expression cannot be compiled against it. That is the same limit eclipse_debug_evaluate has."); //$NON-NLS-1$
 			}
 			IEvaluationResult result = evaluate(project, (IJavaDebugTarget) target, frame);
-			if (result != null && result.hasErrors()) {
+			if (result == null) {
+				return refuse(json,
+						"The close call did not finish evaluating in the target within %d seconds, so it was not queued.".formatted(Integer.valueOf(EVALUATION_SECONDS))); //$NON-NLS-1$
+			}
+			if (result.hasErrors()) {
 				return refuse(json.put("evaluationErrors", String.join("; ", result.getErrorMessages())), //$NON-NLS-1$ //$NON-NLS-2$
 						"The close call did not compile in the target. A program without a workbench cannot be closed this way; stop its system bundle instead."); //$NON-NLS-1$
 			}
@@ -165,8 +182,7 @@ final class GracefulClose {
 				done.countDown();
 			};
 			engine.evaluate(CLOSE_WORKBENCH, frame, listener, org.eclipse.debug.core.DebugEvent.EVALUATION, false);
-			done.await(15, TimeUnit.SECONDS);
-			return box[0];
+			return done.await(EVALUATION_SECONDS, TimeUnit.SECONDS) ? box[0] : null;
 		} finally {
 			engine.dispose();
 		}
@@ -274,17 +290,6 @@ final class GracefulClose {
 	private static boolean anonymous(String typeName) {
 		int dollar = typeName.lastIndexOf('$');
 		return dollar >= 0 && dollar + 1 < typeName.length() && Character.isDigit(typeName.charAt(dollar + 1));
-	}
-
-	private static boolean waitForSuspend(IJavaThread thread, int seconds) throws InterruptedException {
-		long deadline = System.currentTimeMillis() + seconds * 1000L;
-		while (System.currentTimeMillis() < deadline) {
-			if (thread.isSuspended()) {
-				return true;
-			}
-			Thread.sleep(50);
-		}
-		return thread.isSuspended();
 	}
 
 	private static boolean waitForExit(ILaunch launchValue, int seconds) throws InterruptedException {

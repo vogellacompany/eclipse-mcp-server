@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.IJobChangeEvent;
 import org.eclipse.core.runtime.jobs.Job;
@@ -75,13 +76,6 @@ final class TargetLoad {
 		return finished.await(seconds, TimeUnit.SECONDS);
 	}
 
-	void cancel() {
-		Job running = job;
-		if (running != null) {
-			running.cancel();
-		}
-	}
-
 	private IStatus run(IProgressMonitor monitor) {
 		try {
 			long resolveStartedAt = System.currentTimeMillis();
@@ -101,6 +95,8 @@ final class TargetLoad {
 				return end("cancelled", Status.CANCEL_STATUS); //$NON-NLS-1$
 			}
 			return end(loadStatus.getSeverity() == IStatus.ERROR ? "failed" : "done", Status.OK_STATUS); //$NON-NLS-1$ //$NON-NLS-2$
+		} catch (OperationCanceledException e) {
+			return end("cancelled", Status.CANCEL_STATUS); //$NON-NLS-1$
 		} catch (RuntimeException e) {
 			loadStatus = Status.error(String.valueOf(e.getMessage()), e);
 			return end("failed", Status.OK_STATUS); //$NON-NLS-1$
@@ -149,7 +145,19 @@ final class TargetLoad {
 		return jobResult;
 	}
 
-	JsonObject toJson(boolean includeLocations, int maxProblems) {
+	/** Whether this run loaded the definition {@code other} names, which is when a description of it can be reused. */
+	boolean isFor(ITargetDefinition other) {
+		String mine = TargetPlatforms.memento(definition.getHandle());
+		return mine != null && other != null && mine.equals(TargetPlatforms.memento(other.getHandle()));
+	}
+
+	JsonObject toJson(boolean includeLocations, int maxProblems, int maxResults) {
+		return toJson(includeLocations, maxProblems, maxResults, null, null);
+	}
+
+	/** {@code activeJson} is the already computed description of {@code active}, reused when it is this run's target. */
+	JsonObject toJson(boolean includeLocations, int maxProblems, int maxResults, ITargetDefinition active,
+			JsonObject activeJson) {
 		JsonObject json = new JsonObject().put("target", target) //$NON-NLS-1$
 				.put("state", state) //$NON-NLS-1$
 				.put("resolveOnly", resolveOnly) //$NON-NLS-1$
@@ -163,7 +171,9 @@ final class TargetLoad {
 					"Still resolving. Resolving a target that is not cached downloads from its p2 repositories and can take many minutes. Poll it with eclipse_get_target_platform."); //$NON-NLS-1$
 			return json;
 		}
-		json.put("definition", TargetPlatforms.describe(definition, includeLocations, maxProblems)); //$NON-NLS-1$
+		json.put("definition", //$NON-NLS-1$
+				activeJson != null && isFor(active) ? activeJson
+						: TargetPlatforms.describe(definition, includeLocations, maxProblems, maxResults));
 		if ("done".equals(state)) { //$NON-NLS-1$
 			json.put("note", //$NON-NLS-1$
 					"This is now the active target platform, and PDE recomputed the plug-in classpaths against it. THE JRE BINDING IS NOT UNDONE BY ACTIVATING SOMETHING ELSE: a target that names a JRE overwrites the WORKSPACE DEFAULT VM, measured, not assumed, and every project whose JRE container names no execution environment follows that one setting. It outlives the target that set it, so going back to another target leaves the new VM in place, and a project compiling for a newer release than that VM can serve then fails with a message about the release rather than about the target. The jre field says which install this one names. Problem markers across the workspace change with it: eclipse_get_problems builds first and reports the new state, and eclipse_get_bundle_info with unresolvedOnly names the bundles that still do not resolve. BUILD FULLY BEFORE BELIEVING ANY ERROR COUNT: a target switch changes what every plug-in project compiles against without changing a single file, so an incremental build, which starts from a resource delta, can leave thousands of stale errors standing. Use eclipse_build with kind 'full', and read builderFailures in its answer, since an exception inside JavaBuilder never becomes a problem marker."); //$NON-NLS-1$

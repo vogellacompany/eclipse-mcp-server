@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.IJavaElement;
@@ -44,7 +43,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Returns the callers or callees of a Java method, to the requested depth, using the JDT search engine. For dead code the useful question is not whether something is referenced but whether it is reachable from anything that is itself reachable, and a one level reference list cannot answer that. A method with callers that are themselves uncalled is still dead."; //$NON-NLS-1$
+		return "Returns the callers of a Java method (callees are not implemented), to the requested depth, using the JDT search engine. For dead code the useful question is not whether something is referenced but whether it is reachable from anything that is itself reachable, and a one level reference list cannot answer that. A method with callers that are themselves uncalled is still dead."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -95,6 +94,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 			if (projects.isEmpty()) {
 				return McpToolResult.error("The workspace contains no open Java project."); //$NON-NLS-1$
 			}
+			JavaModelSupport.refresh(args.getString("project"), monitor); //$NON-NLS-1$
 			type = JavaModelSupport.findType(typeName, projects, monitor);
 			methods = JavaModelSupport.findMembers(type, methodName).stream().filter(IMethod.class::isInstance)
 					.toList();
@@ -124,6 +124,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 	private static final class Counter {
 		private final int max;
 		private int used;
+		private boolean truncated;
 
 		Counter(int max) {
 			this.max = max;
@@ -131,6 +132,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 
 		boolean take() {
 			if (used >= max) {
+				truncated = true;
 				return false;
 			}
 			used++;
@@ -142,7 +144,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 		}
 
 		boolean exhausted() {
-			return used >= max;
+			return truncated;
 		}
 	}
 
@@ -153,7 +155,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 			return nodes;
 		}
 		for (SearchMatch match : search(targets, scope, monitor)) {
-			if (monitor.isCanceled() || !counter.take()) {
+			if (monitor.isCanceled()) {
 				return nodes;
 			}
 			if (!(match.getElement() instanceof IJavaElement element)) {
@@ -164,6 +166,9 @@ public final class GetCallHierarchyTool implements IMcpTool {
 			if (!seen.add(key)) {
 				// a caller already in the tree; recursing again would loop on mutual recursion
 				continue;
+			}
+			if (!counter.take()) {
+				return nodes;
 			}
 			JsonObject node = new JsonObject()
 					.put("caller", JavaModelSupport.describe(enclosing == null ? element : enclosing)); //$NON-NLS-1$

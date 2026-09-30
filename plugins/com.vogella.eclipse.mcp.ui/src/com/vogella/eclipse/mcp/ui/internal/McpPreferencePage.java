@@ -44,6 +44,8 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 
 	private static final int FIELD_WIDTH_HINT = 320;
 
+	private static final String COPY_BUTTON = "copyButton";
+
 	private final List<Button> copyButtons = new ArrayList<>();
 
 	private Label status;
@@ -53,8 +55,6 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 	private Text token;
 
 	private Button tokenCopy;
-
-	private Button lastCopyButton;
 
 	public McpPreferencePage() {
 		super(GRID);
@@ -106,7 +106,7 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 
 		url = addCopyableField(group, "&URL:", true);
 		token = addCopyableField(group, "&Token:", false);
-		tokenCopy = lastCopyButton;
+		tokenCopy = (Button) token.getData(COPY_BUTTON);
 		addCopyableField(group, "&File:", false).setText(McpServerService.getEndpointFile().toString());
 
 		Button regenerate = new Button(group, SWT.PUSH);
@@ -160,7 +160,7 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 		if (onlyWhenRunning) {
 			copyButtons.add(copy);
 		}
-		lastCopyButton = copy;
+		text.setData(COPY_BUTTON, copy);
 		return text;
 	}
 

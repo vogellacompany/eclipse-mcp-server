@@ -97,7 +97,7 @@ public final class SetWidgetTextTool implements IMcpTool {
 			return McpToolResult.error("The text is %d characters; at most %d are accepted." //$NON-NLS-1$
 					.formatted(Integer.valueOf(text.length()), Integer.valueOf(MAX_TEXT)));
 		}
-		String shell = args.getString("shell") != null ? args.getString("shell") : args.getString("shellTitle"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		String shell = Shells.spec(args);
 		Request request = new Request(args.getString("part"), shell, path, text, "replace".equals(mode), //$NON-NLS-1$ //$NON-NLS-2$
 				args.getBoolean("perCharacter", true), args.getBoolean("pressEnter", false), item, itemIndex, //$NON-NLS-1$ //$NON-NLS-2$
 				args.getBoolean("focus", false)); //$NON-NLS-1$
@@ -146,16 +146,23 @@ public final class SetWidgetTextTool implements IMcpTool {
 					return refusal(error).put("items", items(control)); //$NON-NLS-1$
 				}
 			} else {
-				int vetoed = request.perCharacter() ? typeEach(control, request) : enterAtOnce(control, request);
+				int vetoed = 0;
+				if (request.perCharacter()) {
+					vetoed = typeEach(control, request);
+				} else {
+					enterAtOnce(control, request);
+				}
 				if (vetoed > 0) {
 					result.put("charactersVetoedByKeyDown", Integer.valueOf(vetoed)); //$NON-NLS-1$
 				}
 			}
-			String after = textOf(control);
-			result.put("text", after); //$NON-NLS-1$
-			if (!request.pressEnter()) {
+			if (control.isDisposed()) {
+				result.put("widgetDisposed", Boolean.TRUE); //$NON-NLS-1$
+			} else if (!request.pressEnter()) {
+				result.put("text", textOf(control)); //$NON-NLS-1$
 				addCaret(control, result);
 			} else {
+				result.put("text", textOf(control)); //$NON-NLS-1$
 				pressEnter(control);
 				boolean disposed = control.isDisposed();
 				result.put("enterPressed", Boolean.TRUE).put("widgetDisposed", Boolean.valueOf(disposed)); //$NON-NLS-1$ //$NON-NLS-2$
@@ -168,7 +175,7 @@ public final class SetWidgetTextTool implements IMcpTool {
 			counter.dispose();
 		}
 		result.put("events", counter.toJson()); //$NON-NLS-1$
-		if (request.text() != null && request.replace() && !request.pressEnter()
+		if (request.text() != null && request.replace() && !request.pressEnter() && !control.isDisposed()
 				&& !request.text().equals(textOf(control))) {
 			result.put("note", //$NON-NLS-1$
 					"The widget holds different text than was entered: a Verify listener changed or vetoed characters, the widget has a text limit, or a listener rewrote it."); //$NON-NLS-1$
@@ -211,7 +218,7 @@ public final class SetWidgetTextTool implements IMcpTool {
 		return vetoed;
 	}
 
-	private static int enterAtOnce(Control control, Request request) {
+	private static void enterAtOnce(Control control, Request request) {
 		if (request.replace()) {
 			switch (control) {
 			case Text text -> text.setText(request.text());
@@ -224,10 +231,9 @@ public final class SetWidgetTextTool implements IMcpTool {
 			case CCombo combo -> combo.setText(request.text());
 			default -> throw new IllegalStateException();
 			}
-			return 0;
+			return;
 		}
 		insert(control, request.text());
-		return 0;
 	}
 
 	private static void selectAll(Control control) {

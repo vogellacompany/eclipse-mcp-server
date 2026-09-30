@@ -16,9 +16,6 @@ import org.eclipse.pde.core.target.ITargetLocation;
 import org.eclipse.pde.core.target.ITargetPlatformService;
 import org.eclipse.pde.core.target.TargetBundle;
 import org.eclipse.pde.core.target.TargetFeature;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.FrameworkUtil;
-import org.osgi.framework.ServiceReference;
 
 import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.JreUsability;
@@ -37,25 +34,7 @@ final class TargetPlatforms {
 
 	/** Runs {@code body} with PDE's target platform service, releasing it afterwards. */
 	static McpToolResult with(Function<ITargetPlatformService, McpToolResult> body) {
-		// the bundle is lazily activated, so its own context only exists once it started
-		BundleContext context = FrameworkUtil.getBundle(TargetPlatforms.class).getBundleContext();
-		if (context == null) {
-			context = FrameworkUtil.getBundle(ITargetPlatformService.class).getBundleContext();
-		}
-		if (context == null) {
-			return McpToolResult
-					.error("Neither this bundle nor PDE is active, so the target platform service cannot be reached."); //$NON-NLS-1$
-		}
-		ServiceReference<ITargetPlatformService> reference = context
-				.getServiceReference(ITargetPlatformService.class);
-		if (reference == null) {
-			return McpToolResult.error("PDE does not offer its target platform service in this IDE."); //$NON-NLS-1$
-		}
-		try {
-			return body.apply(context.getService(reference));
-		} finally {
-			context.ungetService(reference);
-		}
+		return PdeServices.with(ITargetPlatformService.class, "target platform service", body::apply); //$NON-NLS-1$
 	}
 
 	/**
@@ -112,7 +91,8 @@ final class TargetPlatforms {
 	}
 
 	/** The full JSON view of a definition, as far as it has been resolved. */
-	static JsonObject describe(ITargetDefinition definition, boolean includeLocations, int maxProblems) {
+	static JsonObject describe(ITargetDefinition definition, boolean includeLocations, int maxProblems,
+			int maxResults) {
 		JsonObject json = new JsonObject().put("name", definition.getName()) //$NON-NLS-1$
 				.put("memento", memento(definition.getHandle())) //$NON-NLS-1$
 				.put("resolved", definition.isResolved()) //$NON-NLS-1$
@@ -157,8 +137,12 @@ final class TargetPlatforms {
 
 		if (includeLocations) {
 			JsonArray locations = new JsonArray();
-			for (ITargetLocation location : definition.getTargetLocations() == null ? new ITargetLocation[0]
-					: definition.getTargetLocations()) {
+			ITargetLocation[] all = definition.getTargetLocations() == null ? new ITargetLocation[0]
+					: definition.getTargetLocations();
+			for (ITargetLocation location : all) {
+				if (locations.size() >= maxResults) {
+					break;
+				}
 				TargetBundle[] fromLocation = location.getBundles();
 				String xml = serialize(location);
 				locations.add(new JsonObject().put("type", location.getType()) //$NON-NLS-1$
@@ -169,7 +153,8 @@ final class TargetPlatforms {
 						.put("bundleCount", fromLocation == null ? 0 : fromLocation.length) //$NON-NLS-1$
 						.put("status", status(location.getStatus()))); //$NON-NLS-1$
 			}
-			json.put("locations", locations); //$NON-NLS-1$
+			json.put("locations", locations).put("locationCount", all.length) //$NON-NLS-1$ //$NON-NLS-2$
+					.put("locationsTruncated", all.length > locations.size()); //$NON-NLS-1$
 		}
 		return json;
 	}

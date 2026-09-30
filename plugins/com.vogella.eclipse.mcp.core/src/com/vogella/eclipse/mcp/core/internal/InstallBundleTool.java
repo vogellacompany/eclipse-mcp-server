@@ -235,9 +235,7 @@ public final class InstallBundleTool implements IMcpTool {
 		boolean started = false;
 		String resolutionError = null;
 		if (!deferred && !monitor.isCanceled()) {
-			if (fragment && start) {
-				started = false;
-			} else if (start) {
+			if (start && !fragment) {
 				try {
 					bundle.start(0);
 					started = true;
@@ -498,7 +496,7 @@ public final class InstallBundleTool implements IMcpTool {
 	/** Returns whether the refresh callback arrived within the bounded wait. */
 	private static boolean waitForRefresh(IProgressMonitor monitor, FrameworkWiring wiring, List<Bundle> closure) {
 		if (wiring == null) {
-			return false;
+			return true;
 		}
 		CountDownLatch done = new CountDownLatch(1);
 		wiring.refreshBundles(new HashSet<>(closure), event -> done.countDown());
@@ -526,7 +524,7 @@ public final class InstallBundleTool implements IMcpTool {
 				|| state == Bundle.STOPPING || bundle.adapt(BundleWiring.class) != null;
 	}
 
-	private static String stateName(int state) {
+	static String stateName(int state) {
 		return switch (state) {
 			case Bundle.UNINSTALLED -> "UNINSTALLED"; //$NON-NLS-1$
 			case Bundle.INSTALLED -> "INSTALLED"; //$NON-NLS-1$
@@ -577,7 +575,12 @@ public final class InstallBundleTool implements IMcpTool {
 		}
 		Path fresh = jar.toAbsolutePath().normalize();
 		if (old.equals(fresh)) {
-			return true;
+			// a rebuild in place keeps the path, so only a newer file than the load means new content
+			try {
+				return Files.getLastModifiedTime(fresh).toMillis() <= installed.getLastModified();
+			} catch (IOException e) {
+				return false;
+			}
 		}
 		try {
 			return sha256(old).equals(sha256(fresh));

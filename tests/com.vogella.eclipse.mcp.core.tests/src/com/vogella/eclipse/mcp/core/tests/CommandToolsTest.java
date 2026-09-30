@@ -1,5 +1,6 @@
 package com.vogella.eclipse.mcp.core.tests;
 
+import static com.vogella.eclipse.mcp.core.tests.TestFixture.assertRefused;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -61,11 +62,5 @@ class CommandToolsTest {
 	void managingAWindowNeedsAWorkbench() throws Exception {
 		assertRefused(TestFixture.call("eclipse_manage_window", Map.of("action", "open")), "no running workbench");
 		assertRefused(TestFixture.call("eclipse_manage_window", Map.of("action", "close")), "no running workbench");
-	}
-
-	private static void assertRefused(McpToolResult result, String expected) {
-		assertTrue(result.isError(), "expected an error, got " + result.text());
-		assertTrue(result.text().toLowerCase().contains(expected.toLowerCase()),
-				"expected a message about '%s', got %s".formatted(expected, result.text()));
 	}
 }

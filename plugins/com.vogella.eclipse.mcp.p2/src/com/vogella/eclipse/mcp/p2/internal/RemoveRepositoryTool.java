@@ -16,7 +16,7 @@ import com.vogella.eclipse.mcp.core.ToolArguments;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
 /**
- * Removes a p2 repository this server was allowed to add.
+ * Removes a configured p2 repository.
  */
 public final class RemoveRepositoryTool implements IMcpTool {
 

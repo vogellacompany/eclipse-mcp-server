@@ -14,8 +14,12 @@ import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IConfigurationElement;
+import org.eclipse.core.runtime.IExtension;
+import org.eclipse.core.runtime.IExtensionRegistry;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.OperationCanceledException;
+import org.eclipse.core.runtime.Platform;
 
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolException;
@@ -91,24 +95,34 @@ public final class GetProblemsTool implements IMcpTool {
 			}
 		}
 
-		boolean upToDate = false;
+		IProject project = null;
+		if (projectName != null) {
+			project = ResourcesPlugin.getWorkspace().getRoot().getProject(projectName);
+			if (!project.isAccessible()) {
+				return McpToolResult.error("No open project named '%s' in this workspace.".formatted(projectName)); //$NON-NLS-1$
+			}
+		}
+		IResource scope = project == null ? ResourcesPlugin.getWorkspace().getRoot() : project;
 		if (refresh) {
-			org.eclipse.core.resources.IProject project = projectName == null ? null
-					: ResourcesPlugin.getWorkspace().getRoot().getProject(projectName);
-			IResource scope = project == null ? ResourcesPlugin.getWorkspace().getRoot() : project;
 			try {
 				WorkspaceSync.refresh(scope, monitor);
 			} catch (CoreException e) {
 				throw new McpToolException("Could not refresh the workspace", e); //$NON-NLS-1$
 			} catch (OperationCanceledException e) {
-				upToDate = false;
+				// the wait below reports the cancellation through waitedForBuild
 			}
 		}
+		// waits for a build already running, and never starts one. Asking for markers
+		// used to trigger an incremental build that JDT turned into a batch compile of
+		// every open project, so a read took thirty seconds; starting a build is
+		// eclipse_build's job, where the caller asked for it. It comes before the read,
+		// or the markers would predate the build the answer claims to have waited for
+		boolean waited = WorkspaceSync.waitForBuild(monitor);
+		boolean upToDate = refresh && waited && WorkspaceSync.isAutoBuilding();
 
 		IMarker[] markers;
 		try {
-			markers = ResourcesPlugin.getWorkspace().getRoot().findMarkers(IMarker.PROBLEM, true,
-					IResource.DEPTH_INFINITE);
+			markers = scope.findMarkers(IMarker.PROBLEM, true, IResource.DEPTH_INFINITE);
 		} catch (CoreException e) {
 			throw new McpToolException("Could not read the problem markers of the workspace", e); //$NON-NLS-1$
 		}
@@ -129,13 +143,6 @@ public final class GetProblemsTool implements IMcpTool {
 				problems.add(problem);
 			}
 		}
-		// waits for a build already running, and never starts one. Asking for markers
-		// used to trigger an incremental build that JDT turned into a batch compile of
-		// every open project, so a read took thirty seconds; starting a build is
-		// eclipse_build's job, where the caller asked for it
-		boolean waited = WorkspaceSync.waitForBuild(monitor);
-		upToDate = refresh && waited && WorkspaceSync.isAutoBuilding();
-
 		JsonArray resolved = new JsonArray();
 		int resolvedTotal = 0;
 		if (baseline != null) {
@@ -144,7 +151,8 @@ public final class GetProblemsTool implements IMcpTool {
 			for (String gone : baseline) {
 				// the diff has to be taken over the scope the caller asked about, not
 				// over the whole workspace the marker recorded
-				if (!inScope(gone, projectName, pathPrefix, severity, messageFilter) || now.contains(gone)) {
+				if (!inScope(gone, projectName, pathPrefix, severity, messageFilter, types, excludeTypes)
+						|| now.contains(gone)) {
 					continue;
 				}
 				resolvedTotal++;
@@ -153,7 +161,7 @@ public final class GetProblemsTool implements IMcpTool {
 				}
 			}
 			Set<String> was = baseline;
-			problems = new ArrayList<>(problems.stream().filter(problem -> !was.contains(key(problem))).toList());
+			problems.removeIf(problem -> was.contains(key(problem)));
 		}
 		problems.sort(Comparator.comparingInt(Problem::severity).reversed().thenComparing(Problem::path)
 				.thenComparingInt(Problem::line));
@@ -186,10 +194,6 @@ public final class GetProblemsTool implements IMcpTool {
 			result.put("staleness", //$NON-NLS-1$
 					"Auto-build is off and this tool never starts a build, so these markers are from the last build and may predate recent edits. Run eclipse_build first when that matters."); //$NON-NLS-1$
 		}
-		if (!WorkspaceSync.isAutoBuilding()) {
-			result.put("staleness", //$NON-NLS-1$
-					"Auto-build is off and this tool never starts a build, so these markers are from the last build and may predate recent edits. Run eclipse_build first when that matters."); //$NON-NLS-1$
-		}
 		if (problemMarker != null) {
 			result.put("marker", problemMarker) //$NON-NLS-1$
 					.put("sinceMarker", Boolean.TRUE) //$NON-NLS-1$
@@ -205,13 +209,14 @@ public final class GetProblemsTool implements IMcpTool {
 	/**
 	 * Identity of a problem across two builds: where it is and what it says.
 	 * <p>
-	 * The four fields are parsed back out when a baseline is narrowed to a query's
-	 * scope, so the order matters: a workspace path never contains a colon and the
-	 * message may, which is why the message is last and the split is bounded.
+	 * The five fields are parsed back out when a baseline is narrowed to a query's
+	 * scope, so the order matters: a workspace path and a marker type never contain
+	 * a colon and the message may, which is why the message is last and the split is
+	 * bounded.
 	 */
 	static String key(Problem problem) {
-		return "%s:%d:%d:%s".formatted(problem.path(), Integer.valueOf(problem.line()), //$NON-NLS-1$
-				Integer.valueOf(problem.severity()), problem.message());
+		return "%s:%d:%d:%s:%s".formatted(problem.path(), Integer.valueOf(problem.line()), //$NON-NLS-1$
+				Integer.valueOf(problem.severity()), problem.type(), problem.message());
 	}
 
 	/**
@@ -223,10 +228,13 @@ public final class GetProblemsTool implements IMcpTool {
 	 * asked about, all of them still present.
 	 */
 	private static boolean inScope(String key, String projectName, String pathPrefix, String severity,
-			String messageFilter) {
-		String[] parts = key.split(":", 4); //$NON-NLS-1$
-		if (parts.length < 4) {
+			String messageFilter, List<String> types, List<String> excludeTypes) {
+		String[] parts = key.split(":", 5); //$NON-NLS-1$
+		if (parts.length < 5) {
 			return true;
+		}
+		if (!typeWanted(parts[3], types, excludeTypes)) {
+			return false;
 		}
 		String path = parts[0];
 		if (projectName != null && !path.startsWith("/" + projectName + "/")) { //$NON-NLS-1$ //$NON-NLS-2$
@@ -239,7 +247,38 @@ public final class GetProblemsTool implements IMcpTool {
 		if (wanted != null && !String.valueOf(wanted).equals(parts[2])) {
 			return false;
 		}
-		return messageFilter == null || parts[3].toLowerCase(Locale.ROOT).contains(messageFilter.toLowerCase(Locale.ROOT));
+		return messageFilter == null || parts[4].toLowerCase(Locale.ROOT).contains(messageFilter.toLowerCase(Locale.ROOT));
+	}
+
+	/** The type filters applied to a type name alone, for a problem that no longer has a marker. */
+	private static boolean typeWanted(String type, List<String> types, List<String> excludeTypes) {
+		for (String excluded : excludeTypes) {
+			if (isSubtype(type, excluded)) {
+				return false;
+			}
+		}
+		return types.isEmpty() || types.stream().anyMatch(wanted -> isSubtype(type, wanted));
+	}
+
+	/** Whether {@code type} is {@code ancestor} or declares it as a super type, transitively. */
+	private static boolean isSubtype(String type, String ancestor) {
+		if (type.equals(ancestor)) {
+			return true;
+		}
+		IExtensionRegistry registry = Platform.getExtensionRegistry();
+		if (registry == null) {
+			return false;
+		}
+		IExtension extension = registry.getExtension("org.eclipse.core.resources.markers", type); //$NON-NLS-1$
+		if (extension == null) {
+			return false;
+		}
+		for (IConfigurationElement element : extension.getConfigurationElements()) {
+			if ("super".equals(element.getName()) && isSubtype(element.getAttribute("type"), ancestor)) { //$NON-NLS-1$ //$NON-NLS-2$
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Every problem in the workspace, as keys, for a baseline. */

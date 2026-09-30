@@ -70,4 +70,17 @@ class ProvisioningStatusTest {
 		assertNull(ProvisioningStatus.describe(new Status(IStatus.OK, PLUGIN, "")));
 		assertNull(ProvisioningStatus.describe(null));
 	}
+
+	@Test
+	void aHugeStatusTreeSaysHowManyLinesWereLeftOut() {
+		MultiStatus status = new MultiStatus(PLUGIN, 0, "");
+		for (int i = 0; i < 100; i++) {
+			status.add(new Status(IStatus.ERROR, PLUGIN, "unit " + i));
+		}
+
+		String described = ProvisioningStatus.describe(status);
+
+		assertTrue(described.contains("... and 60 more line(s)"), described);
+		assertTrue(described.contains("unit 0") && !described.contains("unit 99"), described);
+	}
 }

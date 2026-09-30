@@ -36,10 +36,7 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
  * checks that the proposal rows are there rather than waiting for them to be.
  * <p>
  * The wait is bounded by the server's call timeout and stops when the call is
- * cancelled. Four abandoned calls once kept posting fences for minutes after
- * their clients had given up, each fence holding the UI thread for the length of
- * a reconciler probe, and the IDE stuttered for as long as the longest of them
- * had been asked to wait.
+ * cancelled, so an abandoned call does not keep posting fences.
  */
 final class UiSettle {
 
@@ -140,6 +137,10 @@ final class UiSettle {
 						"Any plain background thread other than a text editor's reconciler, and work that has not been scheduled yet. The reconcilers ARE checked, through internal fields that can change in any release, and an unreadable one counts as busy rather than idle; see the reconcilers block above. THIS IS STILL A HEURISTIC: assert what you actually need rather than trusting it.");
 	}
 
+	/** What one fence came back with: how long it waited, and what it saw while there. */
+	private record Fenced(long millis, Reconcilers.State reconcilers) {
+	}
+
 	/**
 	 * Posts a runnable to the Display and waits for it.
 	 * <p>
@@ -149,10 +150,6 @@ final class UiSettle {
 	 *
 	 * @return the milliseconds it took, or -1 when it did not run in time
 	 */
-	/** What one fence came back with: how long it waited, and what it saw while there. */
-	private record Fenced(long millis, Reconcilers.State reconcilers) {
-	}
-
 	private static Fenced fence(Display display, long budgetMillis) {
 		if (budgetMillis <= 0) {
 			return new Fenced(-1, null);

@@ -13,9 +13,8 @@ import org.eclipse.jgit.util.FS;
 /**
  * Finds the repository a request is about.
  * <p>
- * Every reference to EGit and JGit sits behind this class and the two tools, and
- * both bundles are optional: without them the tools report that EGit is not
- * installed rather than the server failing to resolve.
+ * The EGit and JGit bundles are optional: the tools ask {@link #isAvailable()}
+ * first and report that EGit is not installed rather than failing to resolve.
  */
 final class EGit {
 

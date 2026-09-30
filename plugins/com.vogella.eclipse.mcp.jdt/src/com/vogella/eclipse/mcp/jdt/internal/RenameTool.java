@@ -8,7 +8,6 @@ import java.util.Set;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
-import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IField;
 import org.eclipse.jdt.core.IJavaElement;
@@ -39,6 +38,8 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
  * Renames a Java element through the JDT refactoring engine.
  */
 public final class RenameTool implements IMcpTool {
+
+	private static final List<String> KINDS = List.of("auto", "type", "method", "field", "package", "compilationUnit"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
 
 	@Override
 	public String getName() {
@@ -93,6 +94,7 @@ public final class RenameTool implements IMcpTool {
 			if (projects.isEmpty()) {
 				return McpToolResult.error("The workspace contains no open Java project."); //$NON-NLS-1$
 			}
+			JavaModelSupport.refresh(projectName, monitor);
 			element = resolve(typeName, memberName, args.getString("kind", "auto"), projects); //$NON-NLS-1$ //$NON-NLS-2$
 		} catch (ToolInputException e) {
 			return McpToolResult.error(e.getMessage());
@@ -130,12 +132,12 @@ public final class RenameTool implements IMcpTool {
 				return McpToolResult.error("The refactoring could not be created: " + describe(status)); //$NON-NLS-1$
 			}
 			// conditions first: a rename that would break compilation must not be applied
-			status.merge(refactoring.checkAllConditions(monitor == null ? new NullProgressMonitor() : monitor));
-			if (status.hasFatalError() || status.hasError()) {
+			status.merge(refactoring.checkAllConditions(monitor));
+			if (status.hasError()) {
 				return McpToolResult.error("Refused: %s".formatted(describe(status))); //$NON-NLS-1$
 			}
 
-			Change change = refactoring.createChange(monitor == null ? new NullProgressMonitor() : monitor);
+			Change change = refactoring.createChange(monitor);
 			JsonObject result = new JsonObject().put("element", JavaModelSupport.describe(element)) //$NON-NLS-1$
 					.put("newName", newName) //$NON-NLS-1$
 					.put("refactoring", refactoringId) //$NON-NLS-1$
@@ -152,10 +154,13 @@ public final class RenameTool implements IMcpTool {
 			}
 			// a change has to be told to build its validation state before it can be
 			// performed, otherwise it refuses with "has not been initialialized"
-			IProgressMonitor progress = monitor == null ? new NullProgressMonitor() : monitor;
+			IProgressMonitor progress = monitor;
 			change.initializeValidationData(progress);
 			PerformChangeOperation operation = new PerformChangeOperation(change);
 			ResourcesPlugin.getWorkspace().run(operation, progress);
+			if (!operation.changeExecuted()) {
+				return McpToolResult.error("The rename was not applied: %s".formatted(operation.getValidationStatus())); //$NON-NLS-1$
+			}
 			return McpToolResult.of(result.put("applied", Boolean.TRUE).toString()); //$NON-NLS-1$
 		} catch (CoreException e) {
 			throw new McpToolException("The rename failed", e); //$NON-NLS-1$
@@ -185,6 +190,9 @@ public final class RenameTool implements IMcpTool {
 
 	private static IJavaElement resolve(String typeName, String memberName, String kind, List<IJavaProject> projects)
 			throws ToolInputException, McpToolException {
+		if (!KINDS.contains(kind)) {
+			throw new ToolInputException("Unknown kind '%s', expected one of %s.".formatted(kind, String.join(", ", KINDS))); //$NON-NLS-1$ //$NON-NLS-2$
+		}
 		if ("package".equals(kind)) { //$NON-NLS-1$
 			for (IJavaProject project : projects) {
 				try {
@@ -202,6 +210,9 @@ public final class RenameTool implements IMcpTool {
 		}
 		IType type = JavaModelSupport.findType(typeName, projects);
 		if (memberName == null) {
+			if ("method".equals(kind) || "field".equals(kind)) { //$NON-NLS-1$ //$NON-NLS-2$
+				throw new ToolInputException("kind '%s' needs a memberName.".formatted(kind)); //$NON-NLS-1$
+			}
 			return "compilationUnit".equals(kind) ? type.getCompilationUnit() : type; //$NON-NLS-1$
 		}
 		List<IMember> members = JavaModelSupport.findMembers(type, memberName);
@@ -210,7 +221,12 @@ public final class RenameTool implements IMcpTool {
 					"'%s#%s' is ambiguous, it resolves to %d members. A rename has to name exactly one, so overloaded methods cannot be renamed through this tool."
 							.formatted(typeName, memberName, members.size()));
 		}
-		return members.get(0);
+		IMember member = members.get(0);
+		if ("method".equals(kind) && !(member instanceof IMethod) || "field".equals(kind) && !(member instanceof IField) //$NON-NLS-1$ //$NON-NLS-2$
+				|| "type".equals(kind)) { //$NON-NLS-1$
+			throw new ToolInputException("'%s#%s' is not a %s.".formatted(typeName, memberName, kind)); //$NON-NLS-1$
+		}
+		return member;
 	}
 
 	/** Returns why the element cannot be renamed because it is compiled, or {@code null}. */

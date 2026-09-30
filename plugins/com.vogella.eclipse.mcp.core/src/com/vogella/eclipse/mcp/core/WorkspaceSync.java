@@ -30,16 +30,6 @@ public final class WorkspaceSync {
 	}
 
 	/**
-	 * Builds when auto-build is off, then waits for any build already running, so that
-	 * problem markers reflect the current state of the files.
-	 *
-	 * @return {@code false} when the wait was cancelled, which leaves the markers stale
-	 */
-	public static boolean build(IProgressMonitor monitor) throws CoreException {
-		return build(null, monitor);
-	}
-
-	/**
 	 * Builds and waits, restricted to {@code scope} when one is given.
 	 * <p>
 	 * The scope is the whole point. {@code IWorkspace.build} takes no resource, so

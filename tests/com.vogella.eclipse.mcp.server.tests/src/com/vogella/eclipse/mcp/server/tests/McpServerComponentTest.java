@@ -1,5 +1,7 @@
 package com.vogella.eclipse.mcp.server.tests;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,7 +30,7 @@ class McpServerComponentTest {
 	@Test
 	void theDescriptorIsInTheBundle() {
 		Bundle server = FrameworkUtil.getBundle(McpServerService.class);
-		assertTrue(DESCRIPTOR.equals(server.getHeaders().get("Service-Component")), //$NON-NLS-1$
+		assertEquals(DESCRIPTOR, server.getHeaders().get("Service-Component"), //$NON-NLS-1$
 				"The Service-Component header should name the generated descriptor"); //$NON-NLS-1$
 		assertNotNull(server.getEntry(DESCRIPTOR), "The generated descriptor should be packaged"); //$NON-NLS-1$
 	}

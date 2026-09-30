@@ -253,14 +253,6 @@ public final class TestRunRegistry {
 		run.finish("failed", reason); //$NON-NLS-1$
 	}
 
-	/**
-	 * Ends a run whose launch died or never reported.
-	 * <p>
-	 * A launch cancelled at the compile error prompt terminates without ever
-	 * producing a test event, and without this the run sits in {@code running}
-	 * forever. Combined with the one-run-at-a-time guard that disabled the tool for
-	 * the rest of the session, recoverable only by restarting the IDE.
-	 */
 	/** Errors reported from a launched platform's log. Enough to diagnose, not a dump. */
 	private static final int MAX_LAUNCH_ERRORS = 8;
 
@@ -322,6 +314,14 @@ public final class TestRunRegistry {
 		return errors;
 	}
 
+	/**
+	 * Ends a run whose launch died or never reported.
+	 * <p>
+	 * A launch cancelled at the compile error prompt terminates without ever
+	 * producing a test event, and without this the run sits in {@code running}
+	 * forever. Combined with the one-run-at-a-time guard that disabled the tool for
+	 * the rest of the session, recoverable only by restarting the IDE.
+	 */
 	static void watch(Run run, org.eclipse.debug.core.ILaunch launch, int staleAfterSeconds) {
 		run.launch = launch;
 		Thread watchdog = new Thread(() -> {

@@ -12,7 +12,6 @@ import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
-import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IPackageFragment;
@@ -116,7 +115,7 @@ public final class CleanUpTool implements IMcpTool {
 		OrganizeImportsTool.ensureCodeStylePreferences();
 		ToolArguments args = ToolArguments.of(arguments);
 		List<String> requested = new ArrayList<>();
-		if (arguments != null && arguments.get("cleanUps") instanceof List<?> list) { //$NON-NLS-1$
+		if (arguments.get("cleanUps") instanceof List<?> list) { //$NON-NLS-1$
 			list.forEach(value -> requested.add(String.valueOf(value).trim()));
 		}
 		if (requested.isEmpty()) {
@@ -133,7 +132,7 @@ public final class CleanUpTool implements IMcpTool {
 		int maxResults = args.getInt("maxResults", 200, 1, 2000); //$NON-NLS-1$
 
 		List<ICompilationUnit> units = new ArrayList<>();
-		IProgressMonitor progress = monitor == null ? new NullProgressMonitor() : monitor;
+		IProgressMonitor progress = monitor;
 		String path = args.getString("path"); //$NON-NLS-1$
 		String projectName = args.getString("project"); //$NON-NLS-1$
 		try {

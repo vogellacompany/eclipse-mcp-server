@@ -25,9 +25,6 @@ public final class RunScriptTool implements IMcpTool {
 
 	private static final int MAX_STEPS = 100;
 
-	/** A script inside a script would nest UI turns and defeat the budget. */
-	private static final ThreadLocal<Boolean> RUNNING = ThreadLocal.withInitial(() -> Boolean.FALSE);
-
 	@Override
 	public String getName() {
 		return "eclipse_run_script"; //$NON-NLS-1$
@@ -65,9 +62,6 @@ public final class RunScriptTool implements IMcpTool {
 
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
-		if (Boolean.TRUE.equals(RUNNING.get())) {
-			return McpToolResult.error("A script cannot run inside a script."); //$NON-NLS-1$
-		}
 		ToolArguments args = ToolArguments.of(arguments);
 		if (!(arguments.get("steps") instanceof List<?> raw)) { //$NON-NLS-1$
 			return McpToolResult.error("Give 'steps' as an array of {tool, arguments}."); //$NON-NLS-1$
@@ -98,7 +92,6 @@ public final class RunScriptTool implements IMcpTool {
 		}
 		boolean atomic = args.getBoolean("atomic", false); //$NON-NLS-1$
 		boolean stopOnFailure = args.getBoolean("stopOnFailure", true); //$NON-NLS-1$
-		RUNNING.set(Boolean.TRUE);
 		try {
 			List<McpToolResult.Image> images = new ArrayList<>();
 			JsonObject report = atomic
@@ -107,8 +100,6 @@ public final class RunScriptTool implements IMcpTool {
 			return new McpToolResult(report.toString(), false, images);
 		} catch (Exception e) {
 			return McpToolResult.error("The script could not be run: " + e); //$NON-NLS-1$
-		} finally {
-			RUNNING.set(Boolean.FALSE);
 		}
 	}
 
@@ -246,11 +237,14 @@ public final class RunScriptTool implements IMcpTool {
 				}
 			}
 			if (map.containsKey("size")) { //$NON-NLS-1$
-				int wanted = number(map.get("size")); //$NON-NLS-1$
-				int actual = found instanceof List<?> list ? list.size() : -1;
-				return actual == wanted ? null
-						: found instanceof List ? "the list has %d entries".formatted(Integer.valueOf(actual)) //$NON-NLS-1$
-								: "that is not a list"; //$NON-NLS-1$
+				if (!(map.get("size") instanceof Number wanted)) { //$NON-NLS-1$
+					return "the expected size is not a number"; //$NON-NLS-1$
+				}
+				if (!(found instanceof List<?> list)) {
+					return "that is not a list"; //$NON-NLS-1$
+				}
+				return list.size() == wanted.intValue() ? null
+						: "the list has %d entries".formatted(Integer.valueOf(list.size())); //$NON-NLS-1$
 			}
 			return "the expectation names no matcher; use contains, matches, exists or size"; //$NON-NLS-1$
 		}
@@ -269,10 +263,6 @@ public final class RunScriptTool implements IMcpTool {
 			return ((Number) expected).doubleValue() == ((Number) found).doubleValue();
 		}
 		return String.valueOf(expected).equals(String.valueOf(found));
-	}
-
-	private static int number(Object value) {
-		return value instanceof Number n ? n.intValue() : -1;
 	}
 
 	private static String describe(Object matcher) {

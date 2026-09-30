@@ -8,6 +8,7 @@ import org.eclipse.pde.core.target.ITargetDefinition;
 import org.eclipse.pde.core.target.ITargetHandle;
 import org.eclipse.pde.core.target.ITargetPlatformService;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -43,7 +44,8 @@ public final class SetTargetPlatformTool implements IMcpTool {
 				    "wait":             {"type":"boolean","default":true,"description":"Wait for the job to finish before answering."},
 				    "timeoutSeconds":   {"type":"integer","default":25,"minimum":1,"maximum":3600,"description":"How long to wait before returning with state 'running'. Keep this below the server's tool call timeout, which is set in Preferences > General > MCP Server. The job keeps running either way."},
 				    "includeLocations": {"type":"boolean","default":true,"description":"Report each location of the definition with its resolution status."},
-				    "maxProblems":      {"type":"integer","default":50,"minimum":1,"maximum":1000,"description":"Cap on the reported bundles that failed to resolve."}
+				    "maxProblems":      {"type":"integer","default":50,"minimum":1,"maximum":1000,"description":"Cap on the reported bundles that failed to resolve."},
+			    "maxResults":       {"type":"integer","default":100,"minimum":1,"maximum":1000,"description":"Cap on the reported locations."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -62,6 +64,7 @@ public final class SetTargetPlatformTool implements IMcpTool {
 		int timeoutSeconds = args.getInt("timeoutSeconds", DEFAULT_TIMEOUT_SECONDS, 1, 3600); //$NON-NLS-1$
 		boolean includeLocations = args.getBoolean("includeLocations", true); //$NON-NLS-1$
 		int maxProblems = args.getInt("maxProblems", 50, 1, 1000); //$NON-NLS-1$
+		int maxResults = args.getInt("maxResults", 100, 1, 1000); //$NON-NLS-1$
 
 		return TargetPlatforms.with(service -> {
 			String named = file == null ? memento : file;
@@ -84,14 +87,16 @@ public final class SetTargetPlatformTool implements IMcpTool {
 			}
 
 			TargetLoad load = TargetLoad.start(named, definition, resolveOnly, previous(service));
+			String waitNote = null;
 			if (wait) {
 				try {
-					load.await(timeoutSeconds);
+					load.await(CallBudget.boundedWaitSeconds(timeoutSeconds));
 				} catch (InterruptedException e) {
 					Thread.currentThread().interrupt();
 				}
+				waitNote = CallBudget.clampNote(timeoutSeconds, "eclipse_get_target_platform"); //$NON-NLS-1$
 			}
-			return McpToolResult.of(load.toJson(includeLocations, maxProblems).toString());
+			return McpToolResult.of(load.toJson(includeLocations, maxProblems, maxResults).put("waitNote", waitNote).toString()); //$NON-NLS-1$
 		});
 	}
 

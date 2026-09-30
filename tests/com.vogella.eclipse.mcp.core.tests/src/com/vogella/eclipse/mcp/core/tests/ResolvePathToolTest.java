@@ -44,6 +44,19 @@ class ResolvePathToolTest {
 	}
 
 	@Test
+	void aFileOnDiskThatTheWorkspaceHasNotSeenKeepsItsOwnLocation() throws Exception {
+		IProject project = fixture.createProject(PROJECT);
+		File created = project.getLocation().append("fresh.txt").toFile();
+		java.nio.file.Files.writeString(created.toPath(), "x");
+
+		Map<String, Object> entry = resolve(created.getAbsolutePath()).get(0);
+
+		assertEquals("/" + PROJECT + "/fresh.txt", entry.get("workspacePath"), "got " + entry);
+		assertEquals(created.getAbsolutePath(), entry.get("location"));
+		assertEquals(Boolean.FALSE, entry.get("exists"));
+	}
+
+	@Test
 	void aProjectNameGivesItsPlaceOnDisk() throws Exception {
 		IProject project = fixture.createProject(PROJECT);
 
@@ -129,9 +142,6 @@ class ResolvePathToolTest {
 	private IFile write(String name, String content) throws Exception {
 		IProject project = fixture.createProject(PROJECT);
 		IFile file = project.getFile(name);
-		if (file.exists()) {
-			file.delete(true, new NullProgressMonitor());
-		}
 		file.create(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)), true,
 				new NullProgressMonitor());
 		return file;

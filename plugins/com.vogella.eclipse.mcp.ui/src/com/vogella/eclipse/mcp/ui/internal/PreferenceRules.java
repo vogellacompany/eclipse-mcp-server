@@ -26,11 +26,6 @@ public final class PreferenceRules {
 	 */
 	public record Rule(String selector, String escapedId, String qualifier, Map<String, String> values,
 			String media) {
-
-		/** How many pairs the block declares. */
-		public int size() {
-			return values.size();
-		}
 	}
 
 	private static final Pattern SELECTOR = Pattern.compile("(?i)IEclipsePreferences\\s*#\\s*([\\w\\-]+)[^{]*\\{"); //$NON-NLS-1$

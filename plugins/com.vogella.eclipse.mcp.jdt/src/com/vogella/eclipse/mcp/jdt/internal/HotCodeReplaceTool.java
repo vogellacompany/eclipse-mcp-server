@@ -1,28 +1,23 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.lang.instrument.ClassDefinition;
 import java.lang.instrument.Instrumentation;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.jar.Manifest;
 import java.util.stream.Stream;
 
-import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspaceRoot;
 import org.eclipse.core.resources.ResourcesPlugin;
-import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.Platform;
@@ -117,7 +112,7 @@ public final class HotCodeReplaceTool implements IMcpTool {
 			roots = outputRoots(javaProject);
 			result.put("project", projectName); //$NON-NLS-1$
 			if (bundleName == null) {
-				bundleName = symbolicNameOf(javaProject);
+				bundleName = FileText.symbolicName(javaProject.getProject().getFile("META-INF/MANIFEST.MF"));
 			}
 		} else {
 			Path dir = Path.of(directory);
@@ -184,10 +179,7 @@ public final class HotCodeReplaceTool implements IMcpTool {
 				.put("helperMillis", attachment.helperMillis()) //$NON-NLS-1$
 				.put("agentJar", attachment.agentJar() == null ? null : attachment.agentJar().toString())); //$NON-NLS-1$
 
-		Set<String> loadedNames = new HashSet<>();
-		for (Class<?> loaded : instrumentation.getAllLoadedClasses()) {
-			loadedNames.add(loaded.getName());
-		}
+		Map<String, List<Class<?>>> loadedByName = HotSwapSupport.loadedByName(instrumentation);
 		List<ClassDefinition> definitions = new ArrayList<>();
 		List<JsonObject> entries = new ArrayList<>();
 		for (Candidate candidate : candidates) {
@@ -198,8 +190,8 @@ public final class HotCodeReplaceTool implements IMcpTool {
 				failed.add(failure(candidate.name(), "could not read " + candidate.file() + ": " + e.getMessage())); //$NON-NLS-1$ //$NON-NLS-2$
 				continue;
 			}
-			for (Class<?> target : targets(candidate, bundle, instrumentation, failed)) {
-				JsonObject entry = describe(candidate, javaProject).put("wasLoaded", loadedNames.contains(candidate.name())) //$NON-NLS-1$
+			for (Class<?> target : targets(candidate, bundle, loadedByName, failed)) {
+				JsonObject entry = describe(candidate, javaProject).put("wasLoaded", loadedByName.containsKey(candidate.name())) //$NON-NLS-1$
 						.put("bytes", bytes.length); //$NON-NLS-1$
 				Bundle owner = FrameworkUtil.getBundle(target);
 				entry.put("owner", owner == null ? null : owner.getSymbolicName()); //$NON-NLS-1$
@@ -242,10 +234,10 @@ public final class HotCodeReplaceTool implements IMcpTool {
 		return McpToolResult.of(result.toString());
 	}
 
-	private static List<Class<?>> targets(Candidate candidate, Bundle bundle, Instrumentation instrumentation,
+	private static List<Class<?>> targets(Candidate candidate, Bundle bundle, Map<String, List<Class<?>>> loadedByName,
 			JsonArray failed) {
 		if (bundle == null) {
-			List<Class<?>> loaded = HotSwapSupport.loadedClasses(instrumentation, candidate.name());
+			List<Class<?>> loaded = loadedByName.getOrDefault(candidate.name(), List.of());
 			if (loaded.isEmpty()) {
 				failed.add(failure(candidate.name(),
 						"nothing in this IDE has loaded a class of that name, and no bundle was named that could; pass 'bundle' or a project with a manifest")); //$NON-NLS-1$
@@ -388,24 +380,6 @@ public final class HotCodeReplaceTool implements IMcpTool {
 			}
 		}
 		return result;
-	}
-
-	/** The bundle a PDE project builds, read from its manifest, or {@code null}. */
-	private static String symbolicNameOf(IJavaProject javaProject) throws McpToolException {
-		IFile manifestFile = javaProject.getProject().getFile("META-INF/MANIFEST.MF"); //$NON-NLS-1$
-		if (!manifestFile.exists()) {
-			return null;
-		}
-		try (InputStream in = manifestFile.getContents(true)) {
-			String value = new Manifest(in).getMainAttributes().getValue("Bundle-SymbolicName"); //$NON-NLS-1$
-			if (value == null) {
-				return null;
-			}
-			int directive = value.indexOf(';');
-			return (directive < 0 ? value : value.substring(0, directive)).trim();
-		} catch (IOException | CoreException e) {
-			throw new McpToolException("Could not read the manifest of " + javaProject.getElementName(), e); //$NON-NLS-1$
-		}
 	}
 
 	private static JsonArray notes(Bundle bundle) {

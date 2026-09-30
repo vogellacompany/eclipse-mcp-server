@@ -47,6 +47,26 @@ class ReadAndSearchToolsTest {
 	}
 
 	@Test
+	void readsAFileCreatedOutsideTheIde() throws Exception {
+		IProject project = fixture.createProject(PROJECT);
+		java.nio.file.Files.writeString(project.getLocation().append("outside.txt").toFile().toPath(), "from a shell\n");
+
+		Map<String, Object> result = TestFixture.callAndParse("eclipse_read_file",
+				Map.of("path", "/" + PROJECT + "/outside.txt"));
+
+		assertEquals(Boolean.TRUE, result.get("read"), result.toString());
+		assertTrue(String.valueOf(result.get("content")).contains("from a shell"));
+	}
+
+	@Test
+	void aPathWithoutAFileSegmentIsAnErrorNotAnException() throws Exception {
+		McpToolResult result = TestFixture.call("eclipse_read_file", Map.of("path", "/" + PROJECT));
+
+		assertTrue(result.isError());
+		assertTrue(result.text().contains("No file at the workspace path"), result.text());
+	}
+
+	@Test
 	void readsALineRange() throws Exception {
 		IProject project = fixture.createProject(PROJECT);
 		write(project, "lines.txt", "one\ntwo\nthree\nfour\n");
@@ -93,7 +113,6 @@ class ReadAndSearchToolsTest {
 
 		assertEquals(Integer.valueOf(2), result.get("total"), "got " + result);
 		assertEquals(Integer.valueOf(2), result.get("files"));
-		// matches arrive in file order, so the interesting one is found rather than assumed
 		Map<String, Object> match = inFile(result, "plugin.xml");
 		assertEquals(Integer.valueOf(2), match.get("line"));
 		assertTrue(String.valueOf(match.get("text")).contains("<matcher class="), "got " + match);

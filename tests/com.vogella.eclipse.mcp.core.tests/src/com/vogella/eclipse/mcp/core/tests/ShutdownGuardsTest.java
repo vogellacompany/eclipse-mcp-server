@@ -74,7 +74,6 @@ class ShutdownGuardsTest {
 
 	@Test
 	void displayInfoIsRegisteredAndRefusesHeadless() throws Exception {
-		TestFixture.tool("eclipse_get_display_info");
 		McpToolResult result = TestFixture.call("eclipse_get_display_info", Map.of());
 		assertTrue(result.isError(), "expected a refusal, got " + result.text());
 		assertTrue(result.text().toLowerCase().contains("no running workbench"), result.text());

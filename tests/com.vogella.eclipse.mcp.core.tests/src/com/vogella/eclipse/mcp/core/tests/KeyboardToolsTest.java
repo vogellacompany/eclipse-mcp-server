@@ -56,4 +56,16 @@ class KeyboardToolsTest {
 			assertTrue(expected.getMessage().contains("Nonsense"), "got " + expected.getMessage());
 		}
 	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void aTrailingPlusIsThePlusKey() throws Exception {
+		Map<String, Object> zoom = TestFixture.parse(KeyboardTools.describe("Ctrl++").toString());
+		assertEquals("+", zoom.get("character"));
+		assertEquals(List.of(Integer.valueOf(SWT.CTRL)), zoom.get("modifiers"));
+
+		Map<String, Object> plain = TestFixture.parse(KeyboardTools.describe("+").toString());
+		assertEquals("+", plain.get("character"));
+		assertTrue(((List<Object>) plain.get("modifiers")).isEmpty());
+	}
 }

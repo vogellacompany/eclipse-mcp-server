@@ -4,11 +4,9 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.UnsupportedCharsetException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.eclipse.core.resources.IContainer;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IFolder;
 import org.eclipse.core.resources.IProject;
@@ -21,7 +19,6 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
-import com.vogella.eclipse.mcp.core.WorkspaceSync;
 import com.vogella.eclipse.mcp.core.json.JsonArray;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
@@ -90,7 +87,7 @@ public final class WriteFileTool implements IMcpTool {
 
 		try {
 			// the state on disk decides between create and overwrite, so read it first
-			WorkspaceSync.refresh(file.exists() ? file : file.getParent(), monitor);
+			FileSupport.refresh(file, monitor);
 		} catch (CoreException e) {
 			// a folder that cannot be refreshed is still writable
 		}
@@ -113,7 +110,7 @@ public final class WriteFileTool implements IMcpTool {
 		}
 		byte[] bytes = text.getBytes(charset);
 
-		List<IFolder> missing = missingParents(file);
+		List<IFolder> missing = FileSupport.missingParents(file);
 		if (!missing.isEmpty() && !createParents) {
 			return McpToolResult.error("The folder '%s' does not exist. Pass createParents true to create it." //$NON-NLS-1$
 					.formatted(missing.get(missing.size() - 1).getFullPath()));
@@ -159,22 +156,12 @@ public final class WriteFileTool implements IMcpTool {
 		result.put("createdFolders", created); //$NON-NLS-1$
 	}
 
-	/** The folders between the project and the file that do not exist yet, outermost first. */
-	private static List<IFolder> missingParents(IFile file) {
-		List<IFolder> missing = new ArrayList<>();
-		IContainer parent = file.getParent();
-		while (parent instanceof IFolder folder && !folder.exists()) {
-			missing.add(0, folder);
-			parent = folder.getParent();
-		}
-		return missing;
-	}
-
 	/** The charset Eclipse has for the file, or the one its container gives new files. */
 	private static String charset(IFile file, boolean exists) {
 		try {
-			return exists ? file.getCharset() : file.getParent().getDefaultCharset();
-		} catch (CoreException e) {
+			String name = exists ? file.getCharset() : file.getParent().getDefaultCharset();
+			return Charset.isSupported(name) ? name : "UTF-8"; //$NON-NLS-1$
+		} catch (CoreException | IllegalArgumentException e) {
 			return "UTF-8"; //$NON-NLS-1$
 		}
 	}

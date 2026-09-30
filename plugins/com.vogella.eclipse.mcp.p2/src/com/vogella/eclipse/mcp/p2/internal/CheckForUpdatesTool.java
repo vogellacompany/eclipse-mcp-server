@@ -71,7 +71,8 @@ public final class CheckForUpdatesTool implements IMcpTool {
 		if (locations != null && (possible == null || possible.length == 0)) {
 			// the scope was the repositories holding the installed version, and an
 			// update lives somewhere else by definition
-			widened = Provisioning.widenToAllRepositories(agent, operation, monitor);
+			Provisioning.widenToAllRepositories(agent, operation, monitor);
+			widened = true;
 			possible = operation.getPossibleUpdates();
 		}
 		if (possible != null) {

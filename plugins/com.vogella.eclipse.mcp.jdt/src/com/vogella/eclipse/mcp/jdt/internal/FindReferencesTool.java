@@ -112,11 +112,11 @@ public final class FindReferencesTool implements IMcpTool {
 			if (projects.isEmpty()) {
 				return McpToolResult.error("The workspace contains no open Java project."); //$NON-NLS-1$
 			}
+			JavaModelSupport.refresh(projectName, monitor);
 			types = JavaModelSupport.findTypes(typeName, projects, monitor);
 			type = types.get(0);
 			overloads = memberName == null ? List.of() : overloadsOf(types, memberName, paramTypes);
-			fields = overloads.stream().flatMap(overload -> overload.members().stream())
-					.filter(IField.class::isInstance).toList();
+			fields = fieldsOf(overloads);
 			resolved = memberName == null ? type.getFullyQualifiedName()
 					: type.getFullyQualifiedName() + '#'
 							+ (paramTypes == null ? memberName : overloads.get(0).signature());
@@ -128,9 +128,7 @@ public final class FindReferencesTool implements IMcpTool {
 					"Read and write accesses only exist for fields, and '%s' does not resolve to one. Use accessKind 'all'." //$NON-NLS-1$
 							.formatted(resolved));
 		}
-		List<Overload> searched = ALL.equals(accessKind) ? overloads
-				: overloads.stream().filter(overload -> overload.members().stream().anyMatch(IField.class::isInstance))
-						.toList();
+		List<Overload> searched = searchedFor(overloads, accessKind);
 
 		IJavaSearchScope scope = projectName == null ? SearchEngine.createWorkspaceScope()
 				: SearchEngine.createJavaSearchScope(new IJavaElement[] { projects.get(0) }, true);
@@ -140,42 +138,12 @@ public final class FindReferencesTool implements IMcpTool {
 		// qualified name is supplied by several jars, which is the norm for a library
 		// like JUnit, that silently answers zero. Search the name instead and say so.
 		boolean byName = type.isBinary() && memberName == null;
-		List<Hit> hits = new ArrayList<>();
-		if (memberName == null) {
-			SearchPattern pattern = byName
-					? SearchPattern.createPattern(type.getFullyQualifiedName(), IJavaSearchConstants.TYPE,
-							IJavaSearchConstants.REFERENCES,
-							SearchPattern.R_EXACT_MATCH | SearchPattern.R_CASE_SENSITIVE)
-					: pattern(List.copyOf(types), IJavaSearchConstants.REFERENCES);
-			if (pattern == null) {
-				return McpToolResult.error("Could not build a search pattern for '%s'.".formatted(resolved)); //$NON-NLS-1$
-			}
-			for (SearchMatch match : search(pattern, scope, monitor, resolved)) {
-				hits.add(new Hit(match, null));
-			}
-		} else {
-			// one search per overload rather than a single pattern over all of them,
-			// so that every match knows which overload it belongs to. A merged count
-			// cannot tell "this one is dead and that one has sixteen callers" from
-			// "both are live"
-			boolean any = false;
-			for (Overload overload : searched) {
-				SearchPattern pattern = pattern(overload.members(), limitTo(accessKind));
-				if (pattern == null) {
-					continue;
-				}
-				any = true;
-				for (SearchMatch match : search(pattern, scope, monitor, resolved)) {
-					hits.add(new Hit(match, overload.signature()));
-				}
-			}
-			if (!any) {
-				return McpToolResult.error("Could not build a search pattern for '%s'.".formatted(resolved)); //$NON-NLS-1$
-			}
+		Found found = find(type, types, memberName, searched, accessKind, scope, monitor, resolved);
+		if (found == null) {
+			return McpToolResult.error("Could not build a search pattern for '%s'.".formatted(resolved)); //$NON-NLS-1$
 		}
-
-		int rawTotal = hits.size();
-		hits = deduplicate(hits);
+		int rawTotal = found.rawTotal();
+		List<Hit> hits = found.hits();
 
 		// a field written but never read is dead while every text search sees live occurrences,
 		// so the split is reported without the caller having to ask for it twice.
@@ -296,6 +264,62 @@ public final class FindReferencesTool implements IMcpTool {
 		return McpToolResult.of(result.toString());
 	}
 
+	/** The deduplicated hits of a search, and how many there were before folding linked copies. */
+	private record Found(List<Hit> hits, int rawTotal) {
+	}
+
+	private static List<IMember> fieldsOf(List<Overload> overloads) {
+		return overloads.stream().flatMap(overload -> overload.members().stream()).filter(IField.class::isInstance)
+				.toList();
+	}
+
+	private static List<Overload> searchedFor(List<Overload> overloads, String accessKind) {
+		return ALL.equals(accessKind) ? overloads
+				: overloads.stream().filter(overload -> overload.members().stream().anyMatch(IField.class::isInstance))
+						.toList();
+	}
+
+	/**
+	 * Runs the searches for a type or for the searched overloads of a member.
+	 * Returns {@code null} when no search pattern could be built.
+	 */
+	private Found find(IType type, List<IType> types, String memberName, List<Overload> searched, String accessKind,
+			IJavaSearchScope scope, IProgressMonitor monitor, String label) throws McpToolException {
+		List<Hit> hits = new ArrayList<>();
+		if (memberName == null) {
+			SearchPattern pattern = type.isBinary()
+					? SearchPattern.createPattern(type.getFullyQualifiedName(), IJavaSearchConstants.TYPE,
+							IJavaSearchConstants.REFERENCES, SearchPattern.R_EXACT_MATCH | SearchPattern.R_CASE_SENSITIVE)
+					: pattern(types, IJavaSearchConstants.REFERENCES);
+			if (pattern == null) {
+				return null;
+			}
+			for (SearchMatch match : search(pattern, scope, monitor, label)) {
+				hits.add(new Hit(match, null));
+			}
+		} else {
+			// one search per overload rather than a single pattern over all of them,
+			// so that every match knows which overload it belongs to. A merged count
+			// cannot tell "this one is dead and that one has sixteen callers" from
+			// "both are live"
+			boolean any = false;
+			for (Overload overload : searched) {
+				SearchPattern pattern = pattern(overload.members(), limitTo(accessKind));
+				if (pattern == null) {
+					continue;
+				}
+				any = true;
+				for (SearchMatch match : search(pattern, scope, monitor, label)) {
+					hits.add(new Hit(match, overload.signature()));
+				}
+			}
+			if (!any) {
+				return null;
+			}
+		}
+		return new Found(deduplicate(hits), hits.size());
+	}
+
 	/** One overload, and the copy of it declared by each project that declares the type. */
 	private record Overload(String signature, List<IMember> members) {
 	}
@@ -404,7 +428,7 @@ public final class FindReferencesTool implements IMcpTool {
 
 	/** {@code null} when absent, which is not the same as an empty list: that is the no-argument overload. */
 	private static List<String> paramTypes(Map<String, Object> arguments) {
-		if (arguments == null || !(arguments.get("paramTypes") instanceof List<?> list)) { //$NON-NLS-1$
+		if (!(arguments.get("paramTypes") instanceof List<?> list)) { //$NON-NLS-1$
 			return null;
 		}
 		return list.stream().map(String::valueOf).toList();
@@ -478,11 +502,12 @@ public final class FindReferencesTool implements IMcpTool {
 		if (projects.isEmpty()) {
 			return McpToolResult.error("The workspace contains no open Java project."); //$NON-NLS-1$
 		}
+		JavaModelSupport.refresh(projectName, monitor);
 		IJavaSearchScope scope = projectName == null ? SearchEngine.createWorkspaceScope()
 				: SearchEngine.createJavaSearchScope(new IJavaElement[] { projects.get(0) }, true);
 		JsonArray results = new JsonArray();
 		for (Map<String, Object> query : queries) {
-			if (monitor != null && monitor.isCanceled()) {
+			if (monitor.isCanceled()) {
 				return McpToolResult.error("The request was cancelled."); //$NON-NLS-1$
 			}
 			results.add(count(query, projects, scope, monitor));
@@ -520,45 +545,17 @@ public final class FindReferencesTool implements IMcpTool {
 		} catch (ToolInputException e) {
 			return entry.put("error", e.getMessage()); //$NON-NLS-1$
 		}
-		List<IMember> fields = overloads.stream().flatMap(overload -> overload.members().stream())
-				.filter(IField.class::isInstance).toList();
+		List<IMember> fields = fieldsOf(overloads);
 		if (!ALL.equals(accessKind) && fields.isEmpty()) {
 			return entry.put("error", "Read and write accesses only exist for fields."); //$NON-NLS-1$ //$NON-NLS-2$
 		}
-		List<Overload> searched = ALL.equals(accessKind) ? overloads
-				: overloads.stream().filter(overload -> overload.members().stream().anyMatch(IField.class::isInstance))
-						.toList();
-		List<Hit> hits = new ArrayList<>();
-		if (memberName == null) {
-			SearchPattern pattern = type.isBinary()
-					? SearchPattern.createPattern(type.getFullyQualifiedName(), IJavaSearchConstants.TYPE,
-							IJavaSearchConstants.REFERENCES,
-							SearchPattern.R_EXACT_MATCH | SearchPattern.R_CASE_SENSITIVE)
-					: pattern(List.copyOf(types), IJavaSearchConstants.REFERENCES);
-			if (pattern == null) {
-				return entry.put("error", "Could not build a search pattern."); //$NON-NLS-1$ //$NON-NLS-2$
-			}
-			for (SearchMatch match : search(pattern, scope, monitor, typeName)) {
-				hits.add(new Hit(match, null));
-			}
-		} else {
-			boolean any = false;
-			for (Overload overload : searched) {
-				SearchPattern pattern = pattern(overload.members(), limitTo(accessKind));
-				if (pattern == null) {
-					continue;
-				}
-				any = true;
-				for (SearchMatch match : search(pattern, scope, monitor, typeName)) {
-					hits.add(new Hit(match, overload.signature()));
-				}
-			}
-			if (!any) {
-				return entry.put("error", "Could not build a search pattern."); //$NON-NLS-1$ //$NON-NLS-2$
-			}
+		List<Overload> searched = searchedFor(overloads, accessKind);
+		Found found = find(type, types, memberName, searched, accessKind, scope, monitor, typeName);
+		if (found == null) {
+			return entry.put("error", "Could not build a search pattern."); //$NON-NLS-1$ //$NON-NLS-2$
 		}
-		int rawTotal = hits.size();
-		hits = deduplicate(hits);
+		int rawTotal = found.rawTotal();
+		List<Hit> hits = found.hits();
 		Set<String> declarations = declarationsOf(fields);
 		int binary = 0;
 		int declared = 0;
@@ -601,7 +598,7 @@ public final class FindReferencesTool implements IMcpTool {
 	@SuppressWarnings("unchecked")
 	private static List<Map<String, Object>> queries(Map<String, Object> arguments) {
 		List<Map<String, Object>> values = new ArrayList<>();
-		if (arguments != null && arguments.get("queries") instanceof List<?> list) { //$NON-NLS-1$
+		if (arguments.get("queries") instanceof List<?> list) { //$NON-NLS-1$
 			for (Object value : list) {
 				if (value instanceof Map<?, ?> map && map.get("typeName") != null) { //$NON-NLS-1$
 					values.add((Map<String, Object>) map);

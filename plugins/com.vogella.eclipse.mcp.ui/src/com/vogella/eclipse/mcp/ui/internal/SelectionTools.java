@@ -58,7 +58,14 @@ public final class SelectionTools {
 
 	/** One selected object as the other tools report it. */
 	public static JsonObject describe(Object element) {
-		return describeElement(element);
+		IResource resource = element == null ? null : Adapters.adapt(element, IResource.class);
+		return new JsonObject().put("class", element == null ? null : element.getClass().getName()) //$NON-NLS-1$
+				.put("label", label(element, resource)) //$NON-NLS-1$
+				.put("adaptsToResource", Boolean.valueOf(resource != null)) //$NON-NLS-1$
+				.put("path", resource == null ? null : resource.getFullPath().toString()) //$NON-NLS-1$
+				.put("project", resource == null || resource.getProject() == null ? null //$NON-NLS-1$
+						: resource.getProject().getName())
+				.put("accessible", resource == null ? null : Boolean.valueOf(resource.isAccessible())); //$NON-NLS-1$
 	}
 
 	/** What the handler framework is looking at, which is not always the active part's viewer. */
@@ -74,24 +81,9 @@ public final class SelectionTools {
 		}
 		JsonArray elements = new JsonArray();
 		for (Object element : structured) {
-			elements.add(describeElement(element));
+			elements.add(describe(element));
 		}
 		return result.put("size", Integer.valueOf(structured.size())).put("elements", elements); //$NON-NLS-1$ //$NON-NLS-2$
-	}
-
-	/**
-	 * One selected object, with the part a handler cares about: whether it adapts
-	 * to a resource, which is what most enablement expressions test.
-	 */
-	private static JsonObject describeElement(Object element) {
-		IResource resource = element == null ? null : Adapters.adapt(element, IResource.class);
-		return new JsonObject().put("class", element == null ? null : element.getClass().getName()) //$NON-NLS-1$
-				.put("label", label(element, resource)) //$NON-NLS-1$
-				.put("adaptsToResource", Boolean.valueOf(resource != null)) //$NON-NLS-1$
-				.put("path", resource == null ? null : resource.getFullPath().toString()) //$NON-NLS-1$
-				.put("project", resource == null || resource.getProject() == null ? null //$NON-NLS-1$
-						: resource.getProject().getName())
-				.put("accessible", resource == null ? null : Boolean.valueOf(resource.isAccessible())); //$NON-NLS-1$
 	}
 
 	/**
@@ -123,12 +115,8 @@ public final class SelectionTools {
 		return value.length() <= MAX_LABEL ? value : value.substring(0, MAX_LABEL) + "..."; //$NON-NLS-1$
 	}
 
-	/** The part a tool argument names, for the other tools in this package. */
+	/** The part a tool argument names, or the active part when none is given. */
 	static IWorkbenchPart partFor(String partId) {
-		return findPart(partId);
-	}
-
-	private static IWorkbenchPart findPart(String partId) {
 		IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
 		IWorkbenchPage page = window == null ? null : window.getActivePage();
 		if (page == null) {
@@ -242,7 +230,7 @@ public final class SelectionTools {
 			List<String> specs = new ArrayList<>();
 			requested.forEach(value -> specs.add(String.valueOf(value)));
 			return UiThread.call(UI_TIMEOUT_SECONDS, () -> {
-				IWorkbenchPart part = findPart(partId);
+				IWorkbenchPart part = partFor(partId);
 				if (part == null) {
 					throw new IllegalArgumentException(partId == null
 							? "There is no active part to select in. Give 'part'." //$NON-NLS-1$
@@ -379,22 +367,14 @@ public final class SelectionTools {
 				return null;
 			}
 			if (value.startsWith("/")) { //$NON-NLS-1$
-				IResource member = ResourcesPlugin.getWorkspace().getRoot().findMember(value);
-				return member;
+				return ResourcesPlugin.getWorkspace().getRoot().findMember(value);
 			}
 			if (value.matches("[0-9]+(/[ir]?[0-9]+)*")) { //$NON-NLS-1$
-				// a widget path that names no row is unresolved and nothing else. It
-				// used to fall through to getProject below, which throws
-				// IllegalArgumentException on a name with more than one segment, so a
-				// row path that missed came back as "The request failed:
-				// java.lang.IllegalArgumentException: Path for project must have only
-				// one segment" and read as the row form not being implemented at all
+				// a row path that names no row is unresolved; getProject below would throw on it
 				return rowData(value, part);
 			}
 			if (value.indexOf('/') >= 0) {
-				// same crash by another route: a relative path is neither a workspace
-				// path, which starts with a slash, nor a project name, which cannot
-				// contain one
+				// a relative path is neither a workspace path nor a project name, and getProject throws on it
 				return null;
 			}
 			var project = ResourcesPlugin.getWorkspace().getRoot().getProject(value);

@@ -18,7 +18,9 @@ import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.jobs.IJobChangeEvent;
 import org.eclipse.core.runtime.jobs.Job;
+import org.eclipse.core.runtime.jobs.JobChangeAdapter;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.internal.wizards.datatransfer.SmartImportJob;
 import org.eclipse.ui.wizards.datatransfer.ProjectConfigurator;
@@ -129,6 +131,13 @@ public final class ImportProjectTool implements IMcpTool {
 			}
 		});
 
+		// while the import runs auto-build stays off on purpose, so a wait that ran out restores it only when the job ends
+		work.addJobChangeListener(new JobChangeAdapter() {
+			@Override
+			public void done(IJobChangeEvent event) {
+				restoreAutoBuilding(workspace, wasAutoBuilding);
+			}
+		});
 		boolean finished;
 		try {
 			work.schedule();
@@ -136,8 +145,6 @@ public final class ImportProjectTool implements IMcpTool {
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			return McpToolResult.error("The import was interrupted."); //$NON-NLS-1$
-		} finally {
-			restoreAutoBuilding(workspace, wasAutoBuilding);
 		}
 
 		Map<File, List<ProjectConfigurator>> proposals = scanned[0];

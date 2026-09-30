@@ -23,6 +23,7 @@ import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.OperationCanceledException;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 
@@ -171,6 +172,17 @@ public final class BuildRegistry {
 			return warnings;
 		}
 
+		/** Ends a build whose job threw, so that nobody waits for an outcome that will never be set. */
+		void abort(RuntimeException failure) {
+			if (!"running".equals(state)) { //$NON-NLS-1$
+				return;
+			}
+			builderFailures = List.of(String.valueOf(failure));
+			endedAt = System.currentTimeMillis();
+			state = "failed"; //$NON-NLS-1$
+			finished.countDown();
+		}
+
 		boolean await(long timeout, TimeUnit unit) throws InterruptedException {
 			return finished.await(timeout, unit);
 		}
@@ -225,8 +237,12 @@ public final class BuildRegistry {
 		Job job = new Job("MCP " + request.kind()) { //$NON-NLS-1$
 
 			@Override
-			protected org.eclipse.core.runtime.IStatus run(org.eclipse.core.runtime.IProgressMonitor monitor) {
-				BuildRegistry.run(build, request, monitor);
+			protected IStatus run(IProgressMonitor monitor) {
+				try {
+					BuildRegistry.run(build, request, monitor);
+				} catch (RuntimeException e) {
+					build.abort(e);
+				}
 				return Status.OK_STATUS;
 			}
 
@@ -236,7 +252,6 @@ public final class BuildRegistry {
 			}
 		};
 		job.setRule(ResourcesPlugin.getWorkspace().getRuleFactory().buildRule());
-		job.setUser(false);
 		build.job = job;
 		job.schedule();
 		return build;
@@ -360,7 +375,7 @@ public final class BuildRegistry {
 	 * rather than call a broken build clean.
 	 */
 	private static void collectLogged(Build build, List<String> into) {
-		var location = org.eclipse.core.runtime.Platform.getLogFileLocation();
+		var location = Platform.getLogFileLocation();
 		if (location == null) {
 			return;
 		}

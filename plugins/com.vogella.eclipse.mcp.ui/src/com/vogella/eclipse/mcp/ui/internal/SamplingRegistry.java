@@ -34,14 +34,7 @@ public final class SamplingRegistry {
 
 	private final AtomicLong ids = new AtomicLong();
 
-	private final Map<String, Session> sessions = new LinkedHashMap<>() {
-		private static final long serialVersionUID = 1L;
-
-		@Override
-		protected boolean removeEldestEntry(Map.Entry<String, Session> eldest) {
-			return size() > 10 && !eldest.getValue().running;
-		}
-	};
+	private final Map<String, Session> sessions = new LinkedHashMap<>();
 
 	public static SamplingRegistry getInstance() {
 		return INSTANCE;
@@ -154,6 +147,9 @@ public final class SamplingRegistry {
 						stoppedByBudget = true;
 					}
 				}
+				if (!running) {
+					break;
+				}
 				try {
 					Thread.sleep(intervalMillis);
 				} catch (InterruptedException e) {
@@ -203,6 +199,12 @@ public final class SamplingRegistry {
 		String id = "sampling-" + ids.incrementAndGet(); //$NON-NLS-1$
 		Session session = new Session(id, threadIds, intervalMillis, maxSamples, maxDepth);
 		sessions.put(id, session);
+		// oldest finished session first: a long running one at the head must not pin the rest
+		for (var it = sessions.values().iterator(); sessions.size() > 10 && it.hasNext();) {
+			if (!it.next().running) {
+				it.remove();
+			}
+		}
 		Thread sampler = new Thread(session::run, "MCP stack sampler " + id); //$NON-NLS-1$
 		sampler.setDaemon(true);
 		// below normal, so that sampling never competes with the work being measured
@@ -229,32 +231,6 @@ public final class SamplingRegistry {
 		return latest;
 	}
 
-	/**
-	 * Aggregates the samples rather than returning them.
-	 * <p>
-	 * A hundred samples of seventy frames is seven thousand lines, which is unusable
-	 * in a model context window and is the same mistake as an uncapped screenshot.
-	 */
-	public static JsonObject aggregate(Session session, int topMethods, int minSamples, boolean includeRaw,
-			boolean includeIdle) {
-		return aggregate(session, topMethods, minSamples, includeRaw, includeIdle, null, false, false);
-	}
-
-	public static JsonObject aggregate(Session session, int topMethods, int minSamples, boolean includeRaw,
-			boolean includeIdle, String frameFilter) {
-		return aggregate(session, topMethods, minSamples, includeRaw, includeIdle, frameFilter, false, false);
-	}
-
-	/**
-	 * Aggregates the samples rather than returning them, optionally only those whose
-	 * stack contains {@code frameFilter}.
-	 * <p>
-	 * The filter is applied here rather than while sampling, so one session can be
-	 * read from several angles without being taken again. It earns its place because
-	 * the top of an unfiltered IDE profile is Jetty accept loops, the AWT event
-	 * pump and the reference handler, none of which is ever the answer to the
-	 * question a caller is asking.
-	 */
 	/** The samples a set of options selects, so every view of a session picks the same ones. */
 	private static Selection select(Session session, boolean includeIdle, String frameFilter, boolean includeServer) {
 		List<Sample> everything = session.snapshot();
@@ -354,6 +330,16 @@ public final class SamplingRegistry {
 		}
 	}
 
+	/**
+	 * Aggregates the samples rather than returning them, optionally only those whose
+	 * stack contains {@code frameFilter}.
+	 * <p>
+	 * The filter is applied here rather than while sampling, so one session can be
+	 * read from several angles without being taken again. It earns its place because
+	 * the top of an unfiltered IDE profile is Jetty accept loops, the AWT event
+	 * pump and the reference handler, none of which is ever the answer to the
+	 * question a caller is asking.
+	 */
 	public static JsonObject aggregate(Session session, int topMethods, int minSamples, boolean includeRaw,
 			boolean includeIdle, String frameFilter, boolean includeAllThreads, boolean includeServer) {
 		Selection selection = select(session, includeIdle, frameFilter, includeServer);
@@ -404,9 +390,11 @@ public final class SamplingRegistry {
 							.formatted(session.ticks(), session.elapsedMillis()));
 		}
 		if (samples.isEmpty()) {
-			return result.put("note", idle > 0 //$NON-NLS-1$
+			String empty = idle > 0
 					? "Every sample was a thread parked or waiting. Nothing was running; sample the ui thread to profile UI work." //$NON-NLS-1$
-					: "No samples were taken. The threads may have been idle or already gone."); //$NON-NLS-1$
+					: "No samples were taken. The threads may have been idle or already gone."; //$NON-NLS-1$
+			Object earlier = result.remove("note"); //$NON-NLS-1$
+			return result.put("note", earlier == null ? empty : earlier + " " + empty); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 
 		// self time: the innermost frame is where the thread actually was
@@ -443,14 +431,6 @@ public final class SamplingRegistry {
 		return result;
 	}
 
-	/**
-	 * Per thread, with its states and the CPU time it actually burned.
-	 * <p>
-	 * Without this two workers collapse into one entry, so a saturated thread and
-	 * two half-busy ones look identical, and a 24 second stall cannot be told to
-	 * have been the UI thread. The states answer the other half: blocked on a lock
-	 * and burning CPU are the same number of samples and opposite diagnoses.
-	 */
 	/** The threads that contributed a sample the answer is actually about. */
 	private static java.util.Set<Long> contributing(List<Sample> samples) {
 		java.util.Set<Long> ids = new java.util.HashSet<>();
@@ -460,6 +440,14 @@ public final class SamplingRegistry {
 		return ids;
 	}
 
+	/**
+	 * Per thread, with its states and the CPU time it actually burned.
+	 * <p>
+	 * Without this two workers collapse into one entry, so a saturated thread and
+	 * two half-busy ones look identical, and a 24 second stall cannot be told to
+	 * have been the UI thread. The states answer the other half: blocked on a lock
+	 * and burning CPU are the same number of samples and opposite diagnoses.
+	 */
 	private static JsonArray byThread(List<Sample> samples, java.util.Set<Long> contributing, Session session,
 			boolean includeAll) {
 		Map<Long, String> names = new LinkedHashMap<>();
@@ -759,7 +747,7 @@ public final class SamplingRegistry {
 	}
 
 	/** Pool threads differ only by a number, and a branch per worker would split one job into many. */
-	static String threadGroup(String name) {
+	public static String threadGroup(String name) {
 		if (name == null) {
 			return "unnamed"; //$NON-NLS-1$
 		}

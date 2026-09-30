@@ -1,5 +1,6 @@
 package com.vogella.eclipse.mcp.core.tests;
 
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -78,7 +79,7 @@ class InstallBundleToolTest {
 				Map.of("jar", jar(SYMBOL, "1.0.0").toString(), "dryRun", Boolean.FALSE));
 
 		assertEquals("installed", installed.get("outcome"), installed.toString());
-		assertEquals(null, installed.get("previousVersion"));
+		assertNull(installed.get("previousVersion"));
 		assertEquals("1.0.0", installed.get("version"));
 		assertEquals(Boolean.TRUE, installed.get("resolved"));
 		assertEquals("ACTIVE", installed.get("state"));
@@ -101,6 +102,20 @@ class InstallBundleToolTest {
 		assertNotNull(extensions, "a hot answer reports what the registry attributes");
 		assertEquals(Boolean.FALSE, extensions.get("pluginXmlInJar"), extensions.toString());
 		assertEquals(Integer.valueOf(0), extensions.get("total"));
+	}
+
+	@Test
+	void aJarRebuiltInPlaceWithTheSameVersionIsUpdatedNotRefused() throws Exception {
+		Path built = jar(SYMBOL, "1.0.0");
+		TestFixture.callAndParse(TOOL, Map.of("jar", built.toString(), "dryRun", Boolean.FALSE));
+
+		Path rebuilt = jar(SYMBOL, "1.0.0", PLUGIN_XML);
+		Files.setLastModifiedTime(rebuilt,
+				java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 5_000));
+		McpToolResult result = TestFixture.call(TOOL, Map.of("jar", rebuilt.toString(), "dryRun", Boolean.FALSE));
+
+		assertFalse(result.isError(), result.text());
+		assertEquals(built, rebuilt, "the point of the test is that the path is the same");
 	}
 
 	@Test
@@ -129,7 +144,7 @@ class InstallBundleToolTest {
 
 		assertEquals(Boolean.TRUE, result.get("dryRun"));
 		assertEquals("installed", result.get("wouldBe"), result.toString());
-		assertEquals(null, result.get("previousVersion"));
+		assertNull(result.get("previousVersion"));
 		assertEquals(Integer.valueOf(0), result.get("total"), result.toString());
 		assertEquals(0, countInstalled(), "a dry run must not install anything");
 	}

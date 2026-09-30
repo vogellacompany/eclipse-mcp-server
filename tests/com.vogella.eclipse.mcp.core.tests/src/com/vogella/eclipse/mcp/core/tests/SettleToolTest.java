@@ -21,7 +21,6 @@ class SettleToolTest {
 
 	@Test
 	void itIsRegisteredAndRefusesWithoutAWorkbench() throws Exception {
-		TestFixture.tool("eclipse_wait_until_settled");
 		McpToolResult result = TestFixture.call("eclipse_wait_until_settled", Map.of());
 
 		assertTrue(result.isError(), "got " + result.text());

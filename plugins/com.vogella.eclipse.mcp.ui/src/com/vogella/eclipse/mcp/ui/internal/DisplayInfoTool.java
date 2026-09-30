@@ -5,7 +5,6 @@ import java.util.Map;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Point;
-import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Monitor;
 
@@ -91,18 +90,12 @@ public final class DisplayInfoTool implements IMcpTool {
 		for (int i = 0; i < all.length; i++) {
 			Monitor candidate = all[i];
 			array.add(new JsonObject().put("index", Integer.valueOf(i)) //$NON-NLS-1$
-					.put("bounds", rectangle(candidate.getBounds())) //$NON-NLS-1$
-					.put("clientArea", rectangle(candidate.getClientArea())) //$NON-NLS-1$
+					.put("bounds", Overlays.describe(candidate.getBounds())) //$NON-NLS-1$
+					.put("clientArea", Overlays.describe(candidate.getClientArea())) //$NON-NLS-1$
 					.put("zoom", Integer.valueOf(candidate.getZoom())) //$NON-NLS-1$
 					.put("primary", Boolean.valueOf(candidate.equals(primary)))); //$NON-NLS-1$
 		}
 		return array;
-	}
-
-	private static String rectangle(Rectangle bounds) {
-		return bounds == null ? null
-				: "%d,%d %dx%d".formatted(Integer.valueOf(bounds.x), Integer.valueOf(bounds.y), //$NON-NLS-1$
-						Integer.valueOf(bounds.width), Integer.valueOf(bounds.height));
 	}
 
 	/**

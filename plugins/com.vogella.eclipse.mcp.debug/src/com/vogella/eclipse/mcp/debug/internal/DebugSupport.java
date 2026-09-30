@@ -146,13 +146,13 @@ final class DebugSupport {
 		}
 		if (threadArg != null) {
 			for (IThread thread : list) {
-				if (name(thread).equals(threadArg) || String.valueOf(System.identityHashCode(thread)).equals(threadArg)) {
+				if (name(thread).equals(threadArg)) {
 					return thread;
 				}
 			}
 			throw new Refusal("No thread '%s'. Threads: %s".formatted(threadArg, describeThreads(list))); //$NON-NLS-1$
 		}
-		List<IThread> suspended = list.stream().filter(DebugSupport::isSuspended).toList();
+		List<IThread> suspended = list.stream().filter(IThread::isSuspended).toList();
 		if (suspended.isEmpty()) {
 			throw new Refusal("Nothing is suspended here. Pass 'thread' to name one of: %s" //$NON-NLS-1$
 					.formatted(describeThreads(list)));
@@ -162,10 +162,6 @@ final class DebugSupport {
 					.formatted(describeThreads(suspended)));
 		}
 		return suspended.get(0);
-	}
-
-	static boolean isSuspended(IThread thread) {
-		return thread.isSuspended();
 	}
 
 	static String name(IThread thread) {
@@ -367,7 +363,7 @@ final class DebugSupport {
 	}
 
 	private static JsonObject threadJson(IThread thread, Session session) {
-		boolean suspended = isSuspended(thread);
+		boolean suspended = thread.isSuspended();
 		JsonObject json = new JsonObject().put("name", name(thread)).put("suspended", Boolean.valueOf(suspended)); //$NON-NLS-1$ //$NON-NLS-2$
 		if (suspended) {
 			json.put("location", location(thread)); //$NON-NLS-1$
@@ -402,7 +398,7 @@ final class DebugSupport {
 				text.append(", "); //$NON-NLS-1$
 			}
 			text.append(name(thread));
-			if (isSuspended(thread)) {
+			if (thread.isSuspended()) {
 				text.append(" (suspended)"); //$NON-NLS-1$
 			}
 		}

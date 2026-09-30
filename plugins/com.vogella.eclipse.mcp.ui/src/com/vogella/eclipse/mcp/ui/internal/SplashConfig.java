@@ -26,7 +26,7 @@ public final class SplashConfig {
 	public static String read(List<String> lines, String key) {
 		for (String line : lines) {
 			String trimmed = line.strip();
-			if (trimmed.startsWith("#") || !trimmed.startsWith(key + "=")) { //$NON-NLS-1$ //$NON-NLS-2$
+			if (!trimmed.startsWith(key + "=")) { //$NON-NLS-1$
 				continue;
 			}
 			return unescape(trimmed.substring(key.length() + 1));
@@ -42,7 +42,7 @@ public final class SplashConfig {
 		List<String> result = new ArrayList<>(lines.size() + 1);
 		boolean replaced = false;
 		for (String line : lines) {
-			if (!replaced && !line.strip().startsWith("#") && line.strip().startsWith(key + "=")) { //$NON-NLS-1$ //$NON-NLS-2$
+			if (!replaced && line.strip().startsWith(key + "=")) { //$NON-NLS-1$
 				result.add(key + "=" + escape(value)); //$NON-NLS-1$
 				replaced = true;
 			} else {
@@ -59,7 +59,7 @@ public final class SplashConfig {
 	public static List<String> remove(List<String> lines, String key) {
 		List<String> result = new ArrayList<>(lines.size());
 		for (String line : lines) {
-			if (line.strip().startsWith("#") || !line.strip().startsWith(key + "=")) { //$NON-NLS-1$ //$NON-NLS-2$
+			if (!line.strip().startsWith(key + "=")) { //$NON-NLS-1$
 				result.add(line);
 			}
 		}

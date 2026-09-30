@@ -33,7 +33,7 @@ public final class GetFramesTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Reads the stack of one suspended thread and the variables of one frame: index, declaring type, method with its signature, line, source file, native flag, and for the selected frame every variable with name, declared type, value, hasChildren and the runtime type when it differs from the declared one. Read only. 'variablePath' expands one level deeper into an object or array per call, e.g. this.buffer.count; the tool never walks an object graph on its own, because a live graph is unbounded. Values are cut at maxValueLength and marked valueTruncated. Refuses with the suspended threads when several are stopped and none is named. Use eclipse_debug_evaluate to compute something instead of reading fields."; //$NON-NLS-1$
+		return "Reads the stack of one suspended thread (frameTotal, framesTruncated) and the variables of one frame (total, truncated): index, declaring type, method with its signature, line, source file, native flag, and for the selected frame every variable with name, declared type, value, hasChildren and the runtime type when it differs from the declared one. Read only. 'variablePath' expands one level deeper into an object or array per call, e.g. this.buffer.count; the tool never walks an object graph on its own, because a live graph is unbounded. Values are cut at maxValueLength and marked valueTruncated. Refuses with the suspended threads when several are stopped and none is named. Use eclipse_debug_evaluate to compute something instead of reading fields."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -74,8 +74,8 @@ public final class GetFramesTool implements IMcpTool {
 			}
 			JsonObject json = new JsonObject().put("sessionId", session.id()) //$NON-NLS-1$
 					.put("thread", DebugSupport.name(thread)).put("frames", frames) //$NON-NLS-1$ //$NON-NLS-2$
-					.put("total", Integer.valueOf(stack.size())) //$NON-NLS-1$
-					.put("truncated", Boolean.valueOf(frames.size() < stack.size())); //$NON-NLS-1$
+					.put("frameTotal", Integer.valueOf(stack.size())) //$NON-NLS-1$
+					.put("framesTruncated", Boolean.valueOf(frames.size() < stack.size())); //$NON-NLS-1$
 
 			String path = args.getString("variablePath"); //$NON-NLS-1$
 			IVariable[] shown;
@@ -103,17 +103,15 @@ public final class GetFramesTool implements IMcpTool {
 				shown = children(selected);
 			}
 			JsonArray variables = new JsonArray();
-			int reported = 0;
 			for (IVariable child : shown) {
 				if (variables.size() >= maxResults) {
 					break;
 				}
 				variables.add(variableJson(child, maxValueLength));
-				reported++;
 			}
 			json.put("variablePath", path).put("variables", variables) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("total", Integer.valueOf(shown.length)) //$NON-NLS-1$
-					.put("truncated", Boolean.valueOf(reported < shown.length)); //$NON-NLS-1$
+					.put("truncated", Boolean.valueOf(variables.size() < shown.length)); //$NON-NLS-1$
 			return McpToolResult.of(json.toString());
 		} catch (DebugException e) {
 			throw new McpToolException("Could not read the frames: %s".formatted(e.getMessage()), e);

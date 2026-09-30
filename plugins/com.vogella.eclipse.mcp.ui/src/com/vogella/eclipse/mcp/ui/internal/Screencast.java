@@ -42,14 +42,6 @@ public final class Screencast {
 
 	private static final int KEEP = 20;
 
-	/**
-	 * On GTK 3, Control.print size-allocates and draws the live widget into the
-	 * caller's surface, after which the on-screen copy stays unpainted until
-	 * something invalidates it: a root capture after a screencast frame was a
-	 * blank editor. Queueing a redraw after every print is what puts it back.
-	 */
-	static final boolean GTK = "gtk".equals(SWT.getPlatform()); //$NON-NLS-1$
-
 	private final Map<String, Session> sessions = new LinkedHashMap<>();
 
 	private int counter;
@@ -73,7 +65,7 @@ public final class Screencast {
 		private final int maxWidth;
 		private final Path directory;
 		private final long startedAt = System.currentTimeMillis();
-		private ExecutorService encoder = newEncoder();
+		private volatile ExecutorService encoder = newEncoder();
 		private final List<Long> timestamps = new ArrayList<>();
 		private volatile String caption;
 		private volatile String captionPosition = OVER;
@@ -90,8 +82,8 @@ public final class Screencast {
 		private int lateTicks;
 		private long maxLatenessMillis;
 		private long paintMillis;
-		private int zoom = 100;
-		private String frameSize;
+		private volatile int zoom = 100;
+		private volatile String frameSize;
 
 		private volatile int frameWidth;
 
@@ -361,15 +353,6 @@ public final class Screencast {
 	record Frame(ImageData data, int zoom, Image image) {
 	}
 
-	/**
-	 * Paints the control at its monitor's zoom. A shell is composed from its
-	 * children the way the screenshot does, because {@code Shell.print} is blank
-	 * under a compositing window manager while the children print fine.
-	 */
-	static Frame paint(Display display, Control printable, boolean composed) {
-		return paint(display, printable, composed, null, null, OVER);
-	}
-
 	public static final String OVER = "over"; //$NON-NLS-1$
 
 	public static final String ABOVE = "above"; //$NON-NLS-1$
@@ -410,19 +393,22 @@ public final class Screencast {
 		int bar = caption == null ? 0 : captionBarHeight(display, caption);
 		int added = outside ? bar : 0;
 		int pictureY = outside && ABOVE.equals(position) ? bar : 0;
-		Image framed = DeviceScale.paint(display, kept.width, kept.height + added, full.zoom(), (gc, width, height) -> {
-			// the frame already holds device pixels, so it is placed rather than
-			// drawn through the canvas' scale, while the caption is painted at it
-			DeviceScale.drawPixels(gc, full.image(), -kept.x, pictureY - kept.y, full.zoom());
-			if (caption != null) {
-				int barY = ABOVE.equals(position) && outside ? 0 : height - bar;
-				drawCaption(gc, caption, barY, width, bar, outside);
-			}
-		});
 		try {
-			return new Frame(DeviceScale.paintedData(framed, full.zoom()), full.zoom(), null);
+			Image framed = DeviceScale.paint(display, kept.width, kept.height + added, full.zoom(), (gc, width, height) -> {
+				// the frame already holds device pixels, so it is placed rather than
+				// drawn through the canvas' scale, while the caption is painted at it
+				DeviceScale.drawPixels(gc, full.image(), -kept.x, pictureY - kept.y, full.zoom());
+				if (caption != null) {
+					int barY = ABOVE.equals(position) && outside ? 0 : height - bar;
+					drawCaption(gc, caption, barY, width, bar, outside);
+				}
+			});
+			try {
+				return new Frame(DeviceScale.paintedData(framed, full.zoom()), full.zoom(), null);
+			} finally {
+				framed.dispose();
+			}
 		} finally {
-			framed.dispose();
 			full.image().dispose();
 		}
 	}
@@ -445,8 +431,13 @@ public final class Screencast {
 		gc.drawText(caption, CAPTION_PAD, y + CAPTION_PAD, SWT.DRAW_TRANSPARENT);
 	}
 
+	/**
+	 * Paints the control at its monitor's zoom. A shell is composed from its
+	 * children the way the screenshot does, because {@code Shell.print} is blank
+	 * under a compositing window manager while the children print fine.
+	 */
 	private static Frame paintWhole(Display display, Control printable, boolean composed) {
-		int zoom = Capture.zoomOf(printable);
+		int zoom = DeviceScale.zoomOf(printable);
 		Rectangle own = composed ? ((Shell) printable).getClientArea() : printable.getBounds();
 		Capture.Size canvas = Capture.compositionSize(own.width, own.height);
 		List<Paintable> pieces = composed ? Capture.paintablesOf((Shell) printable) : null;
@@ -457,7 +448,8 @@ public final class Screencast {
 			drawer.fillRectangle(0, 0, width, height);
 			if (pieces == null) {
 				printable.print(drawer);
-				if (GTK) {
+				// on GTK 3 a print leaves the on-screen widget unpainted until it is invalidated
+				if (DeviceScale.GTK) {
 					Rectangle bounds = printable.getBounds();
 					printable.redraw(0, 0, bounds.width, bounds.height, true);
 				}
@@ -468,7 +460,7 @@ public final class Screencast {
 					gc.setBackground(backgroundOf(piece.control()));
 					gc.fillRectangle(0, 0, w, h);
 					piece.control().print(gc);
-					if (GTK) {
+					if (DeviceScale.GTK) {
 						piece.control().redraw(0, 0, piece.at().width, piece.at().height, true);
 					}
 				});

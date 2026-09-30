@@ -61,7 +61,7 @@ class PreferenceRulesTest {
 				.scan("IEclipsePreferences#org-eclipse-jdt-ui { color: red; }");
 
 		assertEquals(1, found.size());
-		assertEquals(0, found.get(0).size());
+		assertEquals(0, found.get(0).values().size());
 	}
 
 	@Test

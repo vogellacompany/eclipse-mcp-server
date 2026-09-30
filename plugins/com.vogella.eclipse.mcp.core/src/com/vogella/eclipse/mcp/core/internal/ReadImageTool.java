@@ -13,7 +13,6 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
-import com.vogella.eclipse.mcp.core.WorkspaceSync;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
 /**
@@ -59,15 +58,15 @@ public final class ReadImageTool implements IMcpTool {
 		IPath workspacePath = IPath.fromPortableString(path);
 		IFile file = workspacePath.segmentCount() < 2 ? null
 				: ResourcesPlugin.getWorkspace().getRoot().getFile(workspacePath);
-		if (file == null || !file.exists()) {
-			return McpToolResult.error("No file at the workspace path '%s'.".formatted(path)); //$NON-NLS-1$
-		}
-		if (args.getBoolean("refresh", true)) { //$NON-NLS-1$
+		if (file != null && args.getBoolean("refresh", true)) { //$NON-NLS-1$
 			try {
-				WorkspaceSync.refresh(file, monitor);
+				FileSupport.refresh(file, monitor);
 			} catch (CoreException e) {
 				// still readable
 			}
+		}
+		if (file == null || !file.exists()) {
+			return McpToolResult.error("No file at the workspace path '%s'.".formatted(path)); //$NON-NLS-1$
 		}
 		int maxBytes = args.getInt("maxBytes", DEFAULT_MAX_BYTES, 1, 20_000_000); //$NON-NLS-1$
 		byte[] bytes;

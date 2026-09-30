@@ -2,7 +2,6 @@ package com.vogella.eclipse.mcp.pde.internal;
 
 import java.util.Map;
 import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.pde.core.plugin.IPluginModelBase;
@@ -57,12 +56,7 @@ public final class GetBundleInfoTool implements IMcpTool {
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String symbolicName = args.getString("symbolicName"); //$NON-NLS-1$
-		Pattern namePattern;
-		try {
-			namePattern = Globs.compile(args.getString("namePattern")); //$NON-NLS-1$
-		} catch (PatternSyntaxException e) {
-			return McpToolResult.error("Could not read 'namePattern' as a glob: " + e.getMessage()); //$NON-NLS-1$
-		}
+		Pattern namePattern = Globs.compile(args.getString("namePattern")); //$NON-NLS-1$
 		String projectName = args.getString("project"); //$NON-NLS-1$
 		boolean workspaceOnly = args.getBoolean("workspaceOnly", true); //$NON-NLS-1$
 		boolean unresolvedOnly = args.getBoolean("unresolvedOnly", false); //$NON-NLS-1$

@@ -40,7 +40,8 @@ public final class GetTargetPlatformTool implements IMcpTool {
 				    "timeoutSeconds":   {"type":"integer","default":25,"minimum":1,"maximum":3600,"description":"How long to wait for a resolve in flight. Bounded in practice by the server's own call timeout, which is what the answer says when it had to cut the wait short."},
 				    "includeLocations": {"type":"boolean","default":true,"description":"List the locations of the active definition with the resolution status of each."},
 				    "includeKnown":     {"type":"boolean","default":false,"description":"Also list the target definitions the IDE knows, workspace .target files included, with the memento that names each one."},
-				    "maxProblems":      {"type":"integer","default":50,"minimum":1,"maximum":1000,"description":"Cap on the reported bundles that failed to resolve."}
+				    "maxProblems":      {"type":"integer","default":50,"minimum":1,"maximum":1000,"description":"Cap on the reported bundles that failed to resolve."},
+			    "maxResults":       {"type":"integer","default":100,"minimum":1,"maximum":1000,"description":"Cap on the reported locations and known definitions."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -52,6 +53,7 @@ public final class GetTargetPlatformTool implements IMcpTool {
 		boolean includeLocations = args.getBoolean("includeLocations", true); //$NON-NLS-1$
 		boolean includeKnown = args.getBoolean("includeKnown", false); //$NON-NLS-1$
 		int maxProblems = args.getInt("maxProblems", 50, 1, 1000); //$NON-NLS-1$
+		int maxResults = args.getInt("maxResults", 100, 1, 1000); //$NON-NLS-1$
 		int requested = args.getInt("timeoutSeconds", 25, 1, 3600); //$NON-NLS-1$
 		// before the service call, so the answer describes the state after the wait
 		// rather than the one that was current when the request arrived
@@ -74,18 +76,21 @@ public final class GetTargetPlatformTool implements IMcpTool {
 				result.put("note", //$NON-NLS-1$
 						"No target definition is set, so PDE compiles against the IDE's own installation."); //$NON-NLS-1$
 			}
-			result.put("active", active == null ? null : TargetPlatforms.describe(active, includeLocations, maxProblems)); //$NON-NLS-1$
+			JsonObject activeJson = active == null ? null
+					: TargetPlatforms.describe(active, includeLocations, maxProblems, maxResults);
+			result.put("active", activeJson); //$NON-NLS-1$
 			if (active != null && !active.isResolved()) {
 				result.put("resolveNote", //$NON-NLS-1$
 						"This definition is not resolved in this session, so bundle counts and per bundle problems are missing. eclipse_set_target_platform resolves and loads it."); //$NON-NLS-1$
 			}
 			TargetLoad load = TargetLoad.current();
 			if (load != null) {
-				result.put("lastLoad", load.toJson(includeLocations, maxProblems)); //$NON-NLS-1$
+				result.put("lastLoad", load.toJson(includeLocations, maxProblems, maxResults, active, activeJson)); //$NON-NLS-1$
 			}
 			waited.reportInto(result, requested);
 			if (includeKnown) {
-				result.put("known", known(service, monitor)); //$NON-NLS-1$
+				JsonArray known = known(service, monitor, maxResults, result);
+				result.put("known", known); //$NON-NLS-1$
 			}
 			return McpToolResult.of(result.toString());
 		});
@@ -143,7 +148,8 @@ public final class GetTargetPlatformTool implements IMcpTool {
 		}
 	}
 
-	private static JsonArray known(ITargetPlatformService service, IProgressMonitor monitor) {
+	private static JsonArray known(ITargetPlatformService service, IProgressMonitor monitor, int maxResults,
+			JsonObject result) {
 		JsonArray targets = new JsonArray();
 		String activeMemento = null;
 		try {
@@ -152,7 +158,12 @@ public final class GetTargetPlatformTool implements IMcpTool {
 			// leave the active flag off rather than failing the whole listing
 		}
 		ITargetHandle[] handles = service.getTargets(monitor);
-		for (ITargetHandle handle : handles == null ? new ITargetHandle[0] : handles) {
+		ITargetHandle[] all = handles == null ? new ITargetHandle[0] : handles;
+		result.put("knownTotal", all.length).put("knownTruncated", all.length > maxResults); //$NON-NLS-1$ //$NON-NLS-2$
+		for (ITargetHandle handle : all) {
+			if (targets.size() >= maxResults) {
+				break;
+			}
 			String memento = TargetPlatforms.memento(handle);
 			JsonObject entry = new JsonObject().put("memento", memento) //$NON-NLS-1$
 					.put("active", memento != null && memento.equals(activeMemento)); //$NON-NLS-1$

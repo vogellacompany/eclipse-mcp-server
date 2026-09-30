@@ -54,12 +54,13 @@ public final class PauseTool implements IMcpTool {
 		int millis = Math.min(requested, cap);
 		long start = System.currentTimeMillis();
 		long deadline = start + millis;
-		while (System.currentTimeMillis() < deadline) {
-			if (monitor.isCanceled()) {
+		while (true) {
+			long remaining = deadline - System.currentTimeMillis();
+			if (remaining <= 0 || monitor.isCanceled()) {
 				break;
 			}
 			try {
-				Thread.sleep(Math.min(100, deadline - System.currentTimeMillis()));
+				Thread.sleep(Math.min(100, remaining));
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				break;

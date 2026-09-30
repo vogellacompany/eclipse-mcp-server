@@ -77,11 +77,17 @@ public final class GetClasspathTool implements IMcpTool {
 					.put("resolved", resolved) //$NON-NLS-1$
 					.put("outputLocation", javaProject.getOutputLocation().toString()); //$NON-NLS-1$
 
+			IClasspathEntry[] rawEntries = javaProject.getRawClasspath();
 			JsonArray raw = new JsonArray();
-			for (IClasspathEntry entry : javaProject.getRawClasspath()) {
+			for (IClasspathEntry entry : rawEntries) {
+				if (raw.size() >= maxResults) {
+					break;
+				}
 				raw.add(describeRaw(javaProject, entry));
 			}
-			result.put("rawEntries", raw); //$NON-NLS-1$
+			result.put("rawTotal", rawEntries.length) //$NON-NLS-1$
+					.put("rawTruncated", rawEntries.length > raw.size()) //$NON-NLS-1$
+					.put("rawEntries", raw); //$NON-NLS-1$
 
 			if (resolved) {
 				IClasspathEntry[] entries = javaProject.getResolvedClasspath(true);

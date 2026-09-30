@@ -41,6 +41,21 @@ class RunCommandToolTest {
 	}
 
 	@Test
+	void cancellingACommandEndsItAsCancelled() throws Exception {
+		Path directory = Files.createTempDirectory("mcp-command-cancel");
+		List<String> sleeping = WINDOWS ? List.of("cmd.exe", "/c", "ping -n 30 127.0.0.1")
+				: List.of("/bin/sh", "-c", "sleep 30");
+		Map<String, Object> started = TestFixture.callAndParse("eclipse_run_command",
+				Map.of("args", sleeping, "directory", directory.toString()));
+
+		Map<String, Object> cancelled = TestFixture.callAndParse("eclipse_get_command_output",
+				Map.of("commandId", started.get("commandId"), "cancel", Boolean.TRUE, "wait", Boolean.TRUE,
+						"timeoutSeconds", Integer.valueOf(15)));
+
+		assertEquals("cancelled", cancelled.get("state"), "got " + cancelled);
+	}
+
+	@Test
 	void reportsAFailingCommandAsFailedWithItsExitCode() throws Exception {
 		Path directory = Files.createTempDirectory("mcp-command-fail");
 

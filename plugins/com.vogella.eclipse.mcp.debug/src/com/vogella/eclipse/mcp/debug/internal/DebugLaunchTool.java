@@ -103,6 +103,7 @@ public final class DebugLaunchTool implements IMcpTool {
 		String mode = "run".equals(args.getString("mode", "debug")) ? ILaunchManager.RUN_MODE //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				: ILaunchManager.DEBUG_MODE;
 		try {
+			long started = System.nanoTime();
 			DebugSessionRegistry registry = DebugSessionRegistry.getInstance();
 			JsonObject replaced = args.getBoolean("replaceExisting", true) //$NON-NLS-1$
 					? replaceExisting(registry, configuration.getName())
@@ -125,8 +126,8 @@ public final class DebugLaunchTool implements IMcpTool {
 				try {
 					org.eclipse.debug.core.ILaunch launched = configuration.launch(mode, progress);
 					if (!session.registered()) {
-						// belt and braces for a launch event lost to timing
-						session.attach(launched);
+						// a run mode launch produces no adoptable launch event
+						registry.attachLaunched(session, launched);
 					}
 				} catch (CoreException | RuntimeException e) {
 					session.failed(e.getMessage() == null ? String.valueOf(e) : e.getMessage());
@@ -136,7 +137,9 @@ public final class DebugLaunchTool implements IMcpTool {
 				return org.eclipse.core.runtime.Status.OK_STATUS;
 			}).schedule();
 
-			long registrationWait = Math.min(CallBudget.maxWaitSeconds(), Math.max(waitForSuspend, 10));
+			long registrationWait = Math.max(1, Math.min(
+					CallBudget.maxWaitSeconds() - (System.nanoTime() - started) / 1_000_000_000L,
+					Math.max(waitForSuspend, 10)));
 			if (!session.awaitRegistration(registrationWait)) {
 				return McpToolResult.error(("The JVM of session %s did not come up within %d seconds. %s")
 						.formatted(session.id(), Long.valueOf(registrationWait),
@@ -146,17 +149,22 @@ public final class DebugLaunchTool implements IMcpTool {
 				return McpToolResult
 						.error("The launch failed: %s".formatted(session.failure())); //$NON-NLS-1$
 			}
-			JsonObject json = DebugSupport.sessionJson(session, args.getInt("maxResults", 50, 1, 500)); //$NON-NLS-1$
+			int maxThreads = args.getInt("maxResults", 50, 1, 500); //$NON-NLS-1$
+			JsonObject json;
 			if (waitForSuspend > 0 && !session.suspended()) {
 				DebugSessionRegistry.SuspendSignal signal = registry.onNextSuspend(session);
-				boolean arrived = signal.await(CallBudget.boundedWaitSeconds(waitForSuspend));
-				json = DebugSupport.sessionJson(session, args.getInt("maxResults", 50, 1, 500)); //$NON-NLS-1$
+				long remaining = CallBudget.maxWaitSeconds() - (System.nanoTime() - started) / 1_000_000_000L;
+				long waited = Math.max(0, Math.min(waitForSuspend, remaining));
+				boolean arrived = signal.await(waited);
+				json = DebugSupport.sessionJson(session, maxThreads);
 				if (!arrived && !session.suspended()) {
 					json.put("timedOut", Boolean.TRUE).put("waitNote", //$NON-NLS-1$ //$NON-NLS-2$
-							"No suspend within %d seconds; the program is probably still running. Poll eclipse_debug_status with waitForSuspendSeconds to keep waiting.".formatted(Integer.valueOf(waitForSuspend))); //$NON-NLS-1$
+							"No suspend within %d seconds; the program is probably still running. Poll eclipse_debug_status with waitForSuspendSeconds to keep waiting.".formatted(Long.valueOf(waited))); //$NON-NLS-1$
 				} else {
 					json.put("timedOut", Boolean.FALSE); //$NON-NLS-1$
 				}
+			} else {
+				json = DebugSupport.sessionJson(session, maxThreads);
 			}
 			json.put("note", "The session ends with eclipse_debug_control action terminate; it also terminates by itself after autoTerminateAfterSeconds."); //$NON-NLS-1$ //$NON-NLS-2$
 			if (recordingFile != null) {

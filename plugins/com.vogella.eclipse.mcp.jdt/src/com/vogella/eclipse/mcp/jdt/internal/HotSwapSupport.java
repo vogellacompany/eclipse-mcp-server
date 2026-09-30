@@ -9,7 +9,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
@@ -48,8 +50,6 @@ final class HotSwapSupport {
 		try {
 			Class<?> agent = ClassLoader.getSystemClassLoader().loadClass(AGENT_CLASS);
 			return (Instrumentation) agent.getMethod("instrumentation").invoke(null); //$NON-NLS-1$
-		} catch (ClassNotFoundException e) {
-			return null;
 		} catch (ReflectiveOperationException | RuntimeException e) {
 			return null;
 		}
@@ -168,13 +168,11 @@ final class HotSwapSupport {
 		return jar;
 	}
 
-	/** Every loaded class with that binary name, whatever loaded it. */
-	static List<Class<?>> loadedClasses(Instrumentation instrumentation, String name) {
-		List<Class<?>> result = new ArrayList<>();
+	/** Every loaded class by binary name, whatever loaded it. */
+	static Map<String, List<Class<?>>> loadedByName(Instrumentation instrumentation) {
+		Map<String, List<Class<?>>> result = new HashMap<>();
 		for (Class<?> loaded : instrumentation.getAllLoadedClasses()) {
-			if (name.equals(loaded.getName())) {
-				result.add(loaded);
-			}
+			result.computeIfAbsent(loaded.getName(), key -> new ArrayList<>()).add(loaded);
 		}
 		return result;
 	}

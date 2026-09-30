@@ -92,12 +92,10 @@ public final class ControlTool implements IMcpTool {
 			}
 			perform(session, target, thread, action);
 
+			boolean arrived = signal != null && signal.await(CallBudget.boundedWaitSeconds(waitSeconds));
 			JsonObject json = DebugSupport.sessionJson(session, 50);
 			json.put("action", action); //$NON-NLS-1$
 			if (signal != null) {
-				boolean arrived = signal.await(CallBudget.boundedWaitSeconds(waitSeconds));
-				json = DebugSupport.sessionJson(session, 50);
-				json.put("action", action); //$NON-NLS-1$
 				boolean nowSuspended = session.suspended();
 				if (!arrived && !nowSuspended) {
 					json.put("timedOut", Boolean.TRUE).put("waitNote", //$NON-NLS-1$ //$NON-NLS-2$
@@ -120,13 +118,13 @@ public final class ControlTool implements IMcpTool {
 		}
 	}
 
-	private String locationOf(DebugSessionRegistry.Session session) {
+	private static String locationOf(DebugSessionRegistry.Session session) {
 		var target = DebugSupport.liveTarget(session);
 		if (target == null) {
 			return null;
 		}
 		for (IThread candidate : DebugSupport.threads(target)) {
-			if (DebugSupport.isSuspended(candidate)) {
+			if (candidate.isSuspended()) {
 				String location = DebugSupport.location(candidate);
 				if (location != null) {
 					return location;
@@ -136,7 +134,7 @@ public final class ControlTool implements IMcpTool {
 		return null;
 	}
 
-	private void perform(DebugSessionRegistry.Session session, IDebugTarget target, IThread thread, String action)
+	private static void perform(DebugSessionRegistry.Session session, IDebugTarget target, IThread thread, String action)
 			throws DebugException {
 		switch (action) {
 		case "resumeAll" -> target.resume(); //$NON-NLS-1$
@@ -175,7 +173,7 @@ public final class ControlTool implements IMcpTool {
 		}
 		case "terminate" -> terminate(session); //$NON-NLS-1$
 		case "disconnect" -> target.disconnect(); //$NON-NLS-1$
-		default -> throw new DebugSupport.Refusal("Unknown action '%s'.".formatted(action)); //$NON-NLS-1$
+		default -> throw new IllegalStateException(action);
 		}
 	}
 

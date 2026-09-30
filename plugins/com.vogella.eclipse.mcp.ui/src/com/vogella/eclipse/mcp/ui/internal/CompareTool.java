@@ -235,7 +235,11 @@ public final class CompareTool implements IMcpTool {
 
 	private static byte[] read(IFile file) throws CoreException, IOException {
 		try (InputStream stream = file.getContents(true)) {
-			return stream.readNBytes(MAX_BYTES);
+			byte[] bytes = stream.readNBytes(MAX_BYTES + 1);
+			if (bytes.length > MAX_BYTES) {
+				throw new IOException("the file is larger than the " + MAX_BYTES + " bytes this tool reads"); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+			return bytes;
 		}
 	}
 

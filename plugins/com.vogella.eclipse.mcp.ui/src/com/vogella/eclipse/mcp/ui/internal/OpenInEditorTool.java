@@ -1,10 +1,6 @@
 package com.vogella.eclipse.mcp.ui.internal;
 
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import org.eclipse.core.filesystem.EFS;
 import org.eclipse.core.filesystem.IFileStore;
@@ -23,7 +19,6 @@ import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.texteditor.ITextEditor;
 
 import com.vogella.eclipse.mcp.core.IMcpTool;
-import com.vogella.eclipse.mcp.core.McpToolException;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
@@ -61,7 +56,7 @@ public final class OpenInEditorTool implements IMcpTool {
 	}
 
 	@Override
-	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
+	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$
 		if (path == null) {
@@ -70,9 +65,11 @@ public final class OpenInEditorTool implements IMcpTool {
 		if (!PlatformUI.isWorkbenchRunning()) {
 			return McpToolResult.error(Workbenches.noIde());
 		}
-		IFile file = ResourcesPlugin.getWorkspace().getRoot().getFile(new Path(path));
+		// getFile throws for a path without a project and a name
+		IFile file = new Path(path).segmentCount() < 2 ? null
+				: ResourcesPlugin.getWorkspace().getRoot().getFile(new Path(path));
 		IFileStore external = null;
-		if (!file.exists()) {
+		if (file == null || !file.exists()) {
 			// a workspace path and an absolute path on disk look the same, so the
 			// workspace answers first and the disk only for what it does not have
 			IFile inWorkspace = workspaceFileAt(path);
@@ -88,27 +85,10 @@ public final class OpenInEditorTool implements IMcpTool {
 		int line = args.getInt("line", -1, -1, Integer.MAX_VALUE); //$NON-NLS-1$
 		boolean activate = args.getBoolean("activate", true); //$NON-NLS-1$
 
-		CompletableFuture<JsonObject> pending = new CompletableFuture<>();
 		IFile workspaceFile = file;
 		IFileStore store = external;
-		UiThread.exec(() -> {
-			try {
-				pending.complete(store == null ? open(workspaceFile, line, activate) : openExternal(store, line, activate));
-			} catch (RuntimeException e) {
-				pending.completeExceptionally(e);
-			}
-		});
-		try {
-			return McpToolResult.of(pending.get(UI_TIMEOUT_SECONDS, TimeUnit.SECONDS).toString());
-		} catch (TimeoutException e) {
-			pending.cancel(false);
-			return McpToolResult.error("The Eclipse UI is busy, try again"); //$NON-NLS-1$
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			return McpToolResult.error("The request was interrupted."); //$NON-NLS-1$
-		} catch (ExecutionException e) {
-			throw new McpToolException("Could not open " + path, e.getCause() == null ? e : e.getCause());
-		}
+		return UiThread.call(UI_TIMEOUT_SECONDS,
+				() -> store == null ? open(workspaceFile, line, activate) : openExternal(store, line, activate));
 	}
 
 	/** The workspace file at an absolute disk path, when a project contains it. */
