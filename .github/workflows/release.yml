@@ -57,7 +57,6 @@ jobs:
           rm -rf "gh-pages/releases/$version"
           mkdir -p "gh-pages/releases/$version"
           cp -r update-site/com.vogella.eclipse.mcp.repository/target/repository/. "gh-pages/releases/$version"
-          cp docs/images/logo256.png gh-pages/mcp-icon.png
           # the site carries this build only; everything else is dropped.
           # --only rather than --keep 1, because a qualifier-named directory does
           # not sort above a plainly named one: 0.2.1 beats 0.2.0.202608201136.

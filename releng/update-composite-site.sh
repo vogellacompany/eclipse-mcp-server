@@ -121,7 +121,19 @@ EOF
 touch "$site/.nojekyll"
 
 base_url=https://vogellacompany.github.io/eclipse-mcp-server
-latest=${versions[${#versions[@]}-1]}
+cp "$(dirname "$0")/../docs/images/logo256.png" "$site/mcp-icon.png"
+# every build the site carries, since sort -V does not order qualifiers as p2 does
+badges=
+for version in "${versions[@]}"; do
+	badges+="<span class=\"version\">$version</span> "
+done
+if [ ${#versions[@]} -eq 1 ]; then
+	builds_heading='Current build'
+	builds_note='This site carries the newest build and nothing else. The previous build is dropped when a new one is published, so update rather than pin.'
+else
+	builds_heading='Builds'
+	builds_note='The site offers all of these, and p2 installs the highest version it finds.'
+fi
 {
 	cat <<EOF
 <!doctype html>
@@ -233,7 +245,7 @@ latest=${versions[${#versions[@]}-1]}
 <h2>Update site</h2>
 <div class="url">
   <code id="site-url">$base_url/</code>
-  <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('site-url').textContent).then(() => { this.textContent = 'Copied'; })">Copy</button>
+  <button type="button" onclick="const b = this; Promise.resolve().then(() => navigator.clipboard.writeText(document.getElementById('site-url').textContent)).then(() => { b.textContent = 'Copied'; }, () => { b.textContent = 'Copy failed, select the URL'; })">Copy</button>
 </div>
 
 <h2>Install</h2>
@@ -243,9 +255,9 @@ latest=${versions[${#versions[@]}-1]}
   <li>Select <em>Eclipse MCP Server</em>, finish the wizard and restart.</li>
 </ol>
 
-<h2>Current build</h2>
-<p><span class="version">$latest</span></p>
-<p class="note">This site carries the newest build and nothing else. The previous build is dropped when a new one is published, so update rather than pin.</p>
+<h2>$builds_heading</h2>
+<p>$badges</p>
+<p class="note">$builds_note</p>
 
 <footer>Sources and documentation: <a href="https://github.com/vogellacompany/eclipse-mcp-server">github.com/vogellacompany/eclipse-mcp-server</a></footer>
 </main>
