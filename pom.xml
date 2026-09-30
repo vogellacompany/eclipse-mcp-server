@@ -6,7 +6,7 @@
 
   <groupId>com.vogella.eclipse.mcp</groupId>
   <artifactId>com.vogella.eclipse.mcp.parent</artifactId>
-  <version>0.2.0-SNAPSHOT</version>
+  <version>1.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <name>Eclipse MCP Server</name>

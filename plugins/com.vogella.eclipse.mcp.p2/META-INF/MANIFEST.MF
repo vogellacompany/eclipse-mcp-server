@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: Eclipse MCP Provisioning Tools
 Bundle-SymbolicName: com.vogella.eclipse.mcp.p2;singleton:=true
-Bundle-Version: 0.2.0.qualifier
+Bundle-Version: 1.0.0.qualifier
 Bundle-Vendor: vogella GmbH
 Bundle-RequiredExecutionEnvironment: JavaSE-25
 Automatic-Module-Name: com.vogella.eclipse.mcp.p2
@@ -14,6 +14,6 @@ Require-Bundle: org.eclipse.core.runtime;bundle-version="3.31.0",
  org.eclipse.equinox.p2.engine;bundle-version="2.10.0",
  org.eclipse.equinox.p2.repository;bundle-version="2.9.0",
  org.eclipse.equinox.p2.metadata.repository;bundle-version="1.4.0",
- com.vogella.eclipse.mcp.core;bundle-version="0.2.0"
+ com.vogella.eclipse.mcp.core;bundle-version="1.0.0"
 Import-Package: org.bouncycastle.openpgp;version="1.70.0"
 Export-Package: com.vogella.eclipse.mcp.p2.internal;x-friends:="com.vogella.eclipse.mcp.core.tests"

@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: Eclipse MCP Git Tools
 Bundle-SymbolicName: com.vogella.eclipse.mcp.git;singleton:=true
-Bundle-Version: 0.2.0.qualifier
+Bundle-Version: 1.0.0.qualifier
 Bundle-Vendor: vogella GmbH
 Bundle-RequiredExecutionEnvironment: JavaSE-25
 Bundle-ActivationPolicy: lazy
@@ -11,4 +11,4 @@ Require-Bundle: org.eclipse.core.runtime;bundle-version="3.31.0",
  org.eclipse.core.resources;bundle-version="3.20.0",
  org.eclipse.jgit;bundle-version="[7.0.0,8.0.0)";resolution:=optional,
  org.eclipse.egit.core;bundle-version="[7.0.0,8.0.0)";resolution:=optional,
- com.vogella.eclipse.mcp.core;bundle-version="0.2.0"
+ com.vogella.eclipse.mcp.core;bundle-version="1.0.0"
