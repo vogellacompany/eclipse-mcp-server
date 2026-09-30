@@ -121,6 +121,7 @@ EOF
 touch "$site/.nojekyll"
 
 base_url=https://vogellacompany.github.io/eclipse-mcp-server
+latest=${versions[${#versions[@]}-1]}
 {
 	cat <<EOF
 <!doctype html>
@@ -129,24 +130,125 @@ base_url=https://vogellacompany.github.io/eclipse-mcp-server
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Eclipse MCP Server Update Site</title>
+<link rel="icon" href="mcp-icon.png">
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 46rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
-  code { background: #8881; padding: 0.1rem 0.3rem; border-radius: 0.2rem; }
+  :root {
+    --bg: #07060f;
+    --panel: #120f24;
+    --border: #2c2255;
+    --text: #d9d6f2;
+    --muted: #8f8bb3;
+    --orange: #f7941e;
+    --cyan: #22e4ff;
+    --magenta: #ff2bd6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(60rem 30rem at 15% -10%, #2c225588, transparent 70%),
+      radial-gradient(40rem 25rem at 110% 20%, #ff2bd622, transparent 70%),
+      linear-gradient(#ffffff05 1px, transparent 1px) 0 0 / 100% 2.5rem,
+      linear-gradient(90deg, #ffffff05 1px, transparent 1px) 0 0 / 2.5rem 100%,
+      var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6;
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 4rem 1rem 3rem; }
+  header { display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2rem; }
+  header img { width: 6rem; height: 6rem; border-radius: 1.2rem; filter: drop-shadow(0 0 1.2rem #f7941e88); }
+  h1 {
+    margin: 0;
+    font-size: clamp(2rem, 6vw, 3.2rem);
+    line-height: 1.1;
+    color: #fff;
+    text-shadow: 0 0 .4rem var(--orange), 0 0 1.6rem #f7941e99, 0 0 3rem #ff2bd655;
+  }
+  .tagline { margin: .4rem 0 0; color: var(--muted); }
+  h2 {
+    font-size: .8rem;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    text-shadow: 0 0 .6rem #22e4ff99;
+    margin: 2.5rem 0 .8rem;
+  }
+  .url {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    padding: .9rem 1rem;
+    background: var(--panel);
+    border: 1px solid var(--cyan);
+    border-radius: .6rem;
+    box-shadow: 0 0 1rem #22e4ff44, inset 0 0 1rem #22e4ff14;
+  }
+  .url code { flex: 1; font-size: 1.05rem; color: #fff; overflow-wrap: anywhere; }
+  button {
+    font: inherit;
+    font-size: .85rem;
+    padding: .4rem .9rem;
+    color: var(--bg);
+    background: var(--orange);
+    border: 0;
+    border-radius: .4rem;
+    cursor: pointer;
+    box-shadow: 0 0 .8rem #f7941e99;
+  }
+  button:hover { box-shadow: 0 0 1.4rem var(--orange); }
+  ol { padding-left: 1.2rem; }
+  li { margin: .3rem 0; }
+  em { color: #fff; font-style: normal; }
+  .version {
+    display: inline-block;
+    padding: .2rem .7rem;
+    border: 1px solid var(--magenta);
+    border-radius: 999px;
+    color: #fff;
+    font-family: ui-monospace, monospace;
+    box-shadow: 0 0 .8rem #ff2bd655;
+  }
+  .note { color: var(--muted); font-size: .9rem; }
+  a { color: var(--cyan); }
+  @media (max-width: 32rem) {
+    header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+    header img { width: 4.5rem; height: 4.5rem; }
+    .url code { font-size: .9rem; }
+  }
+  footer { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .9rem; }
 </style>
 </head>
 <body>
-<h1>Eclipse MCP Server</h1>
-<p>Install this in Eclipse with <em>Help &gt; Install New Software</em>, using the update site</p>
-<p><code>$base_url/</code></p>
-<p>That URL always offers the newest version. To pin a version, use its own site instead:</p>
-<ul>
-EOF
-	for version in "${versions[@]}"; do
-		printf '  <li><code>%s/releases/%s/</code></li>\n' "$base_url" "$version"
-	done
-	cat <<EOF
-</ul>
-<p>Sources and documentation: <a href="https://github.com/vogellacompany/eclipse-mcp-server">github.com/vogellacompany/eclipse-mcp-server</a></p>
+<main>
+<header>
+  <img src="mcp-icon.png" alt="">
+  <div>
+    <h1>Eclipse MCP Server</h1>
+    <p class="tagline">Turns a running Eclipse IDE into an MCP server, so LLM clients can use its Java model, problem markers, debugger and workbench.</p>
+  </div>
+</header>
+
+<h2>Update site</h2>
+<div class="url">
+  <code id="site-url">$base_url/</code>
+  <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('site-url').textContent).then(() => { this.textContent = 'Copied'; })">Copy</button>
+</div>
+
+<h2>Install</h2>
+<ol>
+  <li>In Eclipse, open <em>Help &gt; Install New Software...</em></li>
+  <li>Paste the update site URL into <em>Work with</em> and press Enter.</li>
+  <li>Select <em>Eclipse MCP Server</em>, finish the wizard and restart.</li>
+</ol>
+
+<h2>Current build</h2>
+<p><span class="version">$latest</span></p>
+<p class="note">This site carries the newest build and nothing else. The previous build is dropped when a new one is published, so update rather than pin.</p>
+
+<footer>Sources and documentation: <a href="https://github.com/vogellacompany/eclipse-mcp-server">github.com/vogellacompany/eclipse-mcp-server</a></footer>
+</main>
 </body>
 </html>
 EOF
