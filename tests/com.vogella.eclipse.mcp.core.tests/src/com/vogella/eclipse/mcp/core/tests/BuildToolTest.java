@@ -44,7 +44,14 @@ class BuildToolTest {
 		assertEquals("projects", result.get("scope"));
 		assertEquals(List.of(PROJECT), result.get("projects"));
 		assertNotNull(result.get("buildId"));
-		assertEquals(List.of(), result.get("builderFailures"));
+		// the log window also catches what other bundles of the test JVM log meanwhile, such as a
+		// debug test's source lookup, so only entries the build itself can have caused count here
+		@SuppressWarnings("unchecked")
+		List<String> fromTheBuild = ((List<String>) result.get("builderFailures")).stream()
+				.filter(failure -> !failure.contains(" logged: ") || failure.startsWith("org.eclipse.jdt.core ")
+						|| failure.startsWith("org.eclipse.core.resources "))
+				.toList();
+		assertEquals(List.of(), fromTheBuild, "got " + result.get("builderFailures"));
 	}
 
 	@Test
