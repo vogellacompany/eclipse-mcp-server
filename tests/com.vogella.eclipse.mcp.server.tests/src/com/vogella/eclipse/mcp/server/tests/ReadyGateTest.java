@@ -56,14 +56,21 @@ class ReadyGateTest {
 	@Test
 	void aHeldRequestPassesOnceTheGateOpens() throws Exception {
 		ReadyGate gate = new ReadyGate(10_000);
-		CompletableFuture<Void> held = CompletableFuture.runAsync(() -> {
+		CompletableFuture<Void> held = new CompletableFuture<>();
+		Thread request = new Thread(() -> {
 			try {
 				run(gate);
+				held.complete(null);
 			} catch (Exception e) {
-				throw new IllegalStateException(e);
+				held.completeExceptionally(e);
 			}
 		});
-		Thread.sleep(200);
+		request.start();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		while (request.getState() != Thread.State.TIMED_WAITING && System.nanoTime() < deadline) {
+			Thread.sleep(10);
+		}
+		assertEquals(Thread.State.TIMED_WAITING, request.getState(), "the request never waited in the gate");
 		assertEquals(0, chained.get(), "passed before the gate opened");
 
 		gate.open();
