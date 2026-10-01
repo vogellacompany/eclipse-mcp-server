@@ -54,7 +54,7 @@ public final class McpServerService {
 
 	private static final String LOOPBACK = "127.0.0.1"; //$NON-NLS-1$
 
-	/** How long a request waits for the tools to load, below the 30 seconds clients give a connection. */
+	/** How long a request waits for the tools to load, kept below the 30 seconds Claude Code gives a connection. */
 	private static final long READY_WAIT_MILLIS = 25_000;
 
 	private static final McpServerService INSTANCE = new McpServerService();
@@ -177,13 +177,12 @@ public final class McpServerService {
 					.instructions("Access to the Java model, the problem markers, the Error Log, the preferences, the workbench and the editor context of a running Eclipse IDE, plus its files and text search. Most tools only read, and the ones that change something say so in their own description in capitals. Those are: renaming and deleting Java elements through the refactoring engine, formatting and organizing imports, running builds and tests, opening and closing projects, writing preferences, setting plug-in execution environments, updating the installation, clearing the Error Log, and showing, hiding or restarting the IDE itself. Every one of those is a dry run by default where a dry run makes sense. Writing is possible but narrow where it matters: eclipse_write_file writes one workspace file, refuses to overwrite unless asked, and puts the previous content into local history, which is why it is the one changing tool that does not default to a dry run. There is no terminal, though eclipse_run_command runs a command in a directory the user has named and eclipse_get_command_output reads what it printed. The debugger is controllable: breakpoints, launching, stepping, reading frames and evaluating an expression in a suspended frame. Recording the JVM with Java Flight Recorder is available too, which is what answers where the memory goes. When several clients are connected, pass ids explicitly rather than relying on a tool's most-recent default. Sessions are counted, not clients: a session is forgotten when it ends with an HTTP DELETE or after 60 seconds without a request, so a client that opens a new session per call and never ends one will look like many clients and will be told to pass ids it should not need to.") //$NON-NLS-1$
 					.capabilities(ServerCapabilities.builder().tools(false).build()).jsonMapper(jsonMapper)
 					.jsonSchemaValidator(new BundleJsonSchemaValidator()).tools(specifications).build();
-		} catch (RuntimeException e) {
+		} catch (RuntimeException | LinkageError e) {
 			stopQuietly();
 			lastError = "Could not load the tools. %s".formatted( //$NON-NLS-1$
 					e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
 			throw new McpServerException("Could not load the MCP tools", e); //$NON-NLS-1$
 		}
-		readyGate.open();
 		lastError = null;
 
 		runningPort = port;
@@ -192,6 +191,7 @@ public final class McpServerService {
 		TracePages.setPublisher((title, html) -> "http://%s:%d%s/%s".formatted(LOOPBACK, Integer.valueOf(port), //$NON-NLS-1$
 				TRACE_PATH, TracePageStore.add(title, html)));
 		EndpointFile.write(endpoint);
+		readyGate.open();
 		ILog.get().info("MCP server listening on %s with %d tool(s)".formatted(endpoint.url(), specifications.size())); //$NON-NLS-1$
 	}
 

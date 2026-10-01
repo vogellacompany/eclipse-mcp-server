@@ -141,7 +141,7 @@ Do not undo these without understanding why they are there.
 
 - The bearer token is a plain owner-only file in user scope, `~/.eclipse/com.vogella.eclipse.mcp.server/token`, shared by all workspaces because the port is shared; `.prefs` files are world readable. It is written through a temporary file and an atomic move so a second IDE never sees it missing. An older workspace token is adopted once and renamed `token.migrated`.
 - The port is never negotiated: if taken, the server stays down and `McpServerService.getLastError()` says why. Moving silently would break every configured client.
-- `McpServerService.start` binds the port before it loads the tools, and `ReadyGate` holds requests until they are loaded. Claude Code gives up reconnecting after five refused attempts, about 15 seconds, so loading first would leave it disconnected after most restarts.
+- `McpServerService.start` binds the port before it loads the tools, and `ReadyGate` holds requests until they are loaded. Claude Code gives up reconnecting after five refused attempts, about 15 seconds, so loading first would leave it disconnected after most restarts. A held request waits at most `READY_WAIT_MILLIS`, 25 seconds, which is kept below Claude Code's 30 second connection timeout by hand.
 - `BundleJsonSchemaValidator` clears the context class loader, or networknt fails with `FileNotFoundException: classpath:draft/2020-12/schema`; any MCP client built inside the IDE needs the same (`McpServerServiceTest.schemaValidator()`).
 - The MCP SDK gets an explicit `jsonMapper` and `jsonSchemaValidator`; `ServiceLoader` discovery across bundles is fragile.
 - Profiles leave the server out through `ServerFrames` and report how much was dropped; `includeMcpFrames` profiles the server itself.

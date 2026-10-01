@@ -27,6 +27,8 @@ class ReadyGateTest {
 
 	private final List<Integer> statuses = new ArrayList<>();
 
+	private final List<String> messages = new ArrayList<>();
+
 	private final List<String> headers = new ArrayList<>();
 
 	private final AtomicInteger chained = new AtomicInteger();
@@ -37,7 +39,10 @@ class ReadyGateTest {
 		HttpServletResponse response = (HttpServletResponse) Proxy.newProxyInstance(getClass().getClassLoader(),
 				new Class<?>[] { HttpServletResponse.class }, (proxy, m, args) -> {
 					switch (m.getName()) {
-					case "sendError" -> statuses.add((Integer) args[0]);
+					case "sendError" -> {
+						statuses.add((Integer) args[0]);
+						messages.add(String.valueOf(args[1]));
+					}
 					case "setHeader" -> headers.add(args[0] + ": " + args[1]);
 					default -> {
 					}
@@ -75,6 +80,7 @@ class ReadyGateTest {
 		assertEquals(0, chained.get());
 		assertEquals(List.of(Integer.valueOf(503)), statuses);
 		assertTrue(headers.contains("Retry-After: 5"), headers::toString);
+		assertTrue(messages.get(0).contains("still loading"), messages::toString);
 	}
 
 	@Test
@@ -85,7 +91,8 @@ class ReadyGateTest {
 
 		run(gate);
 
-		assertTrue(TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - start) < 5, "waited for a closed gate");
+		assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) < 1_000, "waited for a closed gate");
 		assertEquals(List.of(Integer.valueOf(503)), statuses);
+		assertTrue(messages.get(0).contains("failed to start or was stopped"), messages::toString);
 	}
 }
