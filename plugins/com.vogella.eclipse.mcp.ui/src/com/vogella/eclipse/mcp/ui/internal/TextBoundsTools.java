@@ -19,10 +19,13 @@ import org.eclipse.jface.text.source.Annotation;
 import org.eclipse.jface.text.source.IAnnotationModel;
 import org.eclipse.jface.text.source.projection.ProjectionAnnotation;
 import org.eclipse.jface.text.source.projection.ProjectionAnnotationModel;
+import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.StyledText;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Event;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IEditorReference;
 import org.eclipse.ui.IWorkbenchPage;
@@ -232,6 +235,119 @@ public final class TextBoundsTools {
 					throw new IllegalArgumentException("No such position in the document: " + e.getMessage()); //$NON-NLS-1$
 				}
 			});
+		}
+	}
+
+	/**
+	 * Double-clicks a position in a text editor through SWT's own listeners, so the
+	 * editor's double-click strategy runs without the window system.
+	 */
+	public static final class DoubleClickText implements IMcpTool {
+
+		@Override
+		public String getName() {
+			return "eclipse_double_click_text"; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getDescription() {
+			return "Double-clicks a position in a text editor and reports the selection that results, which is how the editor's double-click behaviour is checked: word selection, a Java editor's bracket matching, whatever ITextDoubleClickStrategy the content type has. CHANGES THE EDITOR'S SELECTION AND FOCUS, nothing else. The click is synthesized as SWT mouse events on the editor's text widget (press, release, press with count 2, double-click, release) rather than sent through the window system, so it works on native Wayland and under a compositor, where eclipse_click refuses, and the pointer does not move. It therefore exercises SWT's and JFace's handling of a double-click, not the platform's detection of one. Give line (1-based) and column, or a document offset; the position is scrolled into view first, and the click lands on the middle of the character at that position. Defaults to the active editor. Follow with eclipse_screenshot to see the selection."; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getInputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "part":   {"type":"string","description":"Editor part id, e.g. org.eclipse.ui.DefaultTextEditor. Defaults to the active editor."},
+					    "line":   {"type":"integer","minimum":1,"description":"1-based document line."},
+					    "column": {"type":"integer","minimum":1,"default":1,"description":"1-based column within the line."},
+					    "offset": {"type":"integer","minimum":0,"description":"Document offset, instead of line and column."}
+					  },
+					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
+			ToolArguments args = ToolArguments.of(arguments);
+			String part = args.getString("part"); //$NON-NLS-1$
+			int line = args.getInt("line", 0, 0, Integer.MAX_VALUE); //$NON-NLS-1$
+			int column = args.getInt("column", 1, 1, Integer.MAX_VALUE); //$NON-NLS-1$
+			int offset = args.getInt("offset", -1, -1, Integer.MAX_VALUE); //$NON-NLS-1$
+			if (line < 1 && offset < 0) {
+				return McpToolResult.error("Give 'line' (1-based) or 'offset'."); //$NON-NLS-1$
+			}
+			return UiThread.call(UI_TIMEOUT_SECONDS, () -> {
+				Target target = target(part);
+				if (target.error() != null) {
+					throw new IllegalArgumentException(target.error());
+				}
+				IDocument document = target.viewer().getDocument();
+				int start;
+				try {
+					start = offset >= 0 ? offset : document.getLineOffset(line - 1) + column - 1;
+				} catch (BadLocationException e) {
+					throw new IllegalArgumentException("No such position in the document: " + e.getMessage()); //$NON-NLS-1$
+				}
+				if (start < 0 || start > document.getLength()) {
+					throw new IllegalArgumentException("The offset %d is outside the document of %d characters." //$NON-NLS-1$
+							.formatted(Integer.valueOf(start), Integer.valueOf(document.getLength())));
+				}
+				target.viewer().revealRange(start, 0);
+				StyledText text = target.text();
+				int widgetOffset = target.viewer() instanceof ITextViewerExtension5 projection
+						? projection.modelOffset2WidgetOffset(start)
+						: start;
+				if (widgetOffset < 0) {
+					throw new IllegalArgumentException("The offset %d is folded away; expand it first." //$NON-NLS-1$
+							.formatted(Integer.valueOf(start)));
+				}
+				Rectangle at = widgetOffset < text.getCharCount() ? text.getTextBounds(widgetOffset, widgetOffset)
+						: new Rectangle(text.getLocationAtOffset(widgetOffset).x, text.getLocationAtOffset(widgetOffset).y,
+								1, text.getLineHeight(widgetOffset));
+				int x = at.x + Math.max(0, at.width / 2);
+				int y = at.y + at.height / 2;
+				// a press inside an existing selection starts drag detection, which waits for real pointer motion
+				text.setSelection(widgetOffset);
+				text.forceFocus();
+				mouse(text, SWT.MouseDown, x, y, 1);
+				mouse(text, SWT.MouseUp, x, y, 1);
+				mouse(text, SWT.MouseDown, x, y, 2);
+				mouse(text, SWT.MouseDoubleClick, x, y, 2);
+				mouse(text, SWT.MouseUp, x, y, 2);
+				Point selected = target.viewer().getSelectedRange();
+				JsonObject result = new JsonObject().put("offset", Integer.valueOf(start)) //$NON-NLS-1$
+						.put("editor", target.editor().getTitle()) //$NON-NLS-1$
+						.put("clickedAt", new JsonObject().put("x", Integer.valueOf(x)).put("y", Integer.valueOf(y)) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+								.put("in", "textWidget")) //$NON-NLS-1$ //$NON-NLS-2$
+						.put("selectionOffset", Integer.valueOf(selected.x)) //$NON-NLS-1$
+						.put("selectionLength", Integer.valueOf(selected.y)); //$NON-NLS-1$
+				try {
+					result.put("selectedText", document.get(selected.x, selected.y)) //$NON-NLS-1$
+							.put("line", Integer.valueOf(document.getLineOfOffset(start) + 1)); //$NON-NLS-1$
+				} catch (BadLocationException e) {
+					result.put("selectedText", null); //$NON-NLS-1$
+				}
+				return result.put("synthetic", Boolean.TRUE); //$NON-NLS-1$
+			});
+		}
+
+		private static void mouse(StyledText text, int type, int x, int y, int count) {
+			if (text.isDisposed()) {
+				return;
+			}
+			Event event = new Event();
+			event.button = 1;
+			event.count = count;
+			event.x = x;
+			event.y = y;
+			event.time = (int) System.currentTimeMillis();
+			if (type == SWT.MouseUp) {
+				event.stateMask = SWT.BUTTON1;
+			}
+			text.notifyListeners(type, event);
 		}
 	}
 

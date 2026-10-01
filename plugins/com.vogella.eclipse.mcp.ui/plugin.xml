@@ -28,6 +28,7 @@
       <tool class="com.vogella.eclipse.mcp.ui.internal.ScreencastTools$Start"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ScreencastTools$Stop"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.TextBoundsTools$TextBounds"/>
+      <tool class="com.vogella.eclipse.mcp.ui.internal.TextBoundsTools$DoubleClickText"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.TextBoundsTools$ListAnnotations"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.KeyboardTools$TypeText"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.KeyboardTools$PressKey"/>
