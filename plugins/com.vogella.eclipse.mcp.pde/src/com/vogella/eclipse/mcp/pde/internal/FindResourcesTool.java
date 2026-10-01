@@ -100,12 +100,13 @@ public final class FindResourcesTool implements IMcpTool {
 		if (monitor != null) {
 			search.monitor = monitor;
 		}
-		if (args.getString("copyTo") != null) { //$NON-NLS-1$
+		String copyTo = args.getString("copyTo"); //$NON-NLS-1$
+		if (copyTo != null) {
 			try {
-				search.copyTo = Path.of(args.getString("copyTo")); //$NON-NLS-1$
+				search.copyTo = Path.of(copyTo);
 				Files.createDirectories(search.copyTo);
 			} catch (IOException | InvalidPathException e) {
-				return McpToolResult.error("Could not create '%s': %s".formatted(search.copyTo, e.getMessage())); //$NON-NLS-1$
+				return McpToolResult.error("Could not create '%s': %s".formatted(copyTo, e.getMessage())); //$NON-NLS-1$
 			}
 		}
 

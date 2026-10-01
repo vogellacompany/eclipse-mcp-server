@@ -154,8 +154,12 @@ public final class CommandRegistry {
 
 		/** Ends the process and everything it started, which a build tool needs. */
 		public void cancel() {
-			cancelRequested = true;
 			Process running = process;
+			// a process that already exited keeps its own outcome rather than being reported as cancelled
+			if (running != null && !running.isAlive()) {
+				return;
+			}
+			cancelRequested = true;
 			if (running == null) {
 				return;
 			}
