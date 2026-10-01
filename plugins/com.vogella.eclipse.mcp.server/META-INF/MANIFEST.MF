@@ -26,5 +26,6 @@ Import-Package: com.networknt.schema;version="[3.0,4)",
  org.osgi.framework;version="[1.10,2)",
  tools.jackson.databind;version="[3.0,4)",
  tools.jackson.databind.json;version="[3.0,4)"
-Export-Package: com.vogella.eclipse.mcp.server
+Export-Package: com.vogella.eclipse.mcp.server,
+ com.vogella.eclipse.mcp.server.internal;x-friends:="com.vogella.eclipse.mcp.server.tests"
 Service-Component: OSGI-INF/com.vogella.eclipse.mcp.server.internal.McpServerComponent.xml
