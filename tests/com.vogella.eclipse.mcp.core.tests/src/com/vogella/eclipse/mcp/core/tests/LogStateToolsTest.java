@@ -110,6 +110,8 @@ class LogStateToolsTest {
 
 	@Test
 	void whatShowsTheLogIsToldAboutARealClearOnly() throws Exception {
+		// a fresh workspace has no log file until something is logged, and there is nothing to clear then
+		log("filling the log " + System.nanoTime());
 		AtomicInteger calls = new AtomicInteger();
 		LogClearedHandlers.Handler handler = () -> {
 			calls.incrementAndGet();
@@ -133,6 +135,7 @@ class LogStateToolsTest {
 
 	@Test
 	void aFailingViewUpdateStillLeavesTheLogCleared() throws Exception {
+		log("filling the log " + System.nanoTime());
 		LogClearedHandlers.Handler handler = () -> {
 			throw new IllegalStateException("the view is gone");
 		};
