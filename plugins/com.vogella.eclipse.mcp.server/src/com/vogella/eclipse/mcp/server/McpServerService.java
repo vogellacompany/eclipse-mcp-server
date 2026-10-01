@@ -183,7 +183,7 @@ public final class McpServerService {
 			TracePages.setPublisher((title, html) -> "http://%s:%d%s/%s".formatted(LOOPBACK, Integer.valueOf(port), //$NON-NLS-1$
 					TRACE_PATH, TracePageStore.add(title, html)));
 			EndpointFile.write(endpoint);
-		} catch (RuntimeException | LinkageError e) {
+		} catch (RuntimeException | Error e) {
 			stopQuietly();
 			lastError = "Could not load the tools or publish the endpoint. %s".formatted( //$NON-NLS-1$
 					e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
