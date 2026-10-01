@@ -158,6 +158,10 @@ public final class InstallTool implements IMcpTool {
 			}
 			waitNote = CallBudget.clampNote(requested, "eclipse_get_provisioning_status"); //$NON-NLS-1$
 		}
-		return McpToolResult.of(handle.toJson().put("waitNote", waitNote).toString()); //$NON-NLS-1$
+		JsonObject answer = handle.toJson();
+		if (waitNote != null) {
+			answer.put("waitNote", waitNote); //$NON-NLS-1$
+		}
+		return McpToolResult.of(answer.toString());
 	}
 }

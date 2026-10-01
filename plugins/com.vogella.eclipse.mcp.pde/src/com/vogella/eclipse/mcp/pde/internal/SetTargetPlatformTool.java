@@ -96,7 +96,11 @@ public final class SetTargetPlatformTool implements IMcpTool {
 				}
 				waitNote = CallBudget.clampNote(timeoutSeconds, "eclipse_get_target_platform"); //$NON-NLS-1$
 			}
-			return McpToolResult.of(load.toJson(includeLocations, maxProblems, maxResults).put("waitNote", waitNote).toString()); //$NON-NLS-1$
+			JsonObject answer = load.toJson(includeLocations, maxProblems, maxResults);
+			if (waitNote != null) {
+				answer.put("waitNote", waitNote); //$NON-NLS-1$
+			}
+			return McpToolResult.of(answer.toString());
 		});
 	}
 

@@ -140,6 +140,7 @@ public final class EditFileTool implements IMcpTool {
 		int line = lineOf(content, content.indexOf(wanted));
 		result.put("replacements", Integer.valueOf(replaceAll ? matches : 1)) //$NON-NLS-1$
 				.put("changedLines", changedLines(content, wanted)) //$NON-NLS-1$
+				.put("changedLinesTruncated", Boolean.valueOf(replaceAll && matches > MAX_CHANGED_LINES)) //$NON-NLS-1$
 				.put("firstChangedLine", Integer.valueOf(line)) //$NON-NLS-1$
 				.put("charset", charset.name()) //$NON-NLS-1$
 				.put("context", context(edited, line)); //$NON-NLS-1$
