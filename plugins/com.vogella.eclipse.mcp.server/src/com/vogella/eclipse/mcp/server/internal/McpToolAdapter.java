@@ -9,7 +9,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.NullProgressMonitor;
@@ -31,8 +31,10 @@ public final class McpToolAdapter {
 
 	/** Set once the tool body has returned, which {@code Future.isDone} cannot tell after a cancel. */
 	private static final class Running {
-		final AtomicBoolean started = new AtomicBoolean();
-		final AtomicBoolean finished = new AtomicBoolean();
+		static final int QUEUED = 0, RUNNING = 1, DONE = 2;
+
+		/** Claimed by the worker on start and by {@link #abandon} for a call that never started, never both. */
+		final AtomicInteger state = new AtomicInteger(QUEUED);
 	}
 
 	/** Calls that outlived their timeout and whose tool body has not returned yet. */
@@ -55,11 +57,13 @@ public final class McpToolAdapter {
 		NullProgressMonitor monitor = new NullProgressMonitor();
 		Running running = new Running();
 		Future<McpToolResult> pending = executor.submit(() -> {
-			running.started.set(true);
+			if (!running.state.compareAndSet(Running.QUEUED, Running.RUNNING)) {
+				return null;
+			}
 			try {
 				return tool.call(arguments == null ? Map.of() : arguments, monitor);
 			} finally {
-				running.finished.set(true);
+				running.state.set(Running.DONE);
 			}
 		});
 		try {
@@ -122,9 +126,9 @@ public final class McpToolAdapter {
 	 * available is to stop the leak being invisible.
 	 */
 	private static synchronized int abandon(String name, Running running) {
-		ABANDONED.entrySet().removeIf(entry -> entry.getValue().finished.get());
-		if (!running.started.get()) {
-			// cancelled before it started, so it never will
+		ABANDONED.entrySet().removeIf(entry -> entry.getValue().state.get() == Running.DONE);
+		if (running.state.compareAndSet(Running.QUEUED, Running.DONE)) {
+			// claimed before the worker started, so it never will
 			return ABANDONED.size();
 		}
 		ABANDONED.put(name + "@" + System.nanoTime(), running); //$NON-NLS-1$

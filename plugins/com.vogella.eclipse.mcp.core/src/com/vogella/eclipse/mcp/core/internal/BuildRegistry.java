@@ -173,7 +173,7 @@ public final class BuildRegistry {
 		}
 
 		/** Ends a build whose job threw, so that nobody waits for an outcome that will never be set. */
-		void abort(RuntimeException failure) {
+		void abort(Throwable failure) {
 			if (!"running".equals(state)) { //$NON-NLS-1$
 				return;
 			}
@@ -242,6 +242,9 @@ public final class BuildRegistry {
 					BuildRegistry.run(build, request, monitor);
 				} catch (RuntimeException e) {
 					build.abort(e);
+				} catch (Error e) {
+					build.abort(e);
+					throw e;
 				}
 				return Status.OK_STATUS;
 			}

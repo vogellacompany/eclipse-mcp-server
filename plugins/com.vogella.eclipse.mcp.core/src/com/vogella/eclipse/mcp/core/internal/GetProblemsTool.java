@@ -2,6 +2,7 @@ package com.vogella.eclipse.mcp.core.internal;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -230,9 +231,6 @@ public final class GetProblemsTool implements IMcpTool {
 	private static boolean inScope(String key, String projectName, String pathPrefix, String severity,
 			String messageFilter, List<String> types, List<String> excludeTypes) {
 		String[] parts = key.split(":", 5); //$NON-NLS-1$
-		if (parts.length < 5) {
-			return true;
-		}
 		if (!typeWanted(parts[3], types, excludeTypes)) {
 			return false;
 		}
@@ -262,6 +260,13 @@ public final class GetProblemsTool implements IMcpTool {
 
 	/** Whether {@code type} is {@code ancestor} or declares it as a super type, transitively. */
 	private static boolean isSubtype(String type, String ancestor) {
+		return isSubtype(type, ancestor, new HashSet<>());
+	}
+
+	private static boolean isSubtype(String type, String ancestor, Set<String> visited) {
+		if (type == null || !visited.add(type)) {
+			return false;
+		}
 		if (type.equals(ancestor)) {
 			return true;
 		}
@@ -274,7 +279,7 @@ public final class GetProblemsTool implements IMcpTool {
 			return false;
 		}
 		for (IConfigurationElement element : extension.getConfigurationElements()) {
-			if ("super".equals(element.getName()) && isSubtype(element.getAttribute("type"), ancestor)) { //$NON-NLS-1$ //$NON-NLS-2$
+			if ("super".equals(element.getName()) && isSubtype(element.getAttribute("type"), ancestor, visited)) { //$NON-NLS-1$ //$NON-NLS-2$
 				return true;
 			}
 		}

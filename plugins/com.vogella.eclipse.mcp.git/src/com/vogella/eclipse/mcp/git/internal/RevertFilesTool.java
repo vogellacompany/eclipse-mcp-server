@@ -80,6 +80,7 @@ public final class RevertFilesTool implements IMcpTool {
 		int wouldChange = 0;
 		int reverted = 0;
 		int refused = 0;
+		int failed = 0;
 		for (String requested : paths) {
 			JsonObject entry;
 			try {
@@ -92,8 +93,10 @@ public final class RevertFilesTool implements IMcpTool {
 			files.add(entry);
 			String state = String.valueOf(entry.remove("state")); //$NON-NLS-1$
 			entry.put("state", state); //$NON-NLS-1$
-			if ("refused".equals(state) || "failed".equals(state)) { //$NON-NLS-1$ //$NON-NLS-2$
+			if ("refused".equals(state)) { //$NON-NLS-1$
 				refused++;
+			} else if ("failed".equals(state)) { //$NON-NLS-1$
+				failed++;
 			} else if ("reverted".equals(state)) { //$NON-NLS-1$
 				reverted++;
 			} else if ("wouldRevert".equals(state)) { //$NON-NLS-1$
@@ -105,6 +108,7 @@ public final class RevertFilesTool implements IMcpTool {
 				.put("reverted", Integer.valueOf(reverted)) //$NON-NLS-1$
 				.put("wouldRevert", Integer.valueOf(wouldChange)) //$NON-NLS-1$
 				.put("refused", Integer.valueOf(refused)) //$NON-NLS-1$
+				.put("failed", Integer.valueOf(failed)) //$NON-NLS-1$
 				.put("files", files); //$NON-NLS-1$
 		if (dryRun && wouldChange > 0) {
 			result.put("note", //$NON-NLS-1$

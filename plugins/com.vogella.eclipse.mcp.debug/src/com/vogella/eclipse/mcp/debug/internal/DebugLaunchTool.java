@@ -158,8 +158,10 @@ public final class DebugLaunchTool implements IMcpTool {
 				boolean arrived = signal.await(waited);
 				json = DebugSupport.sessionJson(session, maxThreads);
 				if (!arrived && !session.suspended()) {
-					json.put("timedOut", Boolean.TRUE).put("waitNote", //$NON-NLS-1$ //$NON-NLS-2$
-							"No suspend within %d seconds; the program is probably still running. Poll eclipse_debug_status with waitForSuspendSeconds to keep waiting.".formatted(Long.valueOf(waited))); //$NON-NLS-1$
+					String note = waited < waitForSuspend
+							? "No suspend within the %d seconds the call timeout left after the launch; the program is probably still running. Poll eclipse_debug_status with waitForSuspendSeconds to keep waiting." //$NON-NLS-1$
+							: "No suspend within %d seconds; the program is probably still running. Poll eclipse_debug_status with waitForSuspendSeconds to keep waiting."; //$NON-NLS-1$
+					json.put("timedOut", Boolean.TRUE).put("waitNote", note.formatted(Long.valueOf(waited))); //$NON-NLS-1$ //$NON-NLS-2$
 				} else {
 					json.put("timedOut", Boolean.FALSE); //$NON-NLS-1$
 				}
