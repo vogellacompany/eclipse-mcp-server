@@ -127,8 +127,8 @@ public final class McpToolAdapter {
 	 */
 	private static synchronized int abandon(String name, Running running) {
 		ABANDONED.entrySet().removeIf(entry -> entry.getValue().state.get() == Running.DONE);
-		if (running.state.compareAndSet(Running.QUEUED, Running.DONE)) {
-			// claimed before the worker started, so it never will
+		// claimed before the worker started, so it never will, or finished just after the timeout
+		if (running.state.compareAndSet(Running.QUEUED, Running.DONE) || running.state.get() == Running.DONE) {
 			return ABANDONED.size();
 		}
 		ABANDONED.put(name + "@" + System.nanoTime(), running); //$NON-NLS-1$
