@@ -279,6 +279,9 @@ public final class TextBoundsTools {
 			if (line < 1 && offset < 0) {
 				return McpToolResult.error("Give 'line' (1-based) or 'offset'."); //$NON-NLS-1$
 			}
+			if (line >= 1 && offset >= 0) {
+				return McpToolResult.error("Give either 'line' and 'column' or 'offset', not both."); //$NON-NLS-1$
+			}
 			return UiThread.call(UI_TIMEOUT_SECONDS, () -> {
 				Target target = target(part);
 				if (target.error() != null) {
@@ -287,7 +290,17 @@ public final class TextBoundsTools {
 				IDocument document = target.viewer().getDocument();
 				int start;
 				try {
-					start = offset >= 0 ? offset : document.getLineOffset(line - 1) + column - 1;
+					if (offset >= 0) {
+						start = offset;
+					} else {
+						IRegion region = document.getLineInformation(line - 1);
+						if (column - 1 > region.getLength()) {
+							throw new IllegalArgumentException("Line %d has %d characters, so there is no column %d." //$NON-NLS-1$
+									.formatted(Integer.valueOf(line), Integer.valueOf(region.getLength()),
+											Integer.valueOf(column)));
+						}
+						start = region.getOffset() + column - 1;
+					}
 				} catch (BadLocationException e) {
 					throw new IllegalArgumentException("No such position in the document: " + e.getMessage()); //$NON-NLS-1$
 				}
@@ -310,18 +323,22 @@ public final class TextBoundsTools {
 				int x = at.x + Math.max(0, at.width / 2);
 				int y = at.y + at.height / 2;
 				// a press inside an existing selection starts drag detection, which waits for real pointer motion
-				text.setSelection(widgetOffset);
+				target.viewer().setSelectedRange(start, 0);
 				text.forceFocus();
-				mouse(text, SWT.MouseDown, x, y, 1);
-				mouse(text, SWT.MouseUp, x, y, 1);
-				mouse(text, SWT.MouseDown, x, y, 2);
-				mouse(text, SWT.MouseDoubleClick, x, y, 2);
-				mouse(text, SWT.MouseUp, x, y, 2);
+				Rectangle inShell = WidgetTools.mapToCapture(text.getDisplay(), text, text.getShell(),
+						new Rectangle(x, y, 1, 1));
+				boolean delivered = mouse(text, SWT.MouseDown, x, y, 1) && mouse(text, SWT.MouseUp, x, y, 1)
+						&& mouse(text, SWT.MouseDown, x, y, 2) && mouse(text, SWT.MouseDoubleClick, x, y, 2)
+						&& mouse(text, SWT.MouseUp, x, y, 2);
+				if (!delivered) {
+					return new JsonObject().put("offset", Integer.valueOf(start)).put("widgetDisposed", Boolean.TRUE) //$NON-NLS-1$ //$NON-NLS-2$
+							.put("note", "The text widget was disposed during the click, so the rest of it was not sent and there is no selection to report."); //$NON-NLS-1$ //$NON-NLS-2$
+				}
 				Point selected = target.viewer().getSelectedRange();
 				JsonObject result = new JsonObject().put("offset", Integer.valueOf(start)) //$NON-NLS-1$
 						.put("editor", target.editor().getTitle()) //$NON-NLS-1$
 						.put("clickedAt", new JsonObject().put("x", Integer.valueOf(x)).put("y", Integer.valueOf(y)) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-								.put("in", "textWidget")) //$NON-NLS-1$ //$NON-NLS-2$
+								.put("in", "textWidget").put("inShell", Overlays.describe(inShell))) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 						.put("selectionOffset", Integer.valueOf(selected.x)) //$NON-NLS-1$
 						.put("selectionLength", Integer.valueOf(selected.y)); //$NON-NLS-1$
 				try {
@@ -334,9 +351,10 @@ public final class TextBoundsTools {
 			});
 		}
 
-		private static void mouse(StyledText text, int type, int x, int y, int count) {
+		/** Sends one event, or answers false when the widget is already gone. */
+		private static boolean mouse(StyledText text, int type, int x, int y, int count) {
 			if (text.isDisposed()) {
-				return;
+				return false;
 			}
 			Event event = new Event();
 			event.button = 1;
@@ -348,6 +366,7 @@ public final class TextBoundsTools {
 				event.stateMask = SWT.BUTTON1;
 			}
 			text.notifyListeners(type, event);
+			return true;
 		}
 	}
 
