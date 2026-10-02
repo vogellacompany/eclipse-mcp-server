@@ -199,6 +199,13 @@ class UiToolsTest {
 	}
 
 	@Test
+	void pressingAWidgetNeedsAPathAndAWorkbench() throws Exception {
+		assertRefused(TestFixture.call("eclipse_press_widget", Map.of()), "'path' is required");
+		assertRefused(TestFixture.call("eclipse_press_widget", Map.of("path", "1")), "no running workbench");
+		assertTrue(TestFixture.tool("eclipse_press_widget").getDescription().contains("CHANGES WHAT THE IDE DOES"));
+	}
+
+	@Test
 	void selectingAMenuItemNeedsAPathUnlessItOnlyLists() throws Exception {
 		assertRefused(TestFixture.call("eclipse_select_menu_item", Map.of()), "'path'");
 		assertRefused(TestFixture.call("eclipse_select_menu_item", Map.of("path", "  ")), "'path'");

@@ -194,7 +194,7 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_get_editor_context`, `eclipse_list_editors`, ✎ `eclipse_close_editor` | Active editor, cursor and selection, open editors |
 | ✎ `eclipse_open`, `eclipse_open_compare` | Open a file or element, open a compare editor |
 | `eclipse_get_selection`, ✎ `eclipse_set_selection` | Read and set the selection |
-| ✎ `eclipse_type_text`, `eclipse_press_key`, `eclipse_set_widget_text`, `eclipse_click`, `eclipse_double_click_text`, `eclipse_expand_row`, `eclipse_select_tab` | Drive editors and widgets |
+| ✎ `eclipse_type_text`, `eclipse_press_key`, `eclipse_set_widget_text`, `eclipse_press_widget`, `eclipse_click`, `eclipse_double_click_text`, `eclipse_expand_row`, `eclipse_select_tab` | Drive editors and widgets |
 | `eclipse_get_text_bounds`, `eclipse_list_annotations`, `eclipse_get_context_menu` | Text geometry, editor annotations, context menu contents |
 | `eclipse_list_ui_targets`, `eclipse_get_widget_tree`, `eclipse_inspect_widget` | Shells, parts and widgets, with bounds and CSS styling |
 | ✎ `eclipse_dismiss_dialog` | Answer an open dialog |
