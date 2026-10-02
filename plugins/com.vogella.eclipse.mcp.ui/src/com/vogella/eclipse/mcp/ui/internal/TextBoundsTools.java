@@ -325,16 +325,17 @@ public final class TextBoundsTools {
 				// a press inside an existing selection starts drag detection, which waits for real pointer motion
 				target.viewer().setSelectedRange(start, 0);
 				text.forceFocus();
-				Rectangle inShell = WidgetTools.mapToCapture(text.getDisplay(), text, text.getShell(),
-						new Rectangle(x, y, 1, 1));
 				boolean delivered = mouse(text, SWT.MouseDown, x, y, 1) && mouse(text, SWT.MouseUp, x, y, 1)
 						&& mouse(text, SWT.MouseDown, x, y, 2) && mouse(text, SWT.MouseDoubleClick, x, y, 2)
 						&& mouse(text, SWT.MouseUp, x, y, 2);
-				if (!delivered) {
+				if (!delivered || text.isDisposed()) {
 					return new JsonObject().put("offset", Integer.valueOf(start)).put("widgetDisposed", Boolean.TRUE) //$NON-NLS-1$ //$NON-NLS-2$
 							.put("note", "The text widget was disposed during the click, so the rest of it was not sent and there is no selection to report."); //$NON-NLS-1$ //$NON-NLS-2$
 				}
 				Point selected = target.viewer().getSelectedRange();
+				// mapped after the click, since a strategy may scroll the text
+				Rectangle inShell = WidgetTools.mapToCapture(text.getDisplay(), text, text.getShell(),
+						new Rectangle(x, y, 1, 1));
 				JsonObject result = new JsonObject().put("offset", Integer.valueOf(start)) //$NON-NLS-1$
 						.put("editor", target.editor().getTitle()) //$NON-NLS-1$
 						.put("clickedAt", new JsonObject().put("x", Integer.valueOf(x)).put("y", Integer.valueOf(y)) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
@@ -342,8 +343,8 @@ public final class TextBoundsTools {
 						.put("selectionOffset", Integer.valueOf(selected.x)) //$NON-NLS-1$
 						.put("selectionLength", Integer.valueOf(selected.y)); //$NON-NLS-1$
 				try {
-					result.put("selectedText", document.get(selected.x, selected.y)) //$NON-NLS-1$
-							.put("line", Integer.valueOf(document.getLineOfOffset(start) + 1)); //$NON-NLS-1$
+					result.put("line", Integer.valueOf(document.getLineOfOffset(start) + 1)); //$NON-NLS-1$
+					result.put("selectedText", document.get(selected.x, selected.y)); //$NON-NLS-1$
 				} catch (BadLocationException e) {
 					result.put("selectedText", null); //$NON-NLS-1$
 				}
