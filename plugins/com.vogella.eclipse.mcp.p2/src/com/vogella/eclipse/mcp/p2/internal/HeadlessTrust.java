@@ -177,16 +177,18 @@ public final class HeadlessTrust extends UIServices {
 			if (active == null || !active.remove(trust)) {
 				return;
 			}
-			Object current = agent.getService(UIServices.SERVICE_NAME);
-			if (current != null) {
-				agent.unregisterService(UIServices.SERVICE_NAME, current);
-			}
 			Object next = active.isEmpty() ? ORIGINALS.remove(agent) : active.peekLast();
 			if (active.isEmpty()) {
 				ACTIVE.remove(agent);
 			}
+			// registering replaces in place, so a prompt never meets a moment without a trust and falls to a dialog
 			if (next != null) {
 				agent.registerService(UIServices.SERVICE_NAME, next);
+			} else {
+				Object current = agent.getService(UIServices.SERVICE_NAME);
+				if (current != null) {
+					agent.unregisterService(UIServices.SERVICE_NAME, current);
+				}
 			}
 		}
 	}
