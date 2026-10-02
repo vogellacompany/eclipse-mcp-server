@@ -33,7 +33,7 @@ public final class PressWidgetTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Presses a Button or a ToolItem, addressed by part or shell plus the path eclipse_get_widget_tree reports (a ToolItem as an item path such as 0/i2, listed with includeItems). CHANGES WHAT THE IDE DOES, which is whatever the button's listeners do: Apply applies, OK closes a dialog. It sends the Selection event to the widget's own listeners rather than going through the window system, so it works without OS focus, on native Wayland, under a compositing desktop and inside modal dialogs, where eclipse_click and eclipse_press_key refuse; it therefore tests the button's behaviour, not the platform's mouse handling. A push button is pressed. A check box or toggle flips its state first, or takes 'selected' when given. A radio button is selected and, as SWT does for a click, the other radio buttons of its group are deselected and told so; a ToolItem radio group is its run of adjacent radio items. A disabled or invisible widget is refused. The answer reports the selection before and after, how many Selection listeners the widget had, and whether the press disposed the widget or closed its shell (widgetDisposed, shellClosed). A listener that opens a modal dialog keeps the press from returning; the call then answers timedOut and the dialog can be handled with eclipse_list_ui_targets and eclipse_dismiss_dialog. A dialog button addressed by its label is also reachable through eclipse_dismiss_dialog."; //$NON-NLS-1$
+		return "Presses a Button or a ToolItem, addressed by part or shell plus the path eclipse_get_widget_tree reports (a ToolItem as an item path such as 0/i2, listed with includeItems). CHANGES WHAT THE IDE DOES, which is whatever the button's listeners do: Apply applies, OK closes a dialog. It sends the Selection event to the widget's own listeners rather than going through the window system, so it works without OS focus, on native Wayland, under a compositing desktop and inside modal dialogs, where eclipse_click and eclipse_press_key refuse; it therefore tests the button's behaviour, not the platform's mouse handling. A push button is pressed. A check box or toggle flips its state first, or takes 'selected' when given. A radio button is selected and, as SWT does for a click, the other radio buttons of its group are deselected and told so; a ToolItem radio group is its run of adjacent radio items. A disabled, invisible or separator widget is refused. The answer reports the selection before and after, how many Selection listeners the widget had, and whether the press disposed the widget or closed its shell (widgetDisposed, shellClosed). A listener that opens a modal dialog keeps the press from returning; the call then answers timedOut, the press is not withdrawn, and the dialog can be handled with eclipse_list_ui_targets and eclipse_dismiss_dialog. A dialog button addressed by its label is also reachable through eclipse_dismiss_dialog."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -72,9 +72,10 @@ public final class PressWidgetTool implements IMcpTool {
 			return McpToolResult.error(outcome.error());
 		}
 		if (outcome.timedOut()) {
-			return McpToolResult.of(new JsonObject().put("pressed", Boolean.TRUE).put("timedOut", Boolean.TRUE) //$NON-NLS-1$ //$NON-NLS-2$
+			// the request is not withdrawn, so a press still queued behind a busy UI thread happens later
+			return McpToolResult.of(new JsonObject().put("timedOut", Boolean.TRUE) //$NON-NLS-1$
 					.put("waitedSeconds", Integer.valueOf(timeout)) //$NON-NLS-1$
-					.put("note", "The listeners did not return within the wait, most likely because one opened a modal dialog. Use eclipse_list_ui_targets to see it and eclipse_dismiss_dialog to answer it.") //$NON-NLS-1$ //$NON-NLS-2$
+					.put("note", "No answer within the wait. Either a listener opened a modal dialog and is waiting in it, or the UI thread was busy and the press still runs once it is free. Use eclipse_list_ui_targets to see a dialog and eclipse_dismiss_dialog to answer it.") //$NON-NLS-1$ //$NON-NLS-2$
 					.toString());
 		}
 		return McpToolResult.of(outcome.value().toString());
@@ -86,7 +87,7 @@ public final class PressWidgetTool implements IMcpTool {
 			return refusal("No such part or shell, or the part is not open. Use eclipse_list_ui_targets."); //$NON-NLS-1$
 		}
 		Widget target = WidgetTools.resolve(root, request.path());
-		if (target == null) {
+		if (target == null || target.isDisposed()) {
 			return refusal("The path '%s' does not resolve under this part or shell.".formatted(request.path())); //$NON-NLS-1$
 		}
 		if (!(target instanceof Button || target instanceof ToolItem)) {
@@ -94,6 +95,9 @@ public final class PressWidgetTool implements IMcpTool {
 					target.getClass().getSimpleName(), target instanceof Control
 							? " eclipse_set_widget_text drives text fields and combos." //$NON-NLS-1$
 							: "")); //$NON-NLS-1$
+		}
+		if ((target.getStyle() & SWT.SEPARATOR) != 0) {
+			return refusal("'%s' is a separator, which cannot be pressed.".formatted(request.path())); //$NON-NLS-1$
 		}
 		Control owner = target instanceof ToolItem item ? item.getParent() : (Control) target;
 		if (!enabled(target)) {
@@ -125,6 +129,12 @@ public final class PressWidgetTool implements IMcpTool {
 					sibling.notifyListeners(SWT.Selection, new Event());
 					deselected++;
 				}
+			}
+			if (target.isDisposed()) {
+				return result.put("pressed", Boolean.FALSE).put("widgetDisposed", Boolean.TRUE) //$NON-NLS-1$ //$NON-NLS-2$
+						.put("shellClosed", Boolean.valueOf(shell.isDisposed())) //$NON-NLS-1$
+						.put("radioDeselected", Integer.valueOf(deselected)) //$NON-NLS-1$
+						.put("reason", "A listener of a deselected radio button disposed this one before it could be selected."); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 			select(target, true);
 		} else if (twoState) {
@@ -197,7 +207,7 @@ public final class PressWidgetTool implements IMcpTool {
 		if ((text == null || text.isEmpty()) && widget instanceof ToolItem item) {
 			text = item.getToolTipText();
 		}
-		return text == null ? "" : text.replace("&", ""); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		return text == null ? "" : text.replace("&", "").trim(); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 	}
 
 	private static String kind(Widget widget) {
