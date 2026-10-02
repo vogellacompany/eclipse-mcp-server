@@ -33,7 +33,7 @@ public final class PressWidgetTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Presses a Button or a ToolItem, addressed by part or shell plus the path eclipse_get_widget_tree reports (a ToolItem as an item path such as 0/i2, listed with includeItems). CHANGES WHAT THE IDE DOES, which is whatever the button's listeners do: Apply applies, OK closes a dialog. It sends the Selection event to the widget's own listeners rather than going through the window system, so it works without OS focus, on native Wayland, under a compositing desktop and inside modal dialogs, where eclipse_click and eclipse_press_key refuse; it therefore tests the button's behaviour, not the platform's mouse handling. A push button is pressed. A check box or toggle flips its state first, or takes 'selected' when given. A radio button is selected and, as SWT does for a click, the other radio buttons of its group are deselected and told so; a ToolItem radio group is its run of adjacent radio items. A disabled, invisible or separator widget is refused. The answer reports the selection before and after, how many Selection listeners the widget had, and whether the press disposed the widget or closed its shell (widgetDisposed, shellClosed). A listener that opens a modal dialog keeps the press from returning; the call then answers timedOut, the press is not withdrawn, and the dialog can be handled with eclipse_list_ui_targets and eclipse_dismiss_dialog. A dialog button addressed by its label is also reachable through eclipse_dismiss_dialog."; //$NON-NLS-1$
+		return "Presses a Button or a ToolItem, addressed by part or shell plus the path eclipse_get_widget_tree reports (a ToolItem as an item path such as 0/i2, listed with includeItems); pass label to have a stale path refused rather than pressing whatever now sits there. CHANGES WHAT THE IDE DOES, which is whatever the button's listeners do: Apply applies, OK closes a dialog. It sends the Selection event to the widget's own listeners rather than going through the window system, so it works without OS focus, on native Wayland, under a compositing desktop and inside modal dialogs, where eclipse_click and eclipse_press_key refuse; it therefore tests the button's behaviour, not the platform's mouse handling. A push button is pressed. A check box or toggle flips its state first, or takes 'selected' when given. A radio button is selected and, as SWT does for a click, the other radio buttons of its group are deselected and told so; a ToolItem radio group is its run of adjacent radio items. A disabled, invisible or separator widget is refused. The answer reports the selection before and after, how many Selection listeners the widget had, and whether the press disposed the widget or closed its shell (widgetDisposed, shellClosed). A listener that opens a modal dialog keeps the press from returning; the call then answers timedOut, the press is not withdrawn, and the dialog can be handled with eclipse_list_ui_targets and eclipse_dismiss_dialog. A dialog button addressed by its label is also reachable through eclipse_dismiss_dialog."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -46,7 +46,8 @@ public final class PressWidgetTool implements IMcpTool {
 				    "shellTitle":     {"type":"string","description":"Shell to root the path in, by title substring; omit both for the active shell."},
 				    "shell":          {"type":"string","description":"Shell independent of title: 'popup', an index from eclipse_list_ui_targets, or its bounds. Wins over shellTitle."},
 				    "path":           {"type":"string","description":"Widget path from eclipse_get_widget_tree, such as 1 or 0/i2 for a ToolItem."},
-				    "selected":       {"type":"boolean","description":"Check box, toggle or check ToolItem only: the state to set instead of flipping it. A radio is always selected."},
+				    "label":          {"type":"string","description":"The label the widget is expected to have, matched case insensitively; the press is refused when it differs, which guards against a path that went stale since eclipse_get_widget_tree."},
+				    "selected":       {"type":"boolean","description":"Check box, toggle or check ToolItem only: the state to set instead of flipping it. Not accepted for a radio button, which a press always selects."},
 				    "timeoutSeconds": {"type":"integer","minimum":1,"maximum":25,"default":10,"description":"How long to wait for the listeners, which do not return while one shows a modal dialog."}
 				  },
 				  "required": ["path"],
@@ -54,7 +55,7 @@ public final class PressWidgetTool implements IMcpTool {
 				}"""; //$NON-NLS-1$
 	}
 
-	private record Request(String partId, String shell, String path, Boolean selected) {
+	private record Request(String partId, String shell, String path, String label, Boolean selected) {
 	}
 
 	@Override
@@ -66,7 +67,8 @@ public final class PressWidgetTool implements IMcpTool {
 		}
 		Boolean selected = args.has("selected") ? Boolean.valueOf(args.getBoolean("selected", false)) : null; //$NON-NLS-1$ //$NON-NLS-2$
 		int timeout = args.getInt("timeoutSeconds", 10, 1, 25); //$NON-NLS-1$
-		Request request = new Request(args.getString("part"), Shells.spec(args), path, selected); //$NON-NLS-1$
+		Request request = new Request(args.getString("part"), Shells.spec(args), path, args.getString("label"), //$NON-NLS-1$
+				selected);
 		UiThread.TimedOutcome outcome = UiThread.timed(timeout, () -> press(request));
 		if (outcome.error() != null) {
 			return McpToolResult.error(outcome.error());
@@ -98,6 +100,10 @@ public final class PressWidgetTool implements IMcpTool {
 		}
 		if ((target.getStyle() & SWT.SEPARATOR) != 0) {
 			return refusal("'%s' is a separator, which cannot be pressed.".formatted(request.path())); //$NON-NLS-1$
+		}
+		if (request.label() != null && !label(target).equalsIgnoreCase(request.label().replace("&", "").trim())) { //$NON-NLS-1$ //$NON-NLS-2$
+			return refusal("The %s at '%s' is labelled '%s', not '%s'; the path may have changed since the widget tree was read." //$NON-NLS-1$
+					.formatted(kind(target), request.path(), label(target), request.label()));
 		}
 		Control owner = target instanceof ToolItem item ? item.getParent() : (Control) target;
 		if (!enabled(target)) {
