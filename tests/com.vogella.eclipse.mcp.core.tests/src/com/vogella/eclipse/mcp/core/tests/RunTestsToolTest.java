@@ -42,8 +42,12 @@ class RunTestsToolTest {
 		fixture.dispose();
 	}
 
-	/** A project with JUnit 5 on its build path and one passing, one failing test. */
 	private IJavaProject withTests() throws Exception {
+		return withTests(5);
+	}
+
+	/** A project with the given JUnit on its build path and one passing, one failing test. */
+	private IJavaProject withTests(int junitVersion) throws Exception {
 		IJavaProject project = fixture.createJavaProject(PROJECT);
 		IClasspathEntry[] existing = project.getRawClasspath();
 		IClasspathEntry[] withJUnit = new IClasspathEntry[existing.length + 1];
@@ -51,7 +55,7 @@ class RunTestsToolTest {
 		// the literal container path, because JUnitCore is access restricted here: this
 		// bundle does not require org.eclipse.jdt.junit.core, only the tool under test does
 		withJUnit[existing.length] = JavaCore
-				.newContainerEntry(new org.eclipse.core.runtime.Path("org.eclipse.jdt.junit.JUNIT_CONTAINER/5"));
+				.newContainerEntry(new org.eclipse.core.runtime.Path("org.eclipse.jdt.junit.JUNIT_CONTAINER/" + junitVersion));
 		project.setRawClasspath(withJUnit, null);
 
 		TestFixture.addType(project, "sample", "SampleTest", """
@@ -149,6 +153,21 @@ class RunTestsToolTest {
 		@SuppressWarnings("unchecked")
 		List<String> types = (List<String>) result.get("testTypes");
 		assertTrue(types.contains("sample.SampleTest"), types.toString());
+	}
+
+	@Test
+	void aJUnit6ProjectGetsTheJUnit6Runner() throws Exception {
+		withTests(6);
+
+		Map<String, Object> dryRun = TestFixture.callAndParse(TOOL,
+				Map.of("project", PROJECT, "testClass", "sample.SampleTest", "dryRun", Boolean.TRUE));
+		assertEquals("org.eclipse.jdt.junit.loader.junit6", dryRun.get("testKind"), dryRun.toString());
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("project", PROJECT, "testClass",
+				"sample.SampleTest", "testMethod", "passes", "timeoutSeconds", Integer.valueOf(120)));
+		assertEquals("done", result.get("state"), "the run did not finish: " + result);
+		assertEquals(Integer.valueOf(1), result.get("total"), "only the named method should run: " + result);
+		assertEquals(Integer.valueOf(1), result.get("passed"), result.toString());
 	}
 
 	@Test

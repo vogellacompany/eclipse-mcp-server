@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.jdt.core.ICompilationUnit;
+import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.IPackageFragmentRoot;
@@ -147,7 +148,7 @@ public final class RunTestsTool implements IMcpTool {
 						"A test run is already in progress (%s). Two overlapping runs share JDT's AST parser and can fail with an IllegalStateException, so this one is refused; poll eclipse_get_test_results for the active run first." //$NON-NLS-1$
 								.formatted(active.id()));
 			}
-			String kind = testKind(javaProject);
+			String kind = testKind(type == null ? javaProject : type);
 			String pluginTest = args.getString("pluginTest", "auto"); //$NON-NLS-1$ //$NON-NLS-2$
 			boolean asPlugin = "true".equals(pluginTest) //$NON-NLS-1$
 					|| ("auto".equals(pluginTest) && project.hasNature(PLUGIN_NATURE)); //$NON-NLS-1$
@@ -615,7 +616,7 @@ public final class RunTestsTool implements IMcpTool {
 			String launchedAs) throws CoreException {
 		List<String> names = new ArrayList<>();
 		JsonObject result = new JsonObject().put("dryRun", Boolean.TRUE) //$NON-NLS-1$
-				.put("testKind", testKind(javaProject)) //$NON-NLS-1$
+				.put("testKind", testKind(type == null ? javaProject : type)) //$NON-NLS-1$
 				.put("launchedAs", launchedAs); //$NON-NLS-1$
 		try {
 			for (IType candidate : JUnitCore.findTestTypes(type == null ? javaProject : type, monitor)) {
@@ -669,9 +670,10 @@ public final class RunTestsTool implements IMcpTool {
 	}
 
 	/**
-	 * The test kind JDT's launch delegate expects for the project, which tells JUnit 5 from JUnit 6.
+	 * The test kind JDT's launch delegate expects for the element, which tells JUnit 5 from JUnit 6 and,
+	 * given the test class, a {@code @RunWith(JUnitPlatform)} class from a Jupiter one.
 	 */
-	private static String testKind(IJavaProject javaProject) {
-		return TestKindRegistry.getContainerTestKindId(javaProject);
+	private static String testKind(IJavaElement element) {
+		return TestKindRegistry.getContainerTestKindId(element);
 	}
 }
