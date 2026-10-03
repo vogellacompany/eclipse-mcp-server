@@ -79,7 +79,7 @@ public final class UiThread {
 	 * an error. {@code value} and {@code error} are mutually exclusive, and both are
 	 * unset when {@code timedOut} is set.
 	 */
-	record TimedOutcome(JsonObject value, boolean timedOut, String error) {
+	public record TimedOutcome(JsonObject value, boolean timedOut, String error) {
 	}
 
 	/**
@@ -134,7 +134,7 @@ public final class UiThread {
 	 * a timed request that has not started yet still runs later, which is what
 	 * the answer of eclipse_run_workbench_command says.
 	 */
-	static TimedOutcome timed(long timeoutSeconds, Supplier<JsonObject> work) {
+	public static TimedOutcome timed(long timeoutSeconds, Supplier<JsonObject> work) {
 		if (onUiThread()) {
 			Outcome outcome = inline(work);
 			return new TimedOutcome(outcome.value(), false, outcome.error());
@@ -185,7 +185,7 @@ public final class UiThread {
 		}
 	};
 
-	static McpToolResult call(long timeoutSeconds, Supplier<JsonObject> work) {
+	public static McpToolResult call(long timeoutSeconds, Supplier<JsonObject> work) {
 		Outcome outcome = run(timeoutSeconds, work);
 		return outcome.error() == null ? McpToolResult.of(outcome.value().toString())
 				: McpToolResult.error(outcome.error());

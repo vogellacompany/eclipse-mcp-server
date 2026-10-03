@@ -1,4 +1,4 @@
-package com.vogella.eclipse.mcp.ui.internal;
+package com.vogella.eclipse.mcp.ide.internal;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,6 +30,8 @@ import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
 import com.vogella.eclipse.mcp.core.json.JsonArray;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
+import com.vogella.eclipse.mcp.ui.internal.SelectionTools;
+import com.vogella.eclipse.mcp.ui.internal.UiThread;
 
 /** Invokes a Run As or Debug As shortcut with resources named by the caller. */
 public final class LaunchShortcutTool implements IMcpTool {

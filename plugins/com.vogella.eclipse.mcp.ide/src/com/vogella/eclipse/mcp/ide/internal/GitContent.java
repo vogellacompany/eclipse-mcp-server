@@ -1,4 +1,4 @@
-package com.vogella.eclipse.mcp.ui.internal;
+package com.vogella.eclipse.mcp.ide.internal;
 
 import java.io.File;
 import java.io.IOException;

@@ -26,10 +26,11 @@ plugins/com.vogella.eclipse.mcp.core     provider-independent tool API, registry
 plugins/com.vogella.eclipse.mcp.basic    general-purpose workspace, file, build, preference, log, command and related tools
 plugins/com.vogella.eclipse.mcp.server   MCP protocol, embedded Jetty, bearer token, startup component
 plugins/com.vogella.eclipse.mcp.jdt      Java model tools, declaration sweep and registry index
-plugins/com.vogella.eclipse.mcp.ui       editor, view, perspective and layout tools, compare, screenshots, preference page, startup hook
+plugins/com.vogella.eclipse.mcp.ui       editor, view, perspective and layout tools, screenshots, preference page, startup hook
 plugins/com.vogella.eclipse.mcp.pde      PDE tools
 plugins/com.vogella.eclipse.mcp.debug    breakpoint tools, debug session tools, session registry
 plugins/com.vogella.eclipse.mcp.git      EGit tools, checkout and pull request fetch
+plugins/com.vogella.eclipse.mcp.ide      IDE-only tools: open in editor, compare, launch shortcuts, project import
 plugins/com.vogella.eclipse.mcp.p2       provisioning tools, repositories, install, update, headless trust
 features/com.vogella.eclipse.mcp.feature
 tests/com.vogella.eclipse.mcp.core.tests    the tools, headless
@@ -96,12 +97,16 @@ Do not let it be raised on a client path; answer it and report what was answered
 Before adding a tool that runs project code or touches the installation, look for a prompting `IStatusHandler` on that path.
 `eclipse_run_workbench_command` cannot know whether a handler opens a modal dialog, so it caps its wait, answers `timedOut` with pointers to `eclipse_list_ui_targets` and `eclipse_dismiss_dialog`, and leaves the future running; its `IExecutionListener` is what makes `handlerFinished` trustworthy.
 
+**IDE-only tools live in `com.vogella.eclipse.mcp.ide`.**
+`com.vogella.eclipse.mcp.ui` does not require `org.eclipse.ui.ide`, `org.eclipse.compare`, `org.eclipse.debug.ui` or `org.eclipse.jgit`, because an RCP product that adds it would otherwise pull them and the Debug perspective in.
+A tool that needs one of them goes into the ide bundle, which reaches `UiThread`, `Workbenches` and the other helpers through the `x-friends` export of `com.vogella.eclipse.mcp.ui.internal`.
+
 **Workbench access goes through `Workbenches`, not `PlatformUI`.**
 `PlatformUI` only knows the 3.x workbench; `Workbenches` falls back to the E4 workbench.
 A tool that needs editors, views, perspectives or commands refuses with `Workbenches.noIde()`.
 
 **Optional dependencies live in one class each.**
-`CssStyling` (e4 CSS engine), `GitContent` (jgit) and `FlightRecording` (`jdk.jfr`) are imported optionally and callers catch `LinkageError`; never let one of their types into a signature a tool touches.
+`CssStyling` (e4 CSS engine), `GitContent` (jgit, in the ide bundle) and `FlightRecording` (`jdk.jfr`) are imported optionally and callers catch `LinkageError`; never let one of their types into a signature a tool touches.
 `DisplayScaling` and `NativeForeground` reach SWT internals (`DPIUtil`, `gtk.GTK`, `win32.OS`) by name, so the bundle stays cross platform.
 
 **Answers.**
@@ -196,7 +201,7 @@ Do not undo these without understanding why they are there.
 
 ### UI
 
-- `eclipse_import_project` uses the `x-internal` `SmartImportJob` deliberately, which is why it belongs in the UI bundle rather than basic. It always sets the directories to import (avoiding a modal question), uses `getImportProposals` as the dry run, and restores the auto-build state the job can leave off.
+- `eclipse_import_project` uses the `x-internal` `SmartImportJob` deliberately, which is why it lives in the ide bundle rather than basic. It always sets the directories to import (avoiding a modal question), uses `getImportProposals` as the dry run, and restores the auto-build state the job can leave off.
 - `Reconcilers` reads the reconciler by field name the way JDT's `EditorTestHelper.joinReconciler` does (including the upstream typo `fIninitalProcessDone`); an unreadable one counts as busy, never idle. Lookups are cached per class, a probe stops after `BUDGET_MILLIS`, `UiSettle` sleeps at least as long as the last probe, and the wait is capped by `CallBudget.maxWaitSeconds()` and reports `clamped`.
 - `eclipse_wait_until_settled` is a heuristic whose description names what it cannot see, and a test asserts that wording. `converged false` means the screen never stopped; `converged true` with a differing image means it stopped at a different layout.
 - `suppressCaret` defaults to on and the answer reports `caretsSuppressed`.
@@ -224,7 +229,7 @@ Do not undo these without understanding why they are there.
 
 ### Git
 
-- `org.eclipse.jgit` is required with `resolution:=optional` and referenced only from `GitContent`, so an IDE without EGit loses only `eclipse_open_compare`'s `revision` argument.
+- The ide bundle requires `org.eclipse.jgit` with `resolution:=optional` and references it only from `GitContent`, so an IDE without EGit loses only `eclipse_open_compare`'s `revision` argument.
 
 ### p2
 
