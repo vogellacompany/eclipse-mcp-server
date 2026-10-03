@@ -44,11 +44,7 @@ public final class PlatformLogFile {
 	/**
 	 * Returns the entries written after byte {@code fromByte}.
 	 * <p>
-	 * Entries are appended whole, so a position recorded as the file's size is
-	 * always a record boundary and parsing can start there. Reading from a position
-	 * rather than filtering on a timestamp is what makes a marker exact: it needs no
-	 * clock, and a file that has since shrunk is visibly not the file that was
-	 * marked.
+	 * A position recorded as the file size is a record boundary, so a marker needs no clock.
 	 */
 	public static List<Entry> read(Path file, long fromByte) throws IOException {
 		return parse(readLines(file, fromByte));

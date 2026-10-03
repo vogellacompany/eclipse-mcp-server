@@ -177,10 +177,8 @@ public final class RevertFilesTool implements IMcpTool {
 	/**
 	 * Writes the HEAD content back.
 	 * <p>
-	 * Through the workspace when the file is in it, with KEEP_HISTORY, so the
-	 * content being discarded lands in Eclipse's local history and the caller has a
-	 * way back that {@code git checkout} would not have given them. The refresh
-	 * comes with it, so markers describe the reverted file rather than the old one.
+	 * Through the workspace when the file is in it, with KEEP_HISTORY so the discarded content
+	 * lands in local history; the refresh keeps markers current.
 	 */
 	private static void write(IFile workspaceFile, File onDisk, byte[] head) throws CoreException, IOException {
 		if (workspaceFile != null) {

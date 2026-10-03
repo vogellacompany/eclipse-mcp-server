@@ -27,14 +27,7 @@ final class PrivateFiles {
 	private PrivateFiles() {
 	}
 
-	/**
-	 * Writes through a temporary file and moves it into place.
-	 * <p>
-	 * Truncating in place leaves a window in which the file does not exist, and a
-	 * second IDE starting at that moment reads no token and mints a new one, which
-	 * silently invalidates every client of the first. A move is atomic, so a reader
-	 * sees either the old content or the new one.
-	 */
+	/** Writes through a temporary file and an atomic move, so a second IDE never reads a missing token. */
 	static void write(Path path, String content) throws IOException {
 		Path parent = path.getParent();
 		if (parent != null) {
@@ -60,18 +53,8 @@ final class PrivateFiles {
 	}
 
 	/**
-	 * Replaces a file's ACL with one entry granting its owner everything, which is
-	 * what {@code rw-------} means on a filesystem that has no POSIX permissions.
-	 * <p>
-	 * Without this the token file inherits the directory's rights on Windows. That
-	 * is usually the user profile and usually narrow enough, but "usually" is not a
-	 * property to give a secret, and the failure is silent: a world readable token
-	 * looks exactly like a private one. The ACL travels with the file through the
-	 * atomic move, so it is set on the temporary file rather than afterwards.
-	 * <p>
-	 * A filesystem without ACLs either is not reached here, since it would have had
-	 * POSIX permissions, or cannot express the restriction at all, and a token the
-	 * server cannot write is worse than one whose file it could not narrow.
+	 * Replaces a file's ACL with one entry granting its owner everything, the {@code rw-------} equivalent.
+	 * It is set on the temporary file because the ACL travels through the atomic move.
 	 */
 	private static void restrictToOwner(Path path) {
 		AclFileAttributeView acl = Files.getFileAttributeView(path, AclFileAttributeView.class);

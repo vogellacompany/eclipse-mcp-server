@@ -175,10 +175,8 @@ public final class EvaluateTool implements IMcpTool {
 			return null;
 		}
 		for (var project : org.eclipse.core.resources.ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
-			// one project that cannot answer must not end the scan: JavaCore.create
-			// returns a handle for a project without the Java nature too, and findType
-			// then throws. With the catch outside this loop, the first such project in
-			// a large workspace made every evaluation fail.
+			// one project that cannot answer must not end the scan: findType throws for a
+			// project without the Java nature
 			try {
 				if (!project.isAccessible() || !project.hasNature(org.eclipse.jdt.core.JavaCore.NATURE_ID)) {
 					continue;

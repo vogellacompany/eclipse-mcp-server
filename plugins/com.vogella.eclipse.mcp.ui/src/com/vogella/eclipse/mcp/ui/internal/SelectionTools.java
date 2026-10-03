@@ -257,12 +257,8 @@ public final class SelectionTools {
 				if (activate) {
 					part.getSite().getPage().activate(part);
 				}
-				// a viewer selects its own model objects, and those are not always the
-				// resources a caller names: the Package Explorer holds an IJavaProject
-				// where the workspace holds an IProject, and setSelection drops what it
-				// does not recognise without saying so. Matching the requested resources
-				// against what the viewer actually shows keeps this working for any
-				// viewer without knowing about any one model
+				// a viewer selects its own model objects (the Package Explorer holds an IJavaProject for an IProject) and setSelection silently drops
+				// what it does not recognise, so the requested resources are matched against what the viewer shows
 				List<Object> asShown = matchToViewer(elements, part);
 				ISelection selection = asShown.isEmpty() ? StructuredSelection.EMPTY
 						: new StructuredSelection(asShown);

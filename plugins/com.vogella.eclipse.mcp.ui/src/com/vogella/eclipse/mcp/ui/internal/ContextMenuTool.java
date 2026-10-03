@@ -84,9 +84,7 @@ public final class ContextMenuTool implements IMcpTool {
 			}
 			show(menu, shown);
 			JsonArray items = new JsonArray();
-			// counted at every depth, because the top level array holds only the top
-			// level; past the cap the submenus of skipped items are not opened, so total is
-			// then a lower bound
+			// counted at every depth; past the cap submenus of skipped items stay closed, so total is a lower bound
 			int[] total = { 0 };
 			int[] emitted = { 0 };
 			Menu start = menu;

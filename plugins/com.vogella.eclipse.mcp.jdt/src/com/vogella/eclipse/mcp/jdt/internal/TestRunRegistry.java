@@ -15,11 +15,18 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.variables.VariablesPlugin;
+import org.eclipse.debug.core.DebugPlugin;
+import org.eclipse.debug.core.ILaunch;
+import org.eclipse.debug.core.model.IProcess;
 import org.eclipse.jdt.junit.JUnitCore;
 import org.eclipse.jdt.junit.TestRunListener;
 import org.eclipse.jdt.junit.model.ITestCaseElement;
 import org.eclipse.jdt.junit.model.ITestElement;
 import org.eclipse.jdt.junit.model.ITestRunSession;
+
+import org.eclipse.pde.launching.IPDELauncherConstants;
 
 import com.vogella.eclipse.mcp.core.LaunchAttributes;
 import com.vogella.eclipse.mcp.core.json.JsonArray;
@@ -28,10 +35,8 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
 /**
  * Collects JUnit results from the IDE's own test runner.
  * <p>
- * {@link JUnitCore#addTestRunListener} is global and fires for every run in the
- * IDE, including ones a person started from the UI. Runs are therefore matched
- * by the launch configuration name, which is generated per run, so a run
- * started at the keyboard is never reported as one of ours.
+ * The JUnit listener is global, so runs are matched by their generated launch configuration name and a run
+ * started from the UI is never reported as ours.
  */
 public final class TestRunRegistry {
 
@@ -76,7 +81,7 @@ public final class TestRunRegistry {
 		private volatile String state = "running"; //$NON-NLS-1$
 		private volatile String message;
 		private volatile String launchedAs;
-		private volatile org.eclipse.debug.core.ILaunch launch;
+		private volatile ILaunch launch;
 
 		Run(String id, String launchName, String scope) {
 			this.id = id;
@@ -105,11 +110,7 @@ public final class TestRunRegistry {
 			return finished.await(seconds, TimeUnit.SECONDS);
 		}
 
-		/**
-		 * Moves to a terminal state, once. Terminating an abandoned launch makes JDT
-		 * fire sessionFinished, which used to overwrite "abandoned" with "done" and
-		 * report a run that never started as a completed one with no failures.
-		 */
+		/** Moves to a terminal state, once, so a later sessionFinished cannot overwrite "abandoned" with "done". */
 		synchronized void finish(String terminalState, String reason) {
 			if (!running) {
 				return;
@@ -150,8 +151,7 @@ public final class TestRunRegistry {
 				ITestElement.FailureTrace trace = element.getFailureTrace();
 				synchronized (run.cases) {
 					run.cases.add(new Case(element.getTestClassName(), element.getTestMethodName(),
-							// Result.toString() is "Failure", not "FAILURE"; normalising here is
-							// what stops the counters below silently matching nothing but OK
+							// Result.toString() is "Failure", so normalise or the counters match only OK
 							String.valueOf(element.getTestResult(false)).toUpperCase(Locale.ROOT),
 							element.getElapsedTimeInSeconds(),
 							trace == null ? null : trace.getTrace(), trace == null ? null : trace.getExpected(),
@@ -184,15 +184,11 @@ public final class TestRunRegistry {
 	}
 
 	/**
-	 * Removes launch configurations this server left behind in earlier sessions.
-	 * <p>
-	 * Launching a working copy saves it, so every run of every generation left a
-	 * file in the user's .launches directory. Only configurations carrying this
-	 * server's own marker are removed, never one a person made.
+	 * Removes launch configurations this server left behind in earlier sessions, identified by its own marker.
 	 */
 	private static void deleteLeftoverConfigurations() {
 		try {
-			var manager = org.eclipse.debug.core.DebugPlugin.getDefault().getLaunchManager();
+			var manager = DebugPlugin.getDefault().getLaunchManager();
 			for (var configuration : manager.getLaunchConfigurations()) {
 				if (!configuration.getAttribute(LaunchAttributes.STARTED_BY_MCP,
 						false)) {
@@ -206,7 +202,7 @@ public final class TestRunRegistry {
 					configuration.delete();
 				}
 			}
-		} catch (org.eclipse.core.runtime.CoreException | RuntimeException e) {
+		} catch (CoreException | RuntimeException e) {
 			// tidying is a courtesy; failing at it must not stop a test run
 		}
 	}
@@ -217,9 +213,7 @@ public final class TestRunRegistry {
 	public synchronized Run create(String scope) {
 		listen();
 		String id = "testrun-" + ids.incrementAndGet(); //$NON-NLS-1$
-		// the id restarts at 1 with the server, so the launch name must not be derived
-		// from it alone: two generations would otherwise write the same .launch file and
-		// anyone reading it back to reconstruct a run would get the wrong one
+		// ids restart with the server, so the generation keeps launch names (and .launch files) apart
 		Run run = new Run(id, NAME_PREFIX + id + " " + GENERATION, scope); //$NON-NLS-1$
 		runs.put(id, run);
 		lastId = id;
@@ -257,14 +251,8 @@ public final class TestRunRegistry {
 	private static final int MAX_LAUNCH_ERRORS = 8;
 
 	/**
-	 * The lines of a platform log.
-	 * <p>
-	 * Read leniently rather than through {@code Files.readAllLines}, which decodes
-	 * as UTF-8 and throws on the first byte that is not: the log carries whatever
-	 * encoding the launched platform's default was, which on Windows is a code page
-	 * and not UTF-8, and one stack trace with an accented class name would
-	 * otherwise cost the whole diagnosis. Split on either delimiter for the same
-	 * reason.
+	 * The lines of a platform log, decoded leniently because it carries the launched platform's default
+	 * encoding, which is not always UTF-8.
 	 */
 	private static List<String> logLines(Path log) throws IOException {
 		var decoder = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPLACE)
@@ -277,19 +265,17 @@ public final class TestRunRegistry {
 	private static JsonArray launchedPlatformErrors(Run run) {
 		JsonArray errors = new JsonArray();
 		try {
-			org.eclipse.debug.core.ILaunch launch = run.launch;
+			ILaunch launch = run.launch;
 			var configuration = launch == null ? null : launch.getLaunchConfiguration();
 			if (configuration == null) {
 				return errors;
 			}
-			// the constant, not a remembered string: IPDELauncherConstants.LOCATION is
-			// plain "location", and the guess that was here read nothing at all
 			String location = configuration
-					.getAttribute(org.eclipse.pde.launching.IPDELauncherConstants.LOCATION, (String) null);
+					.getAttribute(IPDELauncherConstants.LOCATION, (String) null);
 			if (location == null) {
 				return errors;
 			}
-			location = org.eclipse.core.variables.VariablesPlugin.getDefault().getStringVariableManager()
+			location = VariablesPlugin.getDefault().getStringVariableManager()
 					.performStringSubstitution(location);
 			Path log = Path.of(location, ".metadata", ".log"); //$NON-NLS-1$ //$NON-NLS-2$
 			if (!Files.isReadable(log)) {
@@ -305,24 +291,18 @@ public final class TestRunRegistry {
 					entry = null;
 				}
 			}
-			// the last ones: a workbench that fails to start says so at the end, after
-			// pages of unrelated bundle resolution noise from a big workspace
+			// the last ones: a failing start says so after pages of resolution noise
 			collected.subList(Math.max(0, collected.size() - MAX_LAUNCH_ERRORS), collected.size()).forEach(errors::add);
-		} catch (org.eclipse.core.runtime.CoreException | IOException | RuntimeException e) {
+		} catch (CoreException | IOException | RuntimeException e) {
 			// the diagnosis is a bonus; failing to read it must not cost the answer
 		}
 		return errors;
 	}
 
 	/**
-	 * Ends a run whose launch died or never reported.
-	 * <p>
-	 * A launch cancelled at the compile error prompt terminates without ever
-	 * producing a test event, and without this the run sits in {@code running}
-	 * forever. Combined with the one-run-at-a-time guard that disabled the tool for
-	 * the rest of the session, recoverable only by restarting the IDE.
+	 * Ends a run whose launch died or never reported, which would otherwise stay running and block every later run.
 	 */
-	static void watch(Run run, org.eclipse.debug.core.ILaunch launch, int staleAfterSeconds) {
+	static void watch(Run run, ILaunch launch, int staleAfterSeconds) {
 		run.launch = launch;
 		Thread watchdog = new Thread(() -> {
 			long deadline = System.currentTimeMillis() + staleAfterSeconds * 1000L;
@@ -345,11 +325,8 @@ public final class TestRunRegistry {
 					return;
 				}
 				if (System.currentTimeMillis() > deadline && !anyResult) {
-					// kill it, do not merely stop waiting: an abandoned plug-in launch is
-					// a second Eclipse holding half a gigabyte, its workspace and its port
+					// kill it: an abandoned plug-in launch is a second Eclipse holding memory and a port
 					boolean killed = terminate(run);
-					// its own terminal state: neither a run that completed nor one whose
-					// tests failed, and "done" with no tests is a contradiction
 					run.finish("abandoned", //$NON-NLS-1$
 							"No test event arrived within %d seconds, so the run was abandoned. %s" //$NON-NLS-1$
 									.formatted(staleAfterSeconds, killed ? "Its launch was terminated." //$NON-NLS-1$
@@ -375,7 +352,7 @@ public final class TestRunRegistry {
 
 	/** Terminates the launch and its processes. Reports whether anything is still alive. */
 	private static boolean terminate(Run run) {
-		org.eclipse.debug.core.ILaunch launch = run.launch;
+		ILaunch launch = run.launch;
 		if (launch == null) {
 			return false;
 		}
@@ -383,12 +360,12 @@ public final class TestRunRegistry {
 			if (launch.canTerminate()) {
 				launch.terminate();
 			}
-			for (org.eclipse.debug.core.model.IProcess process : launch.getProcesses()) {
+			for (IProcess process : launch.getProcesses()) {
 				if (process.canTerminate()) {
 					process.terminate();
 				}
 			}
-		} catch (org.eclipse.core.runtime.CoreException e) {
+		} catch (CoreException e) {
 			return false;
 		}
 		return launch.isTerminated();
@@ -412,8 +389,7 @@ public final class TestRunRegistry {
 			case "FAILURE" -> failed++; //$NON-NLS-1$
 			case "ERROR" -> errors++; //$NON-NLS-1$
 			case "IGNORED" -> ignored++; //$NON-NLS-1$
-			// a result JDT names something else must still be counted: silently
-			// dropping it is how 38 errors were once summarised as zero
+			// an unknown result is still counted, or errors vanish from the summary
 			default -> unclassified++;
 			}
 			if (includePassed || !"OK".equals(testCase.result())) { //$NON-NLS-1$
@@ -437,24 +413,20 @@ public final class TestRunRegistry {
 		if (unclassified > 0) {
 			counted.put("unclassified", unclassified); //$NON-NLS-1$
 		}
-		// a completed run with no tests is a contradiction, and the state field is the
-		// one read programmatically, so it must not quietly claim success
+		// state is the field read programmatically, so a run with no tests must not claim success
 		if ("done".equals(run.state) && cases.isEmpty()) { //$NON-NLS-1$
 			counted.put("stateInconsistent", //$NON-NLS-1$
 					"State is done but no test was reported, which cannot both be true. Treat this as a run that did not happen."); //$NON-NLS-1$
-			// the launched platform knows why, and nothing else does: a workbench that
-			// failed to start reports no tests exactly like a project with none
+			// the launched platform knows why a workbench that failed to start reported no tests
 			JsonArray launchErrors = launchedPlatformErrors(run);
 			if (launchErrors.size() > 0) {
 				counted.put("launchedPlatformErrors", launchErrors) //$NON-NLS-1$
-						// the shadowing explanation fits one failure and misleads for the
-						// rest, so it is only offered when its own symptom is present
+						// the shadowing explanation is only offered when its symptom is present
 						.put("launchedPlatformNote", launchErrors.toString().contains("ClassNotFoundException") //$NON-NLS-1$ //$NON-NLS-2$
 								? "These come from the log of the platform that was launched, not from this IDE. A ClassNotFoundException in a bundle whose version ends in .qualifier is a workspace copy shadowing the installed bundle: it is on the launch's bundle list but has no compiled classes, and under the UI test application that stops the workbench from starting, which reports as no tests. Narrow the bundle set with workspacePlugins required, or build the workspace." //$NON-NLS-1$
 								: "These come from the log of the platform that was launched, not from this IDE. The launch started and then failed on its own terms, so the tests never ran; read them as the platform's account of why, not as a fault of the test bundle."); //$NON-NLS-1$
 			}
 		}
-		// the counters must account for every case, or the summary contradicts the list
 		if (passed + failed + errors + ignored + unclassified != cases.size()) {
 			counted.put("countsInconsistent", //$NON-NLS-1$
 					"The counters do not sum to total; trust the tests array."); //$NON-NLS-1$
@@ -470,8 +442,6 @@ public final class TestRunRegistry {
 				.put("errors", errors) //$NON-NLS-1$
 				.put("ignored", ignored) //$NON-NLS-1$
 				.put("truncated", interesting.size() > reported.size()) //$NON-NLS-1$
-				// how many were dropped, so a caller knows to ask eclipse_get_test_results
-				// for the rest rather than only that something is missing
 				.put("omitted", interesting.size() - reported.size()) //$NON-NLS-1$
 				.put("message", run.message) //$NON-NLS-1$
 				.put("tests", reported); //$NON-NLS-1$

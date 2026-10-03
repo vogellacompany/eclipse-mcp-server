@@ -129,9 +129,7 @@ public final class SamplingRegistry {
 									info.getStackTrace()));
 							if (cpuSupported) {
 								long cpu = threads.getThreadCpuTime(info.getThreadId());
-								// first and last, so the reported time is the thread's
-								// own consumption over the run rather than a sum of
-								// overlapping readings
+								// first and last reading, so the time is the thread's own consumption, not a sum of overlaps
 								long[] range = cpuNanos.computeIfAbsent(Long.valueOf(info.getThreadId()),
 										id -> new long[] { cpu, cpu });
 								range[1] = cpu;
@@ -139,9 +137,7 @@ public final class SamplingRegistry {
 						}
 					}
 					ticks++;
-					// the budget counts rounds, not stacks. Counting stacks meant that
-					// with 70 live threads a 200 budget ended after three rounds, long
-					// before the operation being profiled had got going
+					// the budget counts rounds, not stacks: with 70 live threads a stack budget of 200 ended after three rounds
 					if (ticks >= maxSamples) {
 						running = false;
 						stoppedByBudget = true;
@@ -369,9 +365,7 @@ public final class SamplingRegistry {
 		}
 		long achieved = session.achievedIntervalMillis();
 		if (achieved > session.intervalMillis() * 1.2) {
-			// sampling every thread every 10ms does not fit in 10ms, and a caller
-			// drawing conclusions from sample counts has to know the clock drifted.
-			// The sampler also perturbs what it measures; both belong in the answer
+			// the caller must know the clock drifted, and that sampling perturbs what it measures
 			result.put("intervalWarning", //$NON-NLS-1$
 					"Sampling could not keep the requested %d ms interval and achieved %d ms. Sample fewer threads or ask for a longer interval; note also that sampling itself slows the work being measured, measurably so at short intervals across many threads." //$NON-NLS-1$
 							.formatted(Integer.valueOf(session.intervalMillis()), Long.valueOf(achieved)));
@@ -720,9 +714,7 @@ public final class SamplingRegistry {
 					continue;
 				}
 				JsonObject json = new JsonObject().put("frame", node.frame).put("samples", node.count); //$NON-NLS-1$ //$NON-NLS-2$
-				// a run of frames with one child each and the same count is one path
-				// with nothing to choose along it, forty nested objects for the launcher
-				// and the event loop on every UI thread profile; folded, it is one line
+				// a run of single-child frames with equal counts is one path with nothing to choose along it; folded, it is one line
 				Node tail = node;
 				JsonArray chain = new JsonArray();
 				while (tail.children.size() == 1) {

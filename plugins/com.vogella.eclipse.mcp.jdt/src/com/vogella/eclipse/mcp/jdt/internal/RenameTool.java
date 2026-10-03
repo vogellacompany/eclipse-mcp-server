@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -15,6 +16,7 @@ import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IMember;
 import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.IPackageFragment;
+import org.eclipse.jdt.core.IPackageFragmentRoot;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.manipulation.JavaManipulation;
 import org.eclipse.jdt.core.refactoring.IJavaRefactorings;
@@ -99,8 +101,7 @@ public final class RenameTool implements IMcpTool {
 		} catch (ToolInputException e) {
 			return McpToolResult.error(e.getMessage());
 		}
-		// a binary type has no compilation unit, and the refactoring engine dereferences
-		// it without checking; refuse with the reason rather than dying on an NPE
+		// the refactoring engine dereferences a binary type's missing compilation unit
 		String binary = binaryReason(element);
 		if (binary != null) {
 			return McpToolResult.error(binary);
@@ -152,8 +153,7 @@ public final class RenameTool implements IMcpTool {
 			if (dryRun) {
 				return McpToolResult.of(result.put("applied", Boolean.FALSE).toString()); //$NON-NLS-1$
 			}
-			// a change has to be told to build its validation state before it can be
-			// performed, otherwise it refuses with "has not been initialialized"
+			// without this the change refuses with "has not been initialialized"
 			IProgressMonitor progress = monitor;
 			change.initializeValidationData(progress);
 			PerformChangeOperation operation = new PerformChangeOperation(change);
@@ -168,15 +168,14 @@ public final class RenameTool implements IMcpTool {
 	}
 
 	/**
-	 * Collects the files a change touches, walking composites so that a rename
-	 * reporting one change per file is visible as a file list rather than a count.
+	 * Collects the files a change touches, walking composites.
 	 */
 	private static void collectFiles(Change change, Set<String> into) {
 		if (change == null) {
 			return;
 		}
 		Object modified = change.getModifiedElement();
-		if (modified instanceof org.eclipse.core.resources.IResource resource) {
+		if (modified instanceof IResource resource) {
 			into.add(resource.getFullPath().toString());
 		} else if (modified instanceof IJavaElement element && element.getResource() != null) {
 			into.add(element.getResource().getFullPath().toString());
@@ -196,7 +195,7 @@ public final class RenameTool implements IMcpTool {
 		if ("package".equals(kind)) { //$NON-NLS-1$
 			for (IJavaProject project : projects) {
 				try {
-					for (org.eclipse.jdt.core.IPackageFragmentRoot root : project.getPackageFragmentRoots()) {
+					for (IPackageFragmentRoot root : project.getPackageFragmentRoots()) {
 						IPackageFragment fragment = root.getPackageFragment(typeName);
 						if (fragment != null && fragment.exists() && !fragment.isReadOnly()) {
 							return fragment;
@@ -236,8 +235,7 @@ public final class RenameTool implements IMcpTool {
 		if (type == null || !type.isBinary()) {
 			return null;
 		}
-		// getElementName, never toString: a package fragment root prints every package
-		// it contains, which turned this refusal into 221 lines nobody would read
+		// getElementName, never toString: a package fragment root prints every package it contains
 		IJavaElement root = type.getAncestor(IJavaElement.PACKAGE_FRAGMENT_ROOT);
 		return "'%s' resolved to a binary type in %s, and renaming needs source. This usually means the name was found in build output rather than in a source project; pass 'project' to scope the resolution."
 				.formatted(type.getFullyQualifiedName(), root == null ? "a library" : root.getElementName());

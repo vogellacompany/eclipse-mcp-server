@@ -14,19 +14,13 @@ import org.eclipse.jdt.core.JavaModelException;
  * Annotations that mean something outside this compilation unit reads or writes
  * the member, which is exactly what a reference count cannot see.
  * <p>
- * A field carrying one of these is written by a framework at runtime and read
- * by nothing in Java. JDT reports zero references, zero reads and zero writes,
- * and every heuristic for dead code then agrees that it can go. One such
- * deletion, of two {@code @Reference} fields whose only purpose was to order
- * declarative services components, cost a night and surfaced three subsystems
- * away as a workbench that would not start.
+ * A field carrying one of these is written by a framework, so JDT reports zero references and every dead code
+ * heuristic agrees it can go.
  */
 final class InjectionAnnotations {
 
 	/**
-	 * Matched on the simple name, because that is what an annotation in source
-	 * carries once the type is imported. A false positive costs a caller one
-	 * sentence in an answer; a false negative costs what it cost that night.
+	 * Matched on the simple name, since that is what source carries once imported; a false positive costs a sentence.
 	 */
 	private static final Set<String> SIMPLE_NAMES = Set.of("Reference", //$NON-NLS-1$
 			"Activate", "Deactivate", "Modified", // OSGi declarative services //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$

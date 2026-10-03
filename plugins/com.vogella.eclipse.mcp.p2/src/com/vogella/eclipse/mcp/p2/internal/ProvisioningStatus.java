@@ -47,9 +47,7 @@ public final class ProvisioningStatus {
 		if (lines.isEmpty()) {
 			return null;
 		}
-		// a resolution failure carries a status per unit it could not satisfy, which
-		// came to 122,510 characters in one report and blew the caller's limit. The
-		// first lines are the ones that say what happened
+		// a resolution failure carries a status per unmet unit, enough to blow the caller's limit
 		int kept = Math.min(lines.size(), MAX_LINES);
 		String text = String.join("\n", List.copyOf(lines).subList(0, kept)); //$NON-NLS-1$
 		if (kept < lines.size()) {

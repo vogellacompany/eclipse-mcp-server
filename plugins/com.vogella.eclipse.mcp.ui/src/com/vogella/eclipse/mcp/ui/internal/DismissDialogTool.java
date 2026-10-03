@@ -96,9 +96,7 @@ public final class DismissDialogTool implements IMcpTool {
 			return result.put("dismissed", Boolean.FALSE) //$NON-NLS-1$
 					.put("reason", "The button '%s' is disabled or hidden, so a click would not reach it.".formatted(button)); //$NON-NLS-1$ //$NON-NLS-2$
 		}
-		// read the label before pressing: the button that closes the dialog disposes
-		// itself along with the shell, so reading it afterwards throws "Widget is
-		// disposed" and reported a completed press as a failed call
+		// read the label before pressing: the press may dispose the button along with the shell
 		String pressed = label(target);
 		if ((target.getStyle() & SWT.CHECK) != 0) {
 			target.setSelection(!target.getSelection());
@@ -111,17 +109,13 @@ public final class DismissDialogTool implements IMcpTool {
 
 	private static Shell find(Display display, String title) {
 		if (title == null) {
-			// a modal shell is what blocks the IDE, so it wins. The fallback that used
-			// to return the active shell when it was not getShells()[0] depended on an
-			// ordering SWT does not guarantee, and handed back the user's main window.
+			// a modal shell is what blocks the IDE, so it wins; the active shell is not guaranteed to be getShells()[0]
 			for (Shell shell : display.getShells()) {
 				if (shell.isVisible() && isModal(shell)) {
 					return shell;
 				}
 			}
-			// no modal dialog: a transient popup such as content assist, which has no
-			// title, is the next thing worth closing. A proposal popup carries a Table,
-			// which tells it apart from a tooltip that has none.
+			// otherwise a transient popup such as content assist; its Table tells it from a tooltip
 			for (Shell shell : display.getShells()) {
 				if (shell.isVisible() && !isModal(shell) && !Workbenches.windowShells().contains(shell) && hasTable(shell)) {
 					return shell;

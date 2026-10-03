@@ -9,11 +9,19 @@ import java.util.Set;
 
 import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IncrementalProjectBuilder;
+import org.eclipse.core.resources.ProjectScope;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.Platform;
+import org.eclipse.core.runtime.preferences.IScopeContext;
+import org.eclipse.core.runtime.preferences.InstanceScope;
+import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.debug.core.DebugPlugin;
+import org.eclipse.debug.core.ILaunch;
 import org.eclipse.debug.core.ILaunchConfigurationType;
 import org.eclipse.debug.core.ILaunchConfigurationWorkingCopy;
 import org.eclipse.debug.core.ILaunchManager;
@@ -154,8 +162,7 @@ public final class RunTestsTool implements IMcpTool {
 					|| ("auto".equals(pluginTest) && project.hasNature(PLUGIN_NATURE)); //$NON-NLS-1$
 			boolean ui = args.getBoolean("ui", false); //$NON-NLS-1$
 			String launchedAs = launchedAs(project, args);
-			// what the person's own launches would have done, since this run answers the
-			// prompt for itself and puts the setting back
+			// this run answers the prompt itself and puts the setting back
 			String compileErrorPromptWas = CompileErrorPrompt.effectiveValue();
 			TestRunRegistry.Run run = TestRunRegistry.getInstance()
 					.create(testClass == null ? projectName : testClass + (testMethod == null ? "" : "#" + testMethod)); //$NON-NLS-1$ //$NON-NLS-2$
@@ -175,16 +182,13 @@ public final class RunTestsTool implements IMcpTool {
 				ILaunchConfigurationWorkingCopy configuration = launchType.newInstance(null, run.launchName());
 				configuration.setAttribute(IJavaLaunchConfigurationConstants.ATTR_PROJECT_NAME, projectName);
 				configuration.setAttribute(ATTR_TEST_KIND, kind);
-				// a run nobody is watching must not ask anything: a debugged test that
-				// suspends otherwise raises the modal perspective switch prompt
+				// a suspended debugged test would otherwise raise the modal perspective switch prompt
 				configuration.setAttribute(LaunchAttributes.TARGET_DEBUG_PERSPECTIVE,
 						LaunchAttributes.PERSPECTIVE_NONE);
 				configuration.setAttribute(LaunchAttributes.TARGET_RUN_PERSPECTIVE,
 						LaunchAttributes.PERSPECTIVE_NONE);
 				configuration.setAttribute(LaunchAttributes.STARTED_BY_MCP, true);
-				// launching a working copy saves it, and a saved configuration shows up in
-				// the user's Run Configurations dialog. Private keeps this server's launches
-				// out of a list that belongs to the person at the IDE.
+				// launching saves the configuration; private keeps it out of the user's Run Configurations
 				configuration.setAttribute(LaunchAttributes.PRIVATE, true);
 				if (type == null) {
 					// a container runs everything under it, which is how Run As on a project works
@@ -215,18 +219,15 @@ public final class RunTestsTool implements IMcpTool {
 					configurePlatform(configuration, args.getString("runtimeWorkspace"), ui, allWorkspacePlugins, //$NON-NLS-1$
 							testBundle);
 				}
-				// only for the UI application: it is the one that needs a workbench, and a
-				// workspace plug-in with unbuilt classes shadows the installed bundle and
-				// stops that workbench from starting, which reports as a run with no tests
+				// unbuilt workspace plug-ins shadow installed bundles and keep the UI workbench from starting
 				JsonObject preflight = ui && asPlugin ? unbuiltWorkspacePlugins() : null;
-				// launching happens in a job: preLaunchCheck alone can take a while, and
-				// doing it here would defeat wait:false exactly as the p2 refresh once did
+				// launched in a job: preLaunchCheck alone can outlast wait:false
 				run.launchedAs(launchedAs);
 				boolean debug = args.getBoolean("debug", false); //$NON-NLS-1$
-				org.eclipse.core.runtime.jobs.Job.create("MCP test launch " + run.id(), progress -> { //$NON-NLS-1$
+				Job.create("MCP test launch " + run.id(), progress -> { //$NON-NLS-1$
 					String previous = CompileErrorPrompt.suppress();
 					try {
-						org.eclipse.debug.core.ILaunch launch = configuration.launch(
+						ILaunch launch = configuration.launch(
 								debug ? ILaunchManager.DEBUG_MODE : ILaunchManager.RUN_MODE, null);
 						TestRunRegistry.watch(run, launch, asPlugin ? 300 : 120);
 					} catch (CoreException | RuntimeException e) {
@@ -236,11 +237,10 @@ public final class RunTestsTool implements IMcpTool {
 					} finally {
 						CompileErrorPrompt.restore(previous);
 					}
-					return org.eclipse.core.runtime.Status.OK_STATUS;
+					return Status.OK_STATUS;
 				}).schedule();
 				scheduled = true;
 
-				// a launched platform starts far too slowly to hold a call open for
 				if (args.getBoolean("wait", !asPlugin)) { //$NON-NLS-1$
 					try {
 						run.await(args.getInt("timeoutSeconds", 25, 1, 3600)); //$NON-NLS-1$
@@ -254,8 +254,7 @@ public final class RunTestsTool implements IMcpTool {
 					result.put("note", //$NON-NLS-1$
 							"A second Eclipse is starting, which takes tens of seconds before the first test runs. Poll eclipse_get_test_results with this runId."); //$NON-NLS-1$
 				}
-				// report what was actually set rather than what was intended: two rounds of
-				// this were spent inferring the launch configuration from a runtime log
+				// read back from the configuration, not echoed
 				if (asPlugin) {
 					result.put("launchAttributes", new JsonObject() //$NON-NLS-1$
 							.put(IPDELauncherConstants.APPLICATION,
@@ -264,17 +263,11 @@ public final class RunTestsTool implements IMcpTool {
 									configuration.getAttribute(IPDELauncherConstants.APP_TO_TEST, (String) null))
 							.put("workspacePlugins", allWorkspacePlugins ? "all" : "required") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 							.put("workspaceBundle", testBundle) //$NON-NLS-1$
-							// read back rather than echoed: the selection is only honoured
-							// when useDefault is false, and reporting the intention hid that
 							.put(IPDELauncherConstants.USE_DEFAULT,
 									configuration.getAttribute(IPDELauncherConstants.USE_DEFAULT, true))
-							// where to read the bundle list the launch actually got: config.ini
-							// always holds it as osgi.bundles, while bundles.info is written
-							// only when simpleconfigurator is in use, which the narrow set is
-							// not, so naming that file alone would name a missing one
 							.put("configurationArea", //$NON-NLS-1$
 									"%s/.metadata/.plugins/org.eclipse.pde.core/%s (config.ini holds osgi.bundles; bundles.info is written next to it only for the wide set)" //$NON-NLS-1$
-											.formatted(org.eclipse.core.resources.ResourcesPlugin.getWorkspace().getRoot()
+											.formatted(ResourcesPlugin.getWorkspace().getRoot()
 													.getLocation(), run.launchName()))
 							.put(IPDELauncherConstants.SELECTED_WORKSPACE_BUNDLES,
 									String.join(", ", configuration.getAttribute( //$NON-NLS-1$
@@ -329,8 +322,6 @@ public final class RunTestsTool implements IMcpTool {
 				throw e;
 			}
 		} catch (CoreException e) {
-			// the cause's own text in the message: a bare "could not run the tests"
-			// restates the request and says nothing about what went wrong
 			throw new McpToolException(
 					"Could not run the tests of %s: %s".formatted(projectName, describe(e)), e); //$NON-NLS-1$
 		}
@@ -338,16 +329,14 @@ public final class RunTestsTool implements IMcpTool {
 
 	/**
 	 * The projects the launch depends on that do not compile, transitively.
-	 * <p>
-	 * Direct references are not enough: the launch delegate checks the whole
-	 * required closure, which is why the prompt named a project this field did not.
+	 * The launch delegate checks the whole required closure, not just direct references.
 	 */
 	private static JsonArray projectsWithErrors(IProject project) {
 		Set<String> seen = new LinkedHashSet<>();
-		List<IProject> queue = new ArrayList<>(List.of(project));
+		ArrayDeque<IProject> queue = new ArrayDeque<>(List.of(project));
 		JsonArray broken = new JsonArray();
 		while (!queue.isEmpty() && seen.size() < 500) {
-			IProject current = queue.remove(0);
+			IProject current = queue.removeFirst();
 			if (!current.isAccessible() || !seen.add(current.getName())) {
 				continue;
 			}
@@ -389,16 +378,11 @@ public final class RunTestsTool implements IMcpTool {
 	}
 
 	/**
-	 * A plug-in test launches a second Eclipse, so it needs its own workspace and an
-	 * application to run. The workbench one is opt-in: it opens a window on the
-	 * user's screen, which should never happen by surprise.
+	 * Configures a plug-in test launch with its own workspace and a headless application unless {@code ui} is set.
 	 */
 	private static void configurePlatform(ILaunchConfigurationWorkingCopy configuration, String runtimeWorkspace,
 			boolean ui, boolean allWorkspacePlugins, String testBundle) {
-		// APPLICATION is the switch, per PDE's own comment in getApplication: "if
-		// application is set, it must be a headless app". Leaving it unset yields the
-		// UI test application. APP_TO_TEST is a different thing, the product the UI
-		// test application runs inside, so it belongs only on the ui path.
+		// APPLICATION set means a headless app, unset means the UI one; APP_TO_TEST is the UI product only
 		if (ui) {
 			configuration.removeAttribute(IPDELauncherConstants.APPLICATION);
 			configuration.setAttribute(IPDELauncherConstants.APP_TO_TEST, "org.eclipse.ui.ide.workbench"); //$NON-NLS-1$
@@ -413,16 +397,8 @@ public final class RunTestsTool implements IMcpTool {
 		configuration.setAttribute(IPDELauncherConstants.DOCLEAR, true);
 		configuration.setAttribute(IPDELauncherConstants.ASKCLEAR, false);
 		configuration.setAttribute(IPDELauncherConstants.CONFIG_CLEAR_AREA, true);
-		// AUTOMATIC_ADD decides only how the workspace list is read: true means
-		// everything except the deselected, false means only the selected. Whether
-		// dependencies come along is a separate switch and stays on, so the narrow set
-		// is still the test bundle plus its closure plus the target platform. Taking
-		// everything is the launch tab's default and it kills a UI test launch in a
-		// workspace that holds unbuilt copies of the bundles the workbench is made of.
-		// USE_DEFAULT is the switch that decides whether any of the rest is read at
-		// all. BundleLauncherHelper.getMergedBundleMap returns every active model when
-		// it is true, which it is by default, so a selection written next to it is
-		// simply ignored. That is why setting AUTOMATIC_ADD alone changed nothing.
+		// USE_DEFAULT true makes PDE ignore the selection (BundleLauncherHelper.getMergedBundleMap), so it must follow
+		// allWorkspacePlugins; AUTOMATIC_ADD true takes every workspace plug-in, which breaks UI launches with unbuilt copies
 		configuration.setAttribute(IPDELauncherConstants.USE_DEFAULT, allWorkspacePlugins);
 		configuration.setAttribute(IPDELauncherConstants.AUTOMATIC_ADD, allWorkspacePlugins);
 		configuration.setAttribute(IPDELauncherConstants.AUTOMATIC_INCLUDE_REQUIREMENTS, true);
@@ -434,10 +410,7 @@ public final class RunTestsTool implements IMcpTool {
 	/**
 	 * Workspace plug-in projects PDE reports errors on, which a UI test launch
 	 * takes with it because every workspace plug-in is on its bundle list.
-	 * <p>
-	 * Markers only, no build: this must not cost seconds before a launch. With
-	 * auto-build off the markers can be stale, so an empty answer proves nothing
-	 * and the note says as much.
+	 * Markers only, no build, so with auto-build off an empty answer proves nothing.
 	 */
 	private static JsonObject unbuiltWorkspacePlugins() {
 		JsonArray projects = new JsonArray();
@@ -473,12 +446,7 @@ public final class RunTestsTool implements IMcpTool {
 
 	/**
 	 * Builds the projects going into the launch, when anything else would not.
-	 * <p>
-	 * A plug-in launch runs workspace bundles in dev mode and reads generated
-	 * artefacts off disk. The declarative services descriptors under OSGI-INF are
-	 * written by org.eclipse.pde.ds.core.builder rather than by the Java builder,
-	 * so a workspace whose class files are current can still hand the launch stale
-	 * descriptors, and a component then registers with the wrong services.
+	 * The OSGI-INF descriptors are written by the DS builder, so current class files can still come with stale descriptors.
 	 */
 	private static JsonObject buildForLaunch(IProject project, String buildFirst, boolean autoBuilding,
 			IProgressMonitor monitor) {
@@ -496,11 +464,9 @@ public final class RunTestsTool implements IMcpTool {
 		long started = System.nanoTime();
 		try {
 			for (IProject each : launchProjects(project)) {
-				// full, not incremental, when asked: the descriptors come from a
-				// compilation participant, so an incremental build that finds nothing to
-				// recompile writes none of them
-				each.build(full ? org.eclipse.core.resources.IncrementalProjectBuilder.FULL_BUILD
-						: org.eclipse.core.resources.IncrementalProjectBuilder.INCREMENTAL_BUILD, monitor);
+				// descriptors come from a compilation participant, so an incremental build may write none
+				each.build(full ? IncrementalProjectBuilder.FULL_BUILD
+						: IncrementalProjectBuilder.INCREMENTAL_BUILD, monitor);
 				builtProjects.add(each.getName());
 			}
 		} catch (CoreException | RuntimeException e) {
@@ -528,18 +494,14 @@ public final class RunTestsTool implements IMcpTool {
 
 	/**
 	 * Whether the test project generates its declarative services descriptors.
-	 * <p>
-	 * Off by platform default, and a project that turns it on does so in its own
-	 * .settings, so two projects side by side can differ. Reported always rather
-	 * than only on failure: nothing else tells a caller, and it stays invisible
-	 * until it is catastrophic.
+	 * Off by platform default and set per project, so it is always reported.
 	 */
 	private static JsonObject descriptorGeneration(IProject project) {
 		String qualifier = "org.eclipse.pde.ds.annotations"; //$NON-NLS-1$
-		var lookup = org.eclipse.core.runtime.Platform.getPreferencesService();
-		var scopes = new org.eclipse.core.runtime.preferences.IScopeContext[] {
-				new org.eclipse.core.resources.ProjectScope(project),
-				org.eclipse.core.runtime.preferences.InstanceScope.INSTANCE };
+		var lookup = Platform.getPreferencesService();
+		var scopes = new IScopeContext[] {
+				new ProjectScope(project),
+				InstanceScope.INSTANCE };
 		boolean enabled = lookup.getBoolean(qualifier, "enabled", false, scopes); //$NON-NLS-1$
 		String path = lookup.getString(qualifier, "path", "OSGI-INF", scopes); //$NON-NLS-1$ //$NON-NLS-2$
 		int descriptors = 0;
@@ -572,19 +534,14 @@ public final class RunTestsTool implements IMcpTool {
 	}
 
 	/**
-	 * Sends a UI run to another X display, so the workbench does not open over
-	 * whatever the person at the machine is doing.
-	 * <p>
-	 * The environment is appended rather than replaced: a launch needs the rest of
-	 * it. GDK_BACKEND goes with the display because GTK otherwise takes the Wayland
-	 * compositor and the display is silently ignored, which is the failure this
-	 * whole feature exists to avoid.
+	 * Sends a UI run to another X display.
+	 * GDK_BACKEND goes with it because GTK otherwise takes the Wayland compositor and ignores the display.
 	 */
 	private static JsonObject applyDisplay(ILaunchConfigurationWorkingCopy configuration, String display) {
 		if (display == null) {
 			return null;
 		}
-		String windowSystem = org.eclipse.core.runtime.Platform.getWS();
+		String windowSystem = Platform.getWS();
 		JsonObject result = new JsonObject().put("requested", display) //$NON-NLS-1$
 				.put("windowSystem", windowSystem); //$NON-NLS-1$
 		if (!"gtk".equals(windowSystem)) { //$NON-NLS-1$
@@ -603,7 +560,7 @@ public final class RunTestsTool implements IMcpTool {
 	}
 
 	/** How the run would be launched, which a dry run has to report as well. */
-	private static String launchedAs(org.eclipse.core.resources.IProject project, ToolArguments args)
+	private static String launchedAs(IProject project, ToolArguments args)
 			throws CoreException {
 		String pluginTest = args.getString("pluginTest", "auto"); //$NON-NLS-1$ //$NON-NLS-2$
 		boolean asPlugin = "true".equals(pluginTest) //$NON-NLS-1$
@@ -623,9 +580,7 @@ public final class RunTestsTool implements IMcpTool {
 				names.add(candidate.getFullyQualifiedName());
 			}
 		} catch (JavaModelException | RuntimeException e) {
-			// JDT's own scan descends into an anonymous type declared inside a lambda
-			// and builds a handle that does not resolve, and the failure takes the whole
-			// project with it. Scanning type by type costs one type instead.
+			// JDT descends into an anonymous type inside a lambda and fails for the whole project
 			int skipped = perTypeScan(javaProject, monitor, names);
 			result.put("scan", "perType") //$NON-NLS-1$ //$NON-NLS-2$
 					.put("skippedTypes", Integer.valueOf(skipped)) //$NON-NLS-1$
@@ -642,10 +597,7 @@ public final class RunTestsTool implements IMcpTool {
 	}
 
 	/**
-	 * Asks JDT per top level type instead of per project, so that one type it
-	 * cannot resolve costs that type rather than the answer. Returns how many were
-	 * skipped, because a scan that quietly returns fewer tests is worse than one
-	 * that says it was incomplete.
+	 * Asks JDT per top level type so one unresolvable type costs only itself, and returns how many were skipped.
 	 */
 	private static int perTypeScan(IJavaProject javaProject, IProgressMonitor monitor, List<String> into)
 			throws JavaModelException {

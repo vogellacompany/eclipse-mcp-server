@@ -172,11 +172,8 @@ public final class UpdateTool implements IMcpTool {
 	/**
 	 * The units in this update that are the server itself.
 	 * <p>
-	 * A self update stops the bundle serving the request, and the provisioning job
-	 * runs in a bundle of the same feature, so the operation can lose its own driver
-	 * half way through. What is left is an IDE with no server, no discovery file and
-	 * no way in: the one failure this machinery cannot talk its way out of, and it
-	 * has no recovery path at all once the window is hidden.
+	 * A self update stops the bundle serving the request and can lose its own driver half way,
+	 * leaving an IDE with no server and no way in.
 	 */
 	private static List<String> selfUpdates(Update[] updates) {
 		List<String> self = new ArrayList<>();

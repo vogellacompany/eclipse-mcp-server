@@ -19,15 +19,7 @@ public final class McpPreferences {
 
 	public static final String KEY_CALL_TIMEOUT_SECONDS = "callTimeoutSeconds"; //$NON-NLS-1$
 
-	/**
-	 * Whether this plug-in replaces the IDE's splash screen.
-	 * <p>
-	 * Held in the CONFIGURATION scope and not the instance scope, unlike everything
-	 * else here: the splash is written into the installation's config.ini and is
-	 * therefore a property of the installation. An instance scoped flag would let two
-	 * workspaces of one installation disagree, with the last one started silently
-	 * winning and the other's preference page showing a state that is not in force.
-	 */
+	/** Whether this plug-in replaces the IDE's splash screen; configuration scoped, since config.ini belongs to the installation. */
 	public static final String KEY_REPLACE_SPLASH = "replaceSplash"; //$NON-NLS-1$
 
 	/**

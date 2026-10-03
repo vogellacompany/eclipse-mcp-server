@@ -60,10 +60,8 @@ final class ThemeDefinitions {
 		List<JsonObject> colors = query.colors() ? read(registry, COLOR, theme, query, categories) : List.of();
 		List<JsonObject> fonts = query.fonts() ? read(registry, FONT, theme, query, categories) : List.of();
 
-		// two theme systems sit on top of each other and they disagree: the workbench
-		// ITheme is what the registries below belong to, while the e4 CSS theme is
-		// what actually repaints the IDE. Reporting only the first says
-		// "org.eclipse.ui.defaultTheme" at an IDE that is plainly dark
+		// the workbench ITheme owns the registries below, but the e4 CSS theme is what repaints the IDE;
+		// reporting only the first says "org.eclipse.ui.defaultTheme" at a dark IDE
 		String cssTheme = CssStyling.activeCssThemeId();
 		JsonObject result = new JsonObject()
 				.put("activeThemeId", theme == null ? null : theme.getId()) //$NON-NLS-1$
@@ -198,9 +196,7 @@ final class ThemeDefinitions {
 						Integer.parseInt(parts[2].strip()));
 			}
 		} catch (IllegalArgumentException e) {
-			// parseInt's, and RGB's own for a component out of range. A value this
-			// cannot read is symbolic, and the caller sees an absent comparison
-			// rather than a wrong one
+			// parseInt's, and RGB's for an out of range component; an unreadable value is symbolic and yields an absent comparison
 		}
 		return null;
 	}

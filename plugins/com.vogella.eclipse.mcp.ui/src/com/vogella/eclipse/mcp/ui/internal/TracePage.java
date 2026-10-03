@@ -10,21 +10,14 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
 /**
  * Renders a sampling session as a flame graph page and publishes it.
  * <p>
- * The URL and any reason the page could not be opened are folded into the answer the
- * tool was going to send anyway, so asking for a page never turns a working call into a
- * failed one.
+ * The URL or the reason for failure goes into the tool's own answer, so a page never fails a call.
  */
 final class TracePage {
 
 	private TracePage() {
 	}
 
-	/**
-	 * Publishes the page and records the outcome in {@code answer}.
-	 *
-	 * @param aggregate the aggregate already computed for the answer, read for the
-	 *                  summary tables so the page and the JSON cannot disagree
-	 */
+	/** Publishes the page and records the outcome in {@code aggregate}. */
 	static void publishSampling(SamplingRegistry.Session session, boolean includeIdle, String frameFilter,
 			boolean includeServer, JsonObject aggregate, boolean open) {
 		if (!TracePages.isAvailable()) {

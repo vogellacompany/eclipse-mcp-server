@@ -14,9 +14,11 @@ import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.ICompilationUnit;
+import org.eclipse.jdt.core.IImportContainer;
 import org.eclipse.jdt.core.IImportDeclaration;
 import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IJavaModelMarker;
+import org.eclipse.jdt.core.ISourceRange;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.compiler.IProblem;
@@ -92,8 +94,7 @@ public final class RemoveUnusedImportsTool implements IMcpTool {
 		try {
 			WorkspaceSync.refresh(scope, monitor);
 			if (build) {
-				// the compiler decides what is unused, so a stale marker set means
-				// removing an import that a since-added reference now needs
+				// stale markers would remove an import a new reference now needs
 				WorkspaceSync.build(project, monitor);
 			}
 		} catch (CoreException e) {
@@ -136,9 +137,7 @@ public final class RemoveUnusedImportsTool implements IMcpTool {
 					for (String name : entry.getValue()) {
 						IImportDeclaration declaration = entry.getKey().getImport(name);
 						if (declaration.exists()) {
-							// one declaration at a time, so the rest of the import block
-							// keeps its order: that is the whole difference from
-							// organize_imports
+							// one at a time keeps the rest of the block in order, unlike organize_imports
 							declaration.delete(false, monitor);
 							removed++;
 						}
@@ -172,12 +171,12 @@ public final class RemoveUnusedImportsTool implements IMcpTool {
 			return null;
 		}
 		for (IJavaElement element : unit.getChildren()) {
-			if (!(element instanceof org.eclipse.jdt.core.IImportContainer container)) {
+			if (!(element instanceof IImportContainer container)) {
 				continue;
 			}
 			for (IJavaElement child : container.getChildren()) {
 				if (child instanceof IImportDeclaration declaration) {
-					org.eclipse.jdt.core.ISourceRange range = declaration.getSourceRange();
+					ISourceRange range = declaration.getSourceRange();
 					if (range != null && offset >= range.getOffset()
 							&& offset < range.getOffset() + range.getLength()) {
 						return declaration.getElementName();

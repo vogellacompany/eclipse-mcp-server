@@ -1,15 +1,10 @@
 package com.vogella.eclipse.mcp.core;
 
 /**
- * Publishes a rendered trace page, hands back the URL a browser can open, and opens it
- * when asked.
+ * Publishes a rendered trace page, hands back the URL a browser can open, and opens it when asked.
  * <p>
- * The page is served by the embedded HTTP server, which lives in the server bundle, and
- * opening a browser needs the workbench, which lives in the UI bundle, while the tools
- * that produce traces live here and there. Neither of those may be a dependency of this
- * bundle, so both sides register their implementation on startup the same way the
- * {@link ClientSessions} provider is registered, and everything here degrades to a
- * plain "not available" when they have not.
+ * The HTTP server and the browser launcher live in other bundles, which register their implementations on startup;
+ * without them everything here answers "not available".
  */
 public final class TracePages {
 
@@ -62,8 +57,7 @@ public final class TracePages {
 	/**
 	 * Opens the page in the machine's browser.
 	 *
-	 * @return {@code null} when it was opened, or why it was not, which is never a
-	 *         reason to fail the call: the URL is in the answer either way
+	 * @return {@code null} when it was opened, or why it was not
 	 */
 	public static String open(String url) {
 		Opener current = opener;

@@ -239,9 +239,7 @@ public final class CommandTools {
 			try {
 				return McpToolResult.of(pending.get(timeoutSeconds, TimeUnit.SECONDS));
 			} catch (TimeoutException e) {
-				// registered here rather than up front, so a completion between the timeout
-				// and this line is logged too: the handler keeps running either way, and
-				// dropping its record would hide whatever it went on to do
+				// registered here so a completion between the timeout and this line is logged too
 				pending.whenComplete((text, error) -> logLateCompletion(wanted, text, error));
 				return McpToolResult.of(timedOut(wanted, timeoutSeconds, recorder).toString());
 			} catch (InterruptedException e) {
@@ -375,12 +373,8 @@ public final class CommandTools {
 					elements);
 			org.eclipse.core.commands.IHandler handler = command.getHandler();
 			result.put("handlerClass", handler == null ? null : handler.getClass().getName()); //$NON-NLS-1$
-			// The handler the platform hands out is an e4 wrapper that evaluates
-			// against the LIVE context and ignores the IEvaluationContext it is given,
-			// so handing it a synthetic one answered for the ambient selection instead.
-			// The selection is therefore substituted in the context the handler really
-			// reads, and put back immediately; the swap is invisible because all of
-			// this runs in one turn of the UI thread.
+			// the platform's handler wrapper ignores the IEvaluationContext and reads the LIVE context,
+			// so the selection is swapped in there and restored within the same UI turn
 			org.eclipse.e4.core.contexts.IEclipseContext eclipseContext = eclipseContext();
 			if (eclipseContext == null) {
 				return result.put("enabledForSelection", null) //$NON-NLS-1$

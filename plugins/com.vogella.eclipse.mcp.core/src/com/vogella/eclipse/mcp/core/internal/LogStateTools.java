@@ -176,11 +176,7 @@ public final class LogStateTools {
 		/**
 		 * Writes one entry and reads it back.
 		 * <p>
-		 * The framework holds the log open through its own writer, so a delete
-		 * underneath it can leave it appending to a file nothing can reach any more.
-		 * That failure is silent and would only surface as an empty log much later, so
-		 * it is checked from the consuming end here rather than assumed from the delete
-		 * having returned true.
+		 * A delete can leave the framework appending to a file nothing can reach, so the result is checked here.
 		 */
 		private static JsonObject verify() {
 			String probe = "Error Log cleared through eclipse_clear_log"; //$NON-NLS-1$
@@ -286,9 +282,7 @@ public final class LogStateTools {
 		/**
 		 * Reads the newest entries back from the log file and looks for this one.
 		 * <p>
-		 * Logging through {@link ILog} returns normally whether or not the framework
-		 * can still reach its file, so arrival is proven from the consuming end rather
-		 * than assumed, the way the clear tool checks itself.
+		 * {@link ILog} returns normally even when the file is unreachable, so arrival is proven by reading it back.
 		 */
 		private static JsonObject verify(String message, String pluginId, int severity) {
 			Path log = logFile();

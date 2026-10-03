@@ -17,14 +17,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * What marks a member as deprecated, kept apart by which of the two ways said
- * so.
- * <p>
- * The annotation and the Javadoc tag are usually assumed to agree and often do
- * not: annotations get added to a bundle in one sweep years after the
- * deprecations they annotate. Reading either alone therefore dates a
- * deprecation to the wrong release, which is why both are reported separately
- * rather than folded into one boolean.
+ * What marks a member as deprecated, with the annotation and the Javadoc tag kept apart because they often
+ * disagree and either alone dates a deprecation to the wrong release.
  */
 record Deprecation(boolean annotated, boolean tagged, boolean flagged, boolean forRemoval, String since, String note) {
 
@@ -34,6 +28,8 @@ record Deprecation(boolean annotated, boolean tagged, boolean flagged, boolean f
 
 	/** Longest replacement advice carried in an answer, in characters. */
 	private static final int MAX_NOTE = 400;
+
+	private static final Pattern NEXT_BLOCK_TAG = Pattern.compile("\\n\\s*\\*?\\s*@[a-zA-Z]"); //$NON-NLS-1$
 
 	boolean deprecated() {
 		return annotated || tagged || flagged;
@@ -83,16 +79,15 @@ record Deprecation(boolean annotated, boolean tagged, boolean flagged, boolean f
 			return null;
 		}
 		String text = javadoc.substring(at + TAG.length());
-		// up to the next block tag, since what follows it describes something else
-		Matcher next = Pattern.compile("\\n\\s*\\*?\\s*@[a-zA-Z]").matcher(text); //$NON-NLS-1$
+		// stop at the next block tag
+		Matcher next = NEXT_BLOCK_TAG.matcher(text);
 		if (next.find()) {
 			text = text.substring(0, next.start());
 		}
 		String cleaned = text.replaceAll("\\s*\\*/\\s*$", "").replaceAll("(?m)^\\s*\\*\\s?", " ") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 				.replaceAll("\\s+", " ").strip(); //$NON-NLS-1$ //$NON-NLS-2$
 		if (cleaned.isEmpty()) {
-			// the tag with nothing after it still marks the member, and saying so beats
-			// reporting it as not deprecated
+			// a bare tag still marks the member as deprecated
 			return ""; //$NON-NLS-1$
 		}
 		return cleaned.length() > MAX_NOTE ? cleaned.substring(0, MAX_NOTE) + "..." : cleaned; //$NON-NLS-1$

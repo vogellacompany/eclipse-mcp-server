@@ -22,6 +22,7 @@ import org.eclipse.jdt.core.IMember;
 import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.IPackageFragmentRoot;
+import org.eclipse.jdt.core.ISourceRange;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.ITypeHierarchy;
 import org.eclipse.jdt.core.JavaCore;
@@ -147,10 +148,7 @@ public final class ListDeclarationsTool implements IMcpTool {
 	}
 
 	/**
-	 * Reports named types directly, without walking anything.
-	 * <p>
-	 * The registry cross-check is the expensive part and is shared, so asking about
-	 * twenty candidates costs one index build rather than twenty project walks.
+	 * Reports named types directly, sharing one registry index build across all of them.
 	 */
 	private JsonObject reportNamed(List<String> typeNames, List<IJavaProject> projects, RegistryIndex index,
 			List<String> kinds, Set<String> visibility, String status, String deprecated, int maxResults, boolean includeReflection,
@@ -217,13 +215,14 @@ public final class ListDeclarationsTool implements IMcpTool {
 				}
 			}
 		}
+		List<String> projectNames = projectNames(roots);
 		JsonObject result = new JsonObject().put("kinds", array(kinds)) //$NON-NLS-1$
 				.put("status", status) //$NON-NLS-1$
 				.put("total", Integer.valueOf(total)) //$NON-NLS-1$
 				.put("truncated", Boolean.valueOf(total > declarations.size())) //$NON-NLS-1$
-				.put("projects", array(projectNames(roots))) //$NON-NLS-1$
+				.put("projects", array(projectNames)) //$NON-NLS-1$
 				.put("declarations", declarations); //$NON-NLS-1$
-		addCaveats(result, index, includeReflection, projectNames(roots));
+		addCaveats(result, index, includeReflection, projectNames);
 		return result;
 	}
 
@@ -317,22 +316,13 @@ public final class ListDeclarationsTool implements IMcpTool {
 	}
 
 	/**
-	 * What the declaring package's export says a workspace search can prove.
-	 * <p>
-	 * A search is authoritative only when there is nowhere else a reference could
-	 * be: the package is not exported at all, or every bundle its x-friends list
-	 * names is itself a project here. Everything exported plainly is the opposite
-	 * case, and no number of zero results settles it.
+	 * What the declaring package's export says a workspace search can prove: it is authoritative only
+	 * when the package is not exported, is x-internal, or every x-friends bundle is a project here.
 	 */
 	private static Api api(IType type, PackageExports exports, Set<String> workspaceBundles) {
 		PackageExports.Export export = exports.of(type.getJavaProject().getProject(),
 				type.getPackageFragment().getElementName());
-		// x-internal counts as authoritative too. It declares that NO bundle should
-		// use the package, which is a stronger statement than an x-friends list that
-		// happens to be enumerable, so crediting the enumerable one and not the
-		// absolute one had it backwards. Both rest on a compile time access rule
-		// rather than on anything OSGi enforces at runtime, which is why the caveat
-		// says so rather than the field pretending to more than it has
+		// both x-internal and x-friends rest on compile time access rules, not on anything OSGi enforces at runtime
 		boolean authoritative = PackageExports.NOT_EXPORTED.equals(export.tier())
 				|| PackageExports.INTERNAL.equals(export.tier());
 		List<String> friends = null;
@@ -361,7 +351,7 @@ public final class ListDeclarationsTool implements IMcpTool {
 	 */
 	private static JsonArray apiRestrictions(IType type) {
 		try {
-			org.eclipse.jdt.core.ISourceRange range = type.getJavadocRange();
+			ISourceRange range = type.getJavadocRange();
 			if (range == null || type.getCompilationUnit() == null) {
 				return null;
 			}
@@ -394,13 +384,8 @@ public final class ListDeclarationsTool implements IMcpTool {
 		List<RegistryIndex.Evidence> evidence = index.evidenceFor(name);
 		boolean unjudgeable = false;
 		for (RegistryIndex.Evidence one : evidence) {
-			// an unsatisfied basedOn does not demote. It is a single-valued hint that
-			// several real schemas cannot express: org.eclipse.ui.decorators says
-			// ILabelDecorator while every lightweight="true" decorator implements
-			// ILightweightLabelDecorator instead, and the schema is not lying, only
-			// incapable of saying what it means. Unverifiable is not refuted, and
-			// unsatisfied is not refuted either; basedOnSatisfied stays as a flag for
-			// a person to read
+			// an unsatisfied basedOn does not demote: it is a single-valued hint some real schemas cannot express
+			// (decorators say ILabelDecorator, lightweight ones implement ILightweightLabelDecorator)
 			if (one.schemaKnown()) {
 				return LIVE;
 			}
@@ -447,10 +432,7 @@ public final class ListDeclarationsTool implements IMcpTool {
 	}
 
 	/**
-	 * Whether the class really is what the schema said it would be. A registry entry
-	 * naming a class that does not extend the declared supertype is stale, and a
-	 * stale entry keeps nothing alive, so this is the difference between trusting
-	 * the evidence and verifying it.
+	 * Whether the class really is what the schema said it would be, since a stale registry entry keeps nothing alive.
 	 */
 	private Boolean satisfies(IMember member, String basedOn, IProgressMonitor monitor) throws CoreException {
 		if (basedOn == null || !(member instanceof IType type)) {
@@ -466,27 +448,21 @@ public final class ListDeclarationsTool implements IMcpTool {
 			return null;
 		}
 		Set<String> supertypes = new LinkedHashSet<>();
-		// the type itself: a class satisfies basedOn X when it IS X, which
-		// getAllSupertypes does not report
+		// getAllSupertypes does not report the type itself
 		supertypes.add(type.getFullyQualifiedName());
 		ITypeHierarchy hierarchy = type.newSupertypeHierarchy(monitor);
 		for (IType supertype : hierarchy.getAllSupertypes(type)) {
 			supertypes.add(supertype.getFullyQualifiedName());
 		}
 		if (supertypes.contains(EXTENSION_FACTORY)) {
-			// class="a.b.Factory:product" names a factory, and basedOn describes what
-			// the factory produces rather than the factory itself, so there is nothing
-			// here to check against this class
+			// class="a.b.Factory:product": basedOn describes what the factory produces
 			return null;
 		}
 		for (String name : required) {
 			if (supertypes.contains(name)) {
 				continue;
 			}
-			// not in the hierarchy is only a refutation when the supertype is resolvable
-			// here at all. A schema naming a type this project does not compile against
-			// cannot be checked, and reporting that as a stale entry would call live code
-			// dead, which is the one answer this tool must not give
+			// an unresolvable supertype cannot refute anything, and calling live code dead is the one wrong answer
 			if (type.getJavaProject().findType(name) == null) {
 				return null;
 			}
@@ -548,8 +524,7 @@ public final class ListDeclarationsTool implements IMcpTool {
 		List<IPackageFragmentRoot> roots = new ArrayList<>();
 		for (IJavaProject project : projects) {
 			for (IPackageFragmentRoot root : project.getPackageFragmentRoots()) {
-				// source only, which is what keeps the copies of a type inside built jars
-				// out of the list entirely rather than deduplicated afterwards
+				// source only keeps copies inside built jars out of the list
 				if (root.getKind() != IPackageFragmentRoot.K_SOURCE) {
 					continue;
 				}

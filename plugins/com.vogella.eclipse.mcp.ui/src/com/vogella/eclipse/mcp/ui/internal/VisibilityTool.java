@@ -127,11 +127,7 @@ public final class VisibilityTool implements IMcpTool {
 			entry.put("visible", Boolean.valueOf(shell.isVisible())) //$NON-NLS-1$
 					.put("minimized", Boolean.valueOf(shell.getMinimized())); //$NON-NLS-1$
 			if (visible) {
-				// forceActive is a REQUEST. Windows refuses to hand the foreground to a
-				// process that does not already own it and flashes the taskbar button
-				// instead, and most window managers refuse too, so the call returning
-				// says nothing. Reporting what actually happened is the difference
-				// between a caller that can check and one that photographs a browser.
+				// forceActive is a REQUEST that Windows and most window managers refuse, so the call returning says nothing; report what happened
 				boolean active = NativeForeground.isForeground(shell.getDisplay());
 				String method = "forceActive"; //$NON-NLS-1$
 				String nativeRefusal = null;

@@ -191,10 +191,7 @@ public final class BuildRegistry {
 		 * Asks the job to stop. Cancellation is cooperative: a builder that never
 		 * looks at its monitor runs to the end of whatever it is doing.
 		 * <p>
-		 * A job cancelled before it ever started is a different case, and
-		 * {@code Job.cancel} reporting true is how it is told apart. Nothing will run
-		 * for it, so nothing would ever set its outcome, and it would be reported as
-		 * running for the rest of the session. It is ended here instead.
+		 * A job cancelled before it started never sets its outcome, so it is ended here.
 		 *
 		 * @return whether there was a job left to ask
 		 */
@@ -367,15 +364,8 @@ public final class BuildRegistry {
 	/**
 	 * Adds the errors and warnings the platform logged while the build ran.
 	 * <p>
-	 * A builder that throws does not fail the build: {@code BuildManager} runs
-	 * builders inside a {@code SafeRunner}, which catches the exception and logs it,
-	 * so {@code IProject.build} returns normally and there is nothing to catch. The
-	 * failure only exists in the log, and without this a project whose
-	 * {@code JavaBuilder} threw reports a clean build.
-	 * <p>
-	 * The entries are correlated by time, not by causation, so anything else logged
-	 * during the same window is included too. That is the honest trade: over-report
-	 * rather than call a broken build clean.
+	 * {@code BuildManager} swallows builder exceptions and only logs them, so this is the only place they show.
+	 * Entries are correlated by time, so unrelated ones in the window are included: over-reporting is intended.
 	 */
 	private static void collectLogged(Build build, List<String> into) {
 		var location = Platform.getLogFileLocation();

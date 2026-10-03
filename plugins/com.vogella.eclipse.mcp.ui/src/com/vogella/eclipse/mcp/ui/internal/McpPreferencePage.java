@@ -223,9 +223,7 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 		McpEndpoint endpoint = McpServerService.getInstance().getEndpoint();
 		boolean running = endpoint != null;
 		String error = McpServerService.getInstance().getLastError();
-		// the token is persisted, so it exists and is worth showing whether or not the
-		// server is up. Blanking it while stopped made "Regenerate token" look like a
-		// button that does nothing, because the only visible result was hidden
+		// the persisted token is shown even while stopped, or "Regenerate token" looks like a no-op
 		String persisted = running ? endpoint.token() : McpServerService.getToken();
 		status.setText(running ? "The server is listening."
 				: error != null ? error

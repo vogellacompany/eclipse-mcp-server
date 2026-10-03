@@ -67,11 +67,8 @@ public final class ScreenshotTools {
 		if (gtk4 != null && !"0".equals(gtk4) && !"false".equalsIgnoreCase(gtk4)) { //$NON-NLS-1$ //$NON-NLS-2$
 			return "SWT is running on GTK4, where capturing a window produces a blank image rather than an error."; //$NON-NLS-1$
 		}
-		// Deliberately no Wayland check. WAYLAND_DISPLAY and XDG_SESSION_TYPE stay set
-		// even when GDK_BACKEND=x11 binds the X11 backend through XWayland, where
-		// capture works, so the environment cannot answer the question and sniffing it
-		// refused on machines that were fine. The uniform-image check after the capture
-		// is the real backstop, so this can afford to be permissive.
+		// Deliberately no Wayland check: the variables stay set under GDK_BACKEND=x11 via XWayland, where capture works;
+		// the uniform-image check after capture is the backstop
 		return null;
 	}
 
@@ -274,11 +271,7 @@ public final class ScreenshotTools {
 			boolean inline = args.getBoolean("inline", false); //$NON-NLS-1$
 
 			Object highlights = arguments.get("highlights"); //$NON-NLS-1$
-			// Whether this call is already ON the UI thread, which has to be asked here
-			// rather than inside capture, where the answer is always yes. It is true
-			// when eclipse_run_script with atomic runs the batch inside one Display
-			// runnable, and it means no paint has been dispatched since the widgets
-			// this batch created came into existence.
+			// asked here, not inside capture where it is always true: on the UI thread (eclipse_run_script atomic) no paint has run since the batch's widgets were created
 			boolean sameTurn = UiThread.onUiThread();
 			// before the UI hop, because the fence it posts has to be waited for from
 			// off the UI thread; inside an atomic batch it refuses and says why
@@ -288,9 +281,7 @@ public final class ScreenshotTools {
 			boolean suppressCaret = args.getBoolean("suppressCaret", true); //$NON-NLS-1$
 			boolean settlePixels = args.getBoolean("settlePixels", false) && !sameTurn; //$NON-NLS-1$
 			int attempts = args.getInt("settlePixelAttempts", 4, 2, 10); //$NON-NLS-1$
-			// a known path for every attempt, because two captures are compared on the
-			// file they wrote and a temporary name chosen inside the capture would not
-			// be knowable here
+			// a known path per attempt, because two captures are compared on the file they wrote
 			String path = outputPath;
 			if (settlePixels && path == null) {
 				try {
@@ -317,9 +308,7 @@ public final class ScreenshotTools {
 			int taken = 0;
 			boolean converged = false;
 			for (int i = 0; i < attempts && !converged; i++) {
-				// each capture is its own UI hop on purpose: the point is to let
-				// whatever is painting get on with it between them, which cannot happen
-				// inside one
+				// one UI hop per capture on purpose, so whatever is painting can get on with it in between
 				Encoding encoding = onUiValue(once);
 				if (encoding == null) {
 					return McpToolResult.error("The Eclipse UI is busy, try again."); //$NON-NLS-1$
@@ -458,20 +447,15 @@ public final class ScreenshotTools {
 			}
 
 			List<Overlays.Highlight> overlays = Overlays.resolve(display, printable, highlights);
-			// Inside one UI turn the screen has not caught up with the widgets, and a window
-			// in front of the IDE is photographed as if it were the target; in both cases
-			// the widget is painted directly instead of reading the screen.
+			// in one UI turn the screen lags the widgets, and a window in front is photographed as the target; paint the widget directly then
 			boolean foreground = NativeForeground.isForeground(display);
 			boolean occluded = !foreground && !sameTurn;
 			boolean screenUnreliable = (sameTurn || occluded) && printable != null;
 			if (screenUnreliable) {
 				printable.update();
 			}
-			// SWT draws and blinks the caret itself, so gtk-cursor-blink=false never
-			// reaches it and two captures of a focused editor differ by the caret
-			// alone. Taken out for the duration and put back in the finally below,
-			// because leaving an editor with no caret would be a far worse bug than
-			// the one this avoids
+			// SWT blinks the caret itself, so gtk-cursor-blink=false does not reach it and captures differ by the caret;
+			// taken out for the duration and restored in the finally below
 			List<SuppressedCaret> carets = suppressCaret ? suppressCarets(printable) : List.of();
 			try {
 			// the screen holds device pixels, and a destination sized in points takes
@@ -490,35 +474,24 @@ public final class ScreenshotTools {
 				boolean useWidgetPrint = screenUnreliable || isBlank(rootData);
 				if (useWidgetPrint && printable instanceof Shell shell
 						&& shell.getChildren().length > 0) {
-					// Shell.print returns blank under a compositing window manager while
-					// Composite.print does not, so paint the shell's content instead:
-					// every visible child at its own bounds, trim bars included, rather
-					// than one of them alone. The window decorations are no child of
-					// anything SWT can print; requestedArea and its note tell the caller.
+					// Shell.print is blank under a compositing window manager, so paint every visible child at its own bounds;
+					// window decorations cannot be printed, see requestedArea and its note
 					clientArea = shell.getClientArea();
 					pieces = paintablesOf(shell);
 				}
 				if (useWidgetPrint && printable != null) {
 					final Control painted = printable;
 					final List<Paintable> composed = pieces;
-					// A compositing window manager redirects window contents into an
-					// offscreen pixmap, so reading the X11 root drawable yields nothing.
-					// Painting the widget hierarchy ourselves does work there. It has
-					// known GTK gaps, which is why it is the fallback and not the
-					// primary path, but a slightly wrong image beats no image at all.
+					// a compositing window manager hides window contents from the X11 root drawable; painting the hierarchy has known GTK gaps, hence only a fallback
 					image.dispose();
 					Rectangle own = clientArea != null ? clientArea : painted.getBounds();
 					Size canvas = compositionSize(own.width, own.height);
-					// the print itself lands in points whatever surface it is given, so
-					// the canvas is sized in device pixels and the GC carries the scale
-					// that makes GTK rasterise at that resolution, glyphs included
+					// print lands in points on any surface, so the canvas is in device pixels and the GC carries the scale
 					zoom = DeviceScale.zoomOf(painted);
 					final int pieceZoom = zoom;
 					image = DeviceScale.paint(display, canvas.width(), canvas.height(), zoom,
 							(drawer, drawnWidth, drawnHeight) -> {
-						// anything print leaves untouched stays this colour. White would
-						// be indistinguishable from the unstyled widgets a dark theme bug
-						// produces, which is most of what these captures are used for
+						// unpainted areas keep this colour; white would look like the unstyled widgets of a dark theme bug
 						drawer.setBackground(display.getSystemColor(SWT.COLOR_MAGENTA));
 						drawer.fillRectangle(0, 0, drawnWidth, drawnHeight);
 						if (composed == null) {
@@ -543,10 +516,7 @@ public final class ScreenshotTools {
 							? "The capture came back uniform, so this display cannot be captured through the X11 root drawable. A compositing window manager redirects window contents into an offscreen pixmap, so reading the root yields nothing. There is no fallback for the whole display; capture a part or a shell instead, which can be painted directly." //$NON-NLS-1$
 							: "The capture came back uniform through both the X11 root drawable and by painting the widget, so this display cannot be captured at all. Nothing was written; do not trust screenshots here.")); //$NON-NLS-1$
 				}
-				// before the filler is replaced, because replacing it is what makes this
-				// invisible: a paint that landed at half scale fills the top left quarter
-				// and leaves the rest filler, which afterwards reads as a plain
-				// background and counts as zero unpainted pixels
+				// before the filler is replaced: a half scale paint fills the top left quarter and the rest would then read as plain background
 				String scaleWarning = "widgetPrint".equals(method) ? paintCoverageWarning(data) : null; //$NON-NLS-1$
 				// after the blank check: a fully unpainted capture must still read as
 				// uniform here, and swapping the filler first would hide exactly that
@@ -556,10 +526,7 @@ public final class ScreenshotTools {
 				if (unpainted != null && insidePieces[0] > 0) {
 					unpainted = unpainted.plus(insidePieces[0]);
 				}
-				// read off the pixels that came back rather than off what was asked
-				// for. A capture that lost the device scale reported zoom 100 with
-				// every other field agreeing, which is the one failure this answer
-				// cannot afford: the picture is soft and nothing says why
+				// read off the returned pixels, not what was asked: a capture that lost the device scale reported zoom 100 with every field agreeing
 				int captured = area.width <= 0 ? zoom : Math.round(data.width * 100f / area.width);
 				Encoding encoding = write(display, image, data, area, maxWidth, outputPath, includeBase64, overlays,
 						captured);
@@ -573,9 +540,7 @@ public final class ScreenshotTools {
 							"This display paints at %d%% and the capture came back at %d%%, so the image holds fewer pixels than the screen does and its text is softer than what is on it. Use eclipse_get_display_info to see the scaling in force." //$NON-NLS-1$
 									.formatted(Integer.valueOf(zoom), Integer.valueOf(captured)));
 				}
-				// reported whatever happened, because a caller that only reads 'method'
-				// must still be able to tell a capture of the IDE from a capture of
-				// whatever was on top of it
+				// always reported, so a caller reading only 'method' can tell the IDE from whatever was on top
 				if (!foreground) {
 					written.put("foregroundNote", "rootCapture".equals(method) //$NON-NLS-1$ //$NON-NLS-2$
 							? "THIS IDE IS NOT THE FOREGROUND APPLICATION AND THE WHOLE DISPLAY CANNOT BE PAINTED WIDGET BY WIDGET, so this image is of the screen as it is, including any window in front of the IDE. Nothing else in this answer can tell you that: a window sitting still is settled, converged and the right size. Capture a shell or a part instead, which is painted directly and cannot be occluded, or bring the IDE forward first and check 'foreground' here rather than trusting eclipse_set_ide_visibility, which asks the window system for focus and can be refused." //$NON-NLS-1$
@@ -605,10 +570,7 @@ public final class ScreenshotTools {
 				if ("widgetPrint".equals(method)) { //$NON-NLS-1$
 					written.put("printNote", "The widget print does not paint the sash and margin areas between parts. Those carry the background colour of the part they sit in, and unpaintedPixels counts them; a composed shell capture measures each piece against a filler colour and then repaints it against its own background, so no text in the image is blended against the filler."); //$NON-NLS-1$ //$NON-NLS-2$
 				}
-				// the two axes have to agree on one scale, and when they do not the
-				// paint landed at the wrong one and part of the image is whatever the
-				// canvas was filled with. Saying so beats returning a picture that is
-				// three quarters filler and looks like a rendering bug in the IDE
+				// the axes must agree on one scale; otherwise the paint landed at the wrong one and part of the image is filler
 				if (data.height != Math.round(area.height * captured / 100f)) {
 					written.put("scaleMismatch", //$NON-NLS-1$
 							"The capture is %dx%d pixels for a widget of %dx%d points, which is not one scale in both directions. Part of the image is the magenta fill rather than the widget, so treat it as unreliable." //$NON-NLS-1$
@@ -850,16 +812,10 @@ public final class ScreenshotTools {
 					.put("path", null) //$NON-NLS-1$
 					.put("width", width) //$NON-NLS-1$
 					.put("height", height) //$NON-NLS-1$
-					// the pixels that were actually captured, not the widget's size in
-					// points. Reporting the two as if they were the same is what let a
-					// capture that kept a quarter of the window look complete
+					// the pixels actually captured, not the widget's size in points
 					.put("capturedArea", data.width + "x" + data.height) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("areaInPoints", area.width + "x" + area.height) //$NON-NLS-1$ //$NON-NLS-2$
-					// every number the scaling depends on, from its own source: the
-					// image as SWT sizes it, the data as it came back, and the factor
-					// actually applied. A capture that looks right in every derived
-					// field and wrong on screen is a disagreement between these, and
-					// naming them is cheaper than inferring them from the picture
+					// every number the scaling depends on, so a disagreement between them shows without inferring it from the picture
 					.put("imageBounds", image.getBounds().width + "x" + image.getBounds().height) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("scaleFactor", Math.round(width * 1000.0 / data.width) / 1000.0) //$NON-NLS-1$
 					.put("maxWidthSnappedTo", snapped == maxWidth ? null : Integer.valueOf(snapped)) //$NON-NLS-1$

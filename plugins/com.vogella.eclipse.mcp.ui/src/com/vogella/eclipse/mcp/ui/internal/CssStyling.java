@@ -270,9 +270,7 @@ final class CssStyling {
 		try {
 			org.eclipse.core.runtime.preferences.IEclipsePreferences node = org.eclipse.core.runtime.preferences.InstanceScope.INSTANCE
 					.getNode(rule.qualifier());
-			// the same entry point StylingPreferencesHandler drives on every theme change,
-			// which keeps the backup bookkeeping for overridden values in platform code
-			// rather than here
+			// the entry point StylingPreferencesHandler drives, which keeps the override backup bookkeeping in platform code
 			themeEngine.getClass().getMethod("applyStyles", Object.class, boolean.class).invoke(themeEngine, node, //$NON-NLS-1$
 					Boolean.FALSE);
 			if (rule.values().isEmpty()) {

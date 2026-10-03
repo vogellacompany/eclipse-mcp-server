@@ -58,9 +58,7 @@ final class UiSettle {
 	 */
 	static JsonObject settle(int quietPasses, long timeoutMillis, long pauseMillis, IProgressMonitor monitor) {
 		if (UiThread.onUiThread()) {
-			// a fence posted from the UI thread would be run by the very thread that
-			// is waiting for it, so it proves nothing and could not drain anything
-			// that is not already done
+			// a fence posted from the UI thread runs on the waiting thread and proves nothing
 			return new JsonObject().put("settled", Boolean.FALSE) //$NON-NLS-1$
 					.put("reason", //$NON-NLS-1$
 							"This call is already on the UI thread, which is what eclipse_run_script with atomic does. Nothing can drain the display queue from inside it, because the runnables waiting there are behind this one. Settle outside the atomic batch, before it starts.");
@@ -89,9 +87,7 @@ final class UiSettle {
 						"The call was cancelled before the UI settled.", clamped); //$NON-NLS-1$
 			}
 			rounds++;
-			// one hop does both: the fence proves the queue drained, and while it is
-			// on the UI thread it also reads the reconcilers, which can only be asked
-			// there
+			// one hop: the fence proves the queue drained, and the reconcilers can only be read on the UI thread
 			Fenced fenced = fence(display, deadline - System.currentTimeMillis());
 			long fence = fenced.millis();
 			reconcilers = fenced.reconcilers();

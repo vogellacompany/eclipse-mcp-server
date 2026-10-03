@@ -120,9 +120,7 @@ public final class MovePartTool implements IMcpTool {
 					.put("layout", layout(modelService, modelWindow, request.maxResults())); //$NON-NLS-1$
 		}
 		boolean editor = inEditorArea(part);
-		// a view is a shared part the perspective holds through a placeholder, and it
-		// is the placeholder that sits in the stack; moving the part itself would move
-		// it out of every perspective at once
+		// a view sits in the stack as a placeholder; moving the part itself would remove it from every perspective
 		MUIElement placed = part.getCurSharedRef() == null ? part : part.getCurSharedRef();
 		MElementContainer<MUIElement> oldParent = placed.getParent();
 		if (!(placed instanceof MStackElement toMove) || oldParent == null) {
@@ -159,9 +157,7 @@ public final class MovePartTool implements IMcpTool {
 				return refused("No part or stack '%s' in the active perspective.".formatted(request.target())) //$NON-NLS-1$
 						.put("layout", layout(modelService, modelWindow, request.maxResults())); //$NON-NLS-1$
 			}
-			// the editor area is a shared MArea the compatibility layer owns; an editor
-			// outside it and a view inside it are both layouts the workbench does not
-			// render, so the boundary is refused rather than crossed
+			// the editor area is a shared MArea; editors outside it and views inside it are not rendered, so the boundary is refused
 			if (editor != inEditorArea(targetStack)) {
 				return refused(editor
 						? "'%s' is an editor and can only be placed within the editor area; name another editor or an editor stack as target." //$NON-NLS-1$

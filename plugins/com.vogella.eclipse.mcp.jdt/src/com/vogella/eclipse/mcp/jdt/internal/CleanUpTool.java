@@ -52,10 +52,8 @@ public final class CleanUpTool implements IMcpTool {
 	 * One clean-up: the class that performs it and the options that have to be on
 	 * for it to do anything.
 	 * <p>
-	 * JDT's options are a tree. Several clean-ups are a choice inside a group, and
-	 * setting only the choice leaves the group off, so the clean-up runs and changes
-	 * nothing. That looks exactly like "the pattern did not apply", which is why the
-	 * companions are declared here rather than left to the caller to discover.
+	 * JDT's options are a tree: setting only a choice inside a group leaves the group off and the clean-up silently
+	 * does nothing, so the companions are declared here.
 	 */
 	private record CleanUpEntry(Function<Map<String, String>, ICleanUp> factory, List<String> companions) {
 	}
@@ -109,9 +107,7 @@ public final class CleanUpTool implements IMcpTool {
 
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
-		// a clean-up that touches imports reads the jdt.ui preference node, which
-		// only that plug-in registers; headless the lookup returns null and JDT dies
-		// on it. The same seeding eclipse_organize_imports already needed
+		// headless, the jdt.ui preference node is missing and JDT dies on the lookup
 		OrganizeImportsTool.ensureCodeStylePreferences();
 		ToolArguments args = ToolArguments.of(arguments);
 		List<String> requested = new ArrayList<>();

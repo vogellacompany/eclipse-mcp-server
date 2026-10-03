@@ -7,19 +7,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.eclipse.core.runtime.preferences.InstanceScope;
 
 /**
- * Silences the questions and the invisible breakpoints that turn an unattended
- * launch into a gamble.
+ * Silences the questions and invisible breakpoints that turn an unattended launch into a gamble.
  * <p>
- * Three preferences decide whether a launch nobody is watching stops and waits.
- * Two of them stop it on an exception the program handles perfectly well, which
- * OSGi startup throws as a matter of course, and the third then raises a modal
- * dialog in the host IDE asking whether to switch perspective, which blocks
- * every further call. None of this is visible to the caller:
- * eclipse_list_breakpoints reports zero, because these are not breakpoints.
- * <p>
- * The values are put back when the last launch that asked for quiet has ended,
- * counted rather than assumed, so two overlapping launches cannot restore each
- * other's settings underneath them.
+ * Three preferences stop a launch on handled exceptions or raise a modal perspective dialog.
+ * They are restored when the last launch that asked for quiet has ended, counted so overlapping launches
+ * cannot restore each other's settings.
  */
 public final class LaunchPrompts {
 

@@ -11,18 +11,9 @@ import org.eclipse.core.resources.IProject;
 /**
  * What a bundle's {@code Export-Package} header says about who may use a package.
  * <p>
- * For an OSGi bundle this decides what a workspace search can prove. In a plainly
- * exported package, no references in this workspace proves nothing: consumers may
- * exist anywhere. In a package that is not exported, or is exported
- * {@code x-internal}, the same search very nearly settles it. With
- * {@code x-friends} it can settle it exactly, because the friend list names every
- * bundle allowed to reference the package, and if all of them are in this
- * workspace there is nowhere else to look.
- * <p>
- * Read from the manifest rather than from PDE's resolved state, so that this
- * bundle keeps its dependencies and the header's directives survive: PDE's own
- * model reports the package names with the directives stripped, which is exactly
- * the part the question needs.
+ * This decides what a workspace search can prove: nothing in a plainly exported package, nearly everything in
+ * an unexported or {@code x-internal} one, and exactly everything with {@code x-friends} when all friends are here.
+ * Read from the manifest because PDE's model strips the directives.
  */
 final class PackageExports {
 

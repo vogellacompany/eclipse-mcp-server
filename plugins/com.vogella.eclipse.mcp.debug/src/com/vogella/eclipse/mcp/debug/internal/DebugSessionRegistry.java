@@ -28,13 +28,11 @@ import com.vogella.eclipse.mcp.core.LaunchPrompts;
 
 /**
  * Owns the mapping from {@link ILaunch} to debug session id and the last suspend
- * event per target, in the way {@code TestRunRegistry} owns test runs.
+ * event per target.
  * <p>
- * The launch listener is registered on first use and is global, so a debug session
- * the user started by hand in the IDE, or one started by {@code eclipse_run_tests},
- * gets an id here too. Suspend events arrive on the debug event dispatcher thread:
- * they are recorded and signalled there, never acted on, because blocking that
- * thread would stall every other debug event in the IDE.
+ * The launch listener is global, so launches started by hand get an id too.
+ * Suspend events are only recorded and signalled on the debug event dispatcher thread, since
+ * blocking it would stall every other debug event in the IDE.
  */
 public final class DebugSessionRegistry {
 
@@ -370,11 +368,8 @@ public final class DebugSessionRegistry {
 	/**
 	 * Terminates a session and waits for the process to actually be gone.
 	 * <p>
-	 * {@code ILaunch.terminate} returns once it has asked, and a JVM that is asked
-	 * still holds its workspace lock for a moment afterwards. Reporting it as
-	 * terminated at that point is what makes the next launch of the same
-	 * configuration walk into a "Workspace in use" dialog inside the launched
-	 * process, where nothing here can reach it.
+	 * {@code ILaunch.terminate} returns once it has asked, and the JVM still holds its workspace
+	 * lock for a moment, so reporting it early makes the next launch hit a "Workspace in use" dialog.
 	 *
 	 * @return whether the process had really ended within the wait
 	 */

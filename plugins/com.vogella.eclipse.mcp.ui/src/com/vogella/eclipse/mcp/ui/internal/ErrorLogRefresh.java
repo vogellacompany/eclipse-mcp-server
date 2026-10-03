@@ -19,11 +19,8 @@ final class ErrorLogRefresh implements LogClearedHandlers.Handler {
 	private static final String VIEW_ID = "org.eclipse.ui.views.LogView"; //$NON-NLS-1$
 
 	/**
-	 * The view's own delete action deletes the file and then calls this, so calling
-	 * it is what makes the tool and the toolbar button end in the same state.
-	 * Reflection rather than a compile-time call because {@code LogView} lives in a
-	 * package exported only to PDE, and a missing method has to degrade into a note
-	 * in the answer rather than into a failed clear.
+	 * The view's delete action calls this after deleting the file, so the tool ends in the toolbar button's state.
+	 * Reflective because {@code LogView} is exported only to PDE, and a missing method must degrade into a note.
 	 */
 	private static final String CLEAR_METHOD = "handleClear"; //$NON-NLS-1$
 

@@ -31,21 +31,11 @@ public final class TokenStore {
 
 	/**
 	 * The token file under the user scope location, {@code ~/.eclipse}.
-	 * <p>
-	 * Not the bundle state location, which lives inside the workspace: the port is
-	 * one preference with the same default everywhere, so a workspace scoped token
-	 * gives every workspace a different secret behind one address, and a client
-	 * configured against one of them is rejected by the next with nothing to tell
-	 * that apart from the server being gone. User scope is the narrowest one that
-	 * matches how a client is registered, which is once per user.
-	 * <p>
-	 * The file is written directly rather than as a preference, because a
-	 * preference file is world readable and this is a secret.
+	 * A workspace scoped token would give every workspace a different secret behind one port,
+	 * and it is a plain file because preference files are world readable.
 	 */
 	static Path location() {
-		// user scope is shared by every Eclipse this user starts, the test instance
-		// included, so a test that regenerates the token would otherwise replace the
-		// one the developer's own IDE is serving and orphan its clients
+		// otherwise a test regenerating the token replaces the one the developer's own IDE serves
 		String override = System.getProperty(DIRECTORY_PROPERTY);
 		if (override != null && !override.isBlank()) {
 			return Path.of(override.strip()).resolve(FILE_NAME);
@@ -85,14 +75,7 @@ public final class TokenStore {
 		return store(UUID.randomUUID().toString(), location());
 	}
 
-	/**
-	 * Renames the adopted workspace token out of the way.
-	 * <p>
-	 * A file still called {@code token}, owner-only, sitting beside the live
-	 * endpoint.json and holding a value the server no longer uses is a trap for
-	 * whoever reads it while diagnosing: it looks exactly like current state. It is
-	 * renamed rather than deleted so the previous value can still be recovered.
-	 */
+	/** Renames the adopted workspace token to {@code token.migrated}, so it no longer looks like current state. */
 	private static void retire(Path path) {
 		try {
 			Files.move(path, path.resolveSibling(FILE_NAME + ".migrated"), //$NON-NLS-1$

@@ -3,14 +3,10 @@ package com.vogella.eclipse.mcp.core;
 import java.nio.file.Path;
 
 /**
- * Records a launched JVM with Java Flight Recorder, through the only channel
- * that reaches one.
+ * Records a launched JVM with Java Flight Recorder through its command line.
  * <p>
- * The recording tools of this server work inside the IDE's own JVM, so they
- * cannot see a program the IDE launches: that is a separate process. Asking the
- * JVM to record itself from its command line does reach it, and costs no attach
- * mechanism and no external tool. The price is that the decision has to be made
- * before the launch and the file exists only once the program ends.
+ * The IDE's own recording tools cannot see a launched process, so the decision is made before the launch
+ * and the file exists only once the program ends.
  */
 public final class LaunchRecording {
 
