@@ -35,7 +35,7 @@ import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolException;
 import com.vogella.eclipse.mcp.core.McpToolRegistry;
 import com.vogella.eclipse.mcp.core.McpToolResult;
-import com.vogella.eclipse.mcp.core.internal.BuildRegistry;
+import com.vogella.eclipse.mcp.basic.internal.BuildRegistry;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapperSupplier;

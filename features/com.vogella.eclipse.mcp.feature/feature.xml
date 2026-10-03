@@ -22,6 +22,7 @@
    </license>
 
    <plugin id="com.vogella.eclipse.mcp.core" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
+   <plugin id="com.vogella.eclipse.mcp.basic" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="com.vogella.eclipse.mcp.server" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="com.vogella.eclipse.mcp.jdt" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="com.vogella.eclipse.mcp.ui" download-size="0" install-size="0" version="0.0.0" unpack="false"/>

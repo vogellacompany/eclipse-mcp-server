@@ -11,7 +11,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import com.vogella.eclipse.mcp.core.internal.CommandRegistry;
+import com.vogella.eclipse.mcp.basic.internal.CommandRegistry;
 
 /**
  * How the output of a spawned command is decoded.

@@ -11,7 +11,7 @@ import org.eclipse.core.resources.ResourcesPlugin;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import com.vogella.eclipse.mcp.core.internal.BuildRegistry;
+import com.vogella.eclipse.mcp.basic.internal.BuildRegistry;
 
 /**
  * Cancelling whatever is building.
