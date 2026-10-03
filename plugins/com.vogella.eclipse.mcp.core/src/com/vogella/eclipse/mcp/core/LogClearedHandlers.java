@@ -7,11 +7,7 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
 /**
  * The bridge from clearing the log file to whatever is showing its contents.
  * <p>
- * The Error Log view parses the file once and then keeps the entries in memory,
- * so deleting the file underneath it leaves the person at the IDE looking at
- * entries that are gone. This bundle must not depend on any UI bundle, so the UI
- * registers itself here and {@code eclipse_clear_log} reports back whatever it
- * did.
+ * The UI bundle registers itself here and {@code eclipse_clear_log} reports back what it did.
  */
 public final class LogClearedHandlers {
 

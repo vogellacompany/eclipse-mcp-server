@@ -101,14 +101,7 @@ public final class McpServerService {
 		return EndpointFile.location();
 	}
 
-	/**
-	 * The persisted bearer token, or {@code null} when none has been generated yet.
-	 * <p>
-	 * Available whether or not the server is running: the token lives in the user
-	 * area, so it is a property of this user rather than of the process or of the
-	 * workspace, and a client can be configured with it before the server is ever
-	 * started.
-	 */
+	/** The persisted bearer token, available whether or not the server is running. */
 	public static String getToken() {
 		return TokenStore.get();
 	}
@@ -238,10 +231,8 @@ public final class McpServerService {
 		FilterHolder errors = new FilterHolder(new JsonRpcErrorFilter());
 		errors.setAsyncSupported(true);
 		context.addFilter(errors, ENDPOINT_PATH + "/*", EnumSet.of(DispatcherType.REQUEST)); //$NON-NLS-1$
-		// deliberately outside that mapping: a browser cannot put the bearer token on
-		// a plain navigation, so a trace page is guarded by 128 random bits in its own
-		// URL instead. The connector is loopback only, so the pair is a capability URL
-		// that never leaves this machine
+		// outside that mapping: a browser cannot send the bearer token, so the trace page
+		// is guarded by 128 random bits in its URL instead
 		context.addServlet(new ServletHolder(new TraceServlet()), TRACE_PATH + "/*"); //$NON-NLS-1$
 		server.setHandler(context);
 		return server;

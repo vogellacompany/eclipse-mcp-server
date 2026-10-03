@@ -33,17 +33,9 @@ import org.w3c.dom.NodeList;
 /**
  * Where this workspace names a class in a position some runtime reads.
  * <p>
- * The rule is positional, not textual. A class name in a changelog or a comment
- * keeps nothing alive; a class name in an extension attribute the extension
- * point's schema declares as java-typed does. So extension attributes are not
- * grepped for {@code class=}: the element is resolved to its extension point,
- * the point's {@code .exsd} says which of its attributes are java-typed, and
- * only those count.
- * <p>
- * The schemas are read directly rather than through PDE's model, which exports
- * {@code org.eclipse.pde.internal.core.schema} only to {@code org.eclipse.pde.ui}.
- * What is needed here is two attributes on one element, and that is a far
- * smaller thing to own than a dependency PDE is free to break.
+ * The rule is positional: a class name in a comment keeps nothing alive, one in an extension attribute
+ * the point's {@code .exsd} declares java-typed does.
+ * The schemas are read directly because PDE's schema model is {@code x-friends} to {@code org.eclipse.pde.ui}.
  */
 final class RegistryIndex {
 
@@ -107,14 +99,7 @@ final class RegistryIndex {
 		return byName.getOrDefault(name, List.of());
 	}
 
-	/**
-	 * The points contributed to from {@code projects} whose schema could not be read.
-	 * <p>
-	 * Scoped, because the index covers the whole workspace while a result is about
-	 * the projects that were asked for. A workspace-wide list attached to a
-	 * project-scoped answer describes a limit that answer does not have, and invites
-	 * distrust of a result that was in fact fully judged.
-	 */
+	/** The points contributed to from {@code projects} whose schema could not be read. */
 	Set<String> pointsWithoutSchema(Collection<String> projects) {
 		Set<String> points = new TreeSet<>();
 		for (String project : projects) {
@@ -124,12 +109,8 @@ final class RegistryIndex {
 	}
 
 	/**
-	 * Where a class is named by an {@code instanceof} test rather than instantiated.
-	 * <p>
-	 * A type test is not a registry position and does not make a class live, so this
-	 * is kept apart from the evidence and never changes a verdict. It is reported
-	 * because deleting such a class breaks the expression silently: it stops
-	 * matching rather than failing to compile, which is worse than an error.
+	 * Where a class is named by an {@code instanceof} test.
+	 * Kept apart from the evidence and never changes a verdict, but deleting such a class breaks the expression silently.
 	 */
 	List<Evidence> typeTestsFor(String name) {
 		return typeTests.getOrDefault(name, List.of());
@@ -147,11 +128,7 @@ final class RegistryIndex {
 		return reflectionCapped;
 	}
 
-	/**
-	 * Indexes every open project, not only the ones being enumerated: a class is
-	 * regularly named from the plugin.xml of a different bundle, a fragment above
-	 * all, and an index that stopped at the project boundary would call it dead.
-	 */
+	/** Indexes every open project, since a class is often named from another bundle's plugin.xml, a fragment above all. */
 	static RegistryIndex build(IProgressMonitor monitor) {
 		RegistryIndex index = new RegistryIndex();
 		List<IProject> projects = new ArrayList<>();
@@ -160,8 +137,7 @@ final class RegistryIndex {
 				projects.add(project);
 			}
 		}
-		// extension points first: an extension in the first project read can be
-		// contributed to a point declared in the last one
+		// extension points first: an extension can target a point declared in a later project
 		for (IProject project : projects) {
 			index.indexExtensionPoints(project);
 		}
@@ -184,14 +160,10 @@ final class RegistryIndex {
 		}
 		IResource resource = ResourcesPlugin.getWorkspace().getRoot().findMember(evidence.file());
 		if (resource instanceof IFile file && isBuildOutput(file)) {
-			// a Tycho product build copies every plugin.xml and .e4xmi of the platform
-			// into its output, and none of it is marked derived
+			// Tycho product builds copy every plugin.xml and .e4xmi into non-derived output
 			return;
 		}
-		// one file on disk is one position however many nested projects contain it.
-		// In a platform workspace the aggregator, the repository, a bundles project
-		// and the bundle itself all hold the same fragment.e4xmi, and reporting "68
-		// registry positions" for four real ones makes a refusal read as certainty
+		// one file on disk is one position however many nested projects contain it
 		String key = (resource == null || resource.getLocation() == null ? evidence.file()
 				: resource.getLocation().toString()) + "|" + evidence.position(); //$NON-NLS-1$
 		String trimmed = name.trim();
@@ -199,14 +171,9 @@ final class RegistryIndex {
 			return;
 		}
 		byName.computeIfAbsent(trimmed, key0 -> new ArrayList<>()).add(evidence);
-		// a.b.Outer$Inner is registry evidence for a.b.Outer as well: deleting the
-		// outer type's file takes the nested class with it, and a plain lookup of the
-		// enclosing name once let eclipse_delete through on WizardHandler while
-		// plugin.xml still named WizardHandler$New as a handler
+		// a.b.Outer$Inner is registry evidence for a.b.Outer too, since deleting the outer file takes the nested class along
 		if (trimmed.indexOf('#') < 0) {
-			// keyed by the nested name too: three commands with defaultHandler
-			// WizardHandler$New, $Import and $Export share one xpath and are three
-			// positions, not one
+			// keyed by the nested name too, since commands sharing one xpath are separate positions
 			String nestedKey = key + "|" + trimmed; //$NON-NLS-1$
 			for (int dollar = trimmed.lastIndexOf('$'); dollar > 0; dollar = trimmed.lastIndexOf('$', dollar - 1)) {
 				String enclosing = trimmed.substring(0, dollar);
@@ -217,13 +184,7 @@ final class RegistryIndex {
 		}
 	}
 
-	/**
-	 * Whether a file is build output rather than something a person wrote.
-	 * <p>
-	 * Maven and Tycho output is not marked derived, and a product build copies every
-	 * plugin.xml and .e4xmi of the platform into it, so an unfiltered index counts
-	 * fifty copies of one registration.
-	 */
+	/** Whether a file is Maven or Tycho output, which is not marked derived. */
 	private static boolean isBuildOutput(IFile file) {
 		if (file.isDerived(IResource.CHECK_ANCESTORS)) {
 			return true;
@@ -444,15 +405,9 @@ final class RegistryIndex {
 	}
 
 	/**
-	 * The classes an e4 application model names.
-	 * <p>
-	 * A .e4xmi is a registry position like any other: the workbench instantiates
-	 * what its contributionURI points at, on every start. Nothing in Java refers to
-	 * those classes, so without this they look dead, and a sweep acting on that
-	 * deletes an addon the IDE needs and still compiles cleanly. That happened.
-	 * <p>
-	 * The files are found by walking the project, because unlike plugin.xml they
-	 * live wherever the bundle put them, and a proxy visit is cheap enough for that.
+	 * The classes an e4 application model names through contributionURIs.
+	 * Nothing in Java refers to them, so a sweep would otherwise delete an addon the IDE needs.
+	 * Found by walking the project, since .e4xmi files live wherever the bundle put them.
 	 */
 	private void indexApplicationModel(IProject project) {
 		try {
@@ -467,8 +422,7 @@ final class RegistryIndex {
 				return true;
 			}, IResource.NONE);
 		} catch (CoreException e) {
-			// a project that cannot be walked contributes nothing, which is the same
-			// as one with no application model
+			// an unwalkable project contributes nothing
 		}
 	}
 
@@ -487,10 +441,7 @@ final class RegistryIndex {
 	// --- reflection over string literals ----------------------------------
 
 	/**
-	 * Scans source for reflective loads. A literal name is a position like any
-	 * other; a name built at runtime is not resolvable by any static analysis, and
-	 * is recorded so that a dead verdict in the same project can be reported as
-	 * provisional rather than as a fact.
+	 * Scans source for reflective loads; a name built at runtime is recorded so a dead verdict can be reported as provisional.
 	 */
 	void indexReflection(List<IContainer> sourceFolders, int maxFiles, IProgressMonitor monitor) {
 		for (IContainer folder : sourceFolders) {

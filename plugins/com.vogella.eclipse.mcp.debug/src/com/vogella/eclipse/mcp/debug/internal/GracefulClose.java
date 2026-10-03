@@ -22,31 +22,16 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
 /**
  * Asks a debugged application to shut itself down, instead of killing it.
  * <p>
- * Terminating a launch calls {@code Process.destroy}, which on Linux is SIGTERM
- * and happens to reach Equinox's shutdown hook, and on Windows is an immediate
- * TerminateProcess. Neither runs the workbench's own shutdown, so the workspace
- * is not saved and the next start of the same instance finds whatever the last
- * one left behind.
- * <p>
- * The debugger can do better without anything being configured in the target:
- * suspend a thread, evaluate a call that queues the close on the target's UI
- * thread, and resume so the UI thread runs it. The queueing is the point.
- * {@code IWorkbench.close} must run on the UI thread, while an evaluation runs
- * on the thread that is suspended, so calling it directly would be wrong; an
- * asyncExec is only put in the queue and is worked off once the program runs
- * again.
+ * {@code Process.destroy} never runs the workbench's own shutdown, so the workspace is not saved.
+ * Instead a thread is suspended, an evaluation queues the close on the target's UI thread, and
+ * resuming lets that thread run it; calling {@code IWorkbench.close} directly would run on the
+ * suspended thread, not the UI thread.
  */
 final class GracefulClose {
 
 	/**
-	 * Where the UI thread is stopped so that a method can be invoked in it.
-	 * <p>
-	 * The method's own javadoc says that calling {@code IWorkbench.close()} from
-	 * here is allowed, so this is not a convenient accident. It is a named public
-	 * class in org.eclipse.ui.application, so the expression compiles and JDT
-	 * accepts the lambda, and every workbench application passes through it
-	 * whenever its event loop goes idle. The line is the {@code display.sleep()}
-	 * in the body, and it is the one thing here that a platform version can move.
+	 * Where the UI thread is stopped so that a method can be invoked in it: the idle
+	 * {@code display.sleep()} of a public class, which a platform version could move.
 	 */
 	private static final String DEFAULT_BREAKPOINT = "org.eclipse.ui.application.WorkbenchAdvisor:339"; //$NON-NLS-1$
 
@@ -255,15 +240,8 @@ final class GracefulClose {
 	}
 
 	/**
-	 * A frame the close expression can actually be compiled and run against.
-	 * <p>
-	 * Two things rule most frames out, and both were measured rather than guessed.
-	 * The type of the frame decides which class loader the expression is compiled
-	 * against, so a frame in org.eclipse.swt cannot see org.eclipse.ui at all and
-	 * reports it as an unresolved type, which reads like a missing workbench and is
-	 * not one. And JDT refuses a lambda inside a local or anonymous class, so
-	 * Workbench$1, where the idle event loop lives, is unusable even though it is
-	 * the frame a breakpoint most easily reaches.
+	 * A frame the close expression can be compiled against. A frame in org.eclipse.swt cannot see
+	 * org.eclipse.ui, and JDT refuses a lambda inside a local or anonymous class such as Workbench$1.
 	 */
 	private static IJavaStackFrame workbenchFrame(IJavaThread thread) throws DebugException {
 		IJavaStackFrame fallback = null;

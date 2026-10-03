@@ -112,10 +112,8 @@ final class DebugSupport {
 	}
 
 	/**
-	 * Why this session has no debug target. A launch in run mode never had one and
-	 * is still running, which is a different answer from a program that has ended,
-	 * and reporting the second for the first sent a caller looking for a process
-	 * that was very much alive.
+	 * Why this session has no debug target: a launch in run mode never had one, which differs from
+	 * a program that has ended.
 	 */
 	static Refusal noTarget(Session session) {
 		if (running(session)) {
@@ -238,9 +236,7 @@ final class DebugSupport {
 	/**
 	 * The operating system process id of the launched JVM, or {@code null}.
 	 * <p>
-	 * It is what lets a caller reach that JVM with the tools this server has no
-	 * business wrapping, jcmd and jstack among them, since everything here runs
-	 * inside the IDE's own process and cannot see another one.
+	 * Lets a caller reach that JVM with jcmd or jstack.
 	 */
 	private static String pid(ILaunch launchValue) {
 		if (launchValue == null) {
@@ -262,10 +258,9 @@ final class DebugSupport {
 	 * Describes the processes of a launch, and quotes their output when there is
 	 * reason to think something went wrong.
 	 * <p>
-	 * A launch that meets another instance's workspace lock reports no threads, no
-	 * pid and terminated false, which reads as "still starting" for as long as
-	 * anyone cares to wait. The reason is printed on the process's own console,
-	 * where the IDE has it and the caller does not.
+	 * A launch that meets another instance's workspace lock reports no threads and
+	 * terminated false, which reads as "still starting"; the reason is only on the
+	 * process's console.
 	 */
 	static void describeProcesses(JsonObject json, Session session) {
 		ILaunch launchValue = session.launch();

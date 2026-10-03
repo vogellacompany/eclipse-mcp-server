@@ -32,11 +32,7 @@ public final class WorkspaceSync {
 	/**
 	 * Builds and waits, restricted to {@code scope} when one is given.
 	 * <p>
-	 * The scope is the whole point. {@code IWorkspace.build} takes no resource, so
-	 * building unconditionally means every project in the workspace: asking one
-	 * project for its markers rebuilt all 541 open ones and took the call past its
-	 * timeout, while the refresh it was blamed on costs three seconds for the entire
-	 * workspace.
+	 * {@code IWorkspace.build} takes no resource, so an unscoped build rebuilds every open project.
 	 *
 	 * @return {@code false} when the wait was cancelled, which leaves the markers stale
 	 */

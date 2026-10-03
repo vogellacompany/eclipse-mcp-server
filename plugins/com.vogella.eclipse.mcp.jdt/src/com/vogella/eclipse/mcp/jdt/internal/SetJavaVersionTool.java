@@ -122,11 +122,7 @@ public final class SetJavaVersionTool implements IMcpTool {
 
 	/**
 	 * Sets source, target and compliance together.
-	 * <p>
-	 * Through {@code JavaCore.setComplianceOptions} rather than by writing the
-	 * three keys, because they constrain each other and a combination that JDT
-	 * would not have produced is how a project ends up compiling for one version
-	 * and generating class files for another.
+	 * Goes through {@code JavaCore.setComplianceOptions} because the three keys constrain each other.
 	 */
 	private static JsonObject compliance(IJavaProject javaProject, String version, ToolArguments args, boolean dryRun) {
 		Map<String, String> after = read(javaProject, List.of(KEYS));
@@ -185,8 +181,7 @@ public final class SetJavaVersionTool implements IMcpTool {
 					continue;
 				}
 				candidates.add(describe(vm));
-				// a JDK that cannot compile is not a candidate, however well its version
-				// matches: that is the trap this whole check exists for
+				// a JDK that cannot compile is not a candidate, however well its version matches
 				if (best == null && JreUsability.reason(vm.getInstallLocation()) == null) {
 					best = vm;
 				}

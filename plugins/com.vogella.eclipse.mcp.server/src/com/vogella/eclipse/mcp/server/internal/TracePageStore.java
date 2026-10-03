@@ -9,15 +9,8 @@ import java.util.Map;
  * The rendered trace pages the server is currently willing to serve, each behind an
  * unguessable path.
  * <p>
- * A browser cannot put the bearer token on a plain navigation, so these pages cannot
- * sit behind the token filter and are guarded by the URL instead: 128 random bits from
- * a {@link SecureRandom}, which is the same strength as the token itself. The socket is
- * already bound to the loopback interface, so the pair is a capability URL reachable
- * only from this machine.
- * <p>
- * Nothing is written to disk and nothing survives the process. A page holds stack
- * traces of the user's own IDE, so the exposure is bounded by keeping only the last few
- * and by dying with the server.
+ * A browser cannot send the bearer token, so the path carries 128 random bits from a
+ * {@link SecureRandom} instead. Pages live in memory only, the last few at most.
  */
 public final class TracePageStore {
 

@@ -5,13 +5,7 @@ import java.io.File;
 /**
  * Whether a JRE install can actually compile.
  * <p>
- * Existence is not the test that matters. A JDK can be present and readable and
- * still be missing {@code lib/ct.sym}, the historical signature data the
- * compiler needs for {@code --release}, and JDT then refuses to build every
- * project bound to it with a message that names ct.sym and nothing else. One
- * session activated a target naming JavaSE-21, which on that machine was such
- * an install, and got 2746 identical errors across a workspace that had none an
- * hour earlier.
+ * A JDK can exist and still lack {@code lib/ct.sym}, which makes JDT fail every project bound to it.
  */
 public final class JreUsability {
 

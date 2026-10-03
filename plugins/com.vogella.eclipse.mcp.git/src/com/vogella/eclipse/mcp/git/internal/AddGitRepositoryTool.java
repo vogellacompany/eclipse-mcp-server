@@ -134,11 +134,7 @@ public final class AddGitRepositoryTool implements IMcpTool {
 		if (workTree == null) {
 			return List.of();
 		}
-		// through Path rather than a string prefix: comparing absolute paths as text
-		// is case sensitive, and on Windows the same directory reaches this with the
-		// casing whoever produced it happened to use, so a working tree naming the
-		// profile directory in one casing would not contain a project naming it in
-		// another. Path comparison is case insensitive where the filesystem is
+		// Path, not a string prefix: text comparison is case sensitive, which breaks on Windows
 		Path root = workTree.toPath().toAbsolutePath().normalize();
 		List<IProject> inside = new ArrayList<>();
 		for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {

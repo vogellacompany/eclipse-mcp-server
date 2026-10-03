@@ -9,9 +9,12 @@ import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.jdt.core.Flags;
 import org.eclipse.jdt.core.ICompilationUnit;
+import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IMember;
+import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.search.IJavaSearchConstants;
@@ -94,8 +97,7 @@ public final class DeleteTool implements IMcpTool {
 			if (memberName != null) {
 				return McpToolResult.error("'memberName' names one member of one type, so it cannot be combined with 'typeNames'."); //$NON-NLS-1$
 			}
-			// built once for the whole batch: it walks every project in the workspace,
-			// which is the cost batching exists to avoid paying per type
+			// walks every project, so built once for the batch
 			RegistryIndex index = RegistryIndex.build(progress);
 			JsonArray reported = new JsonArray();
 			for (String name : typeNames) {
@@ -124,10 +126,7 @@ public final class DeleteTool implements IMcpTool {
 	}
 
 	/**
-	 * Deletes one type's file, against an index the caller owns.
-	 * <p>
-	 * The index is a parameter rather than built here because it walks every project
-	 * in the workspace, which a batch must pay once rather than per type.
+	 * Deletes one type's file, against an index the caller owns so a batch builds it once.
 	 */
 	private JsonObject deleteOne(String typeName, List<IJavaProject> projects, RegistryIndex index, boolean dryRun,
 			boolean force, IProgressMonitor progress) throws McpToolException {
@@ -150,8 +149,7 @@ public final class DeleteTool implements IMcpTool {
 				.put("file", file.getFullPath().toString()) //$NON-NLS-1$
 				.put("dryRun", Boolean.valueOf(dryRun)); //$NON-NLS-1$
 
-		// deleting the file deletes every type in it, which for a unit declaring more
-		// than one is not the deletion that was asked for
+		// deleting the file deletes every type in it
 		List<String> alsoDeclared = new ArrayList<>();
 		try {
 			for (IType other : unit.getTypes()) {
@@ -179,12 +177,10 @@ public final class DeleteTool implements IMcpTool {
 		for (RegistryIndex.Evidence one : evidence) {
 			registry.add(describe(one));
 		}
-		// deleting the last type of a package leaves an Export-Package naming a
-		// package that no longer exists, which the next build reports against
-		// MANIFEST.MF. Saying so lets the caller follow up with eclipse_edit_manifest
+		// an Export-Package left naming an emptied package breaks the next build
 		boolean lastInPackage = false;
 		try {
-			lastInPackage = unit.getParent() instanceof org.eclipse.jdt.core.IPackageFragment fragment
+			lastInPackage = unit.getParent() instanceof IPackageFragment fragment
 					&& fragment.getCompilationUnits().length <= 1;
 		} catch (CoreException e) {
 			// a package that cannot be read is simply not reported as emptied
@@ -271,14 +267,8 @@ public final class DeleteTool implements IMcpTool {
 		return new JsonObject().put("type", typeName).put("deleted", Boolean.FALSE).put("error", reason); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 	}
 
-
 	/**
-	 * Deletes one member, which is where about half the edits of a real sweep are.
-	 * <p>
-	 * Through the Java model rather than by editing text: {@code IMember.delete}
-	 * works on the element's source range, which includes its javadoc, so the
-	 * comment goes with the declaration instead of being left behind referring to
-	 * something that no longer exists.
+	 * Deletes one member through the Java model, so its javadoc goes with it.
 	 */
 	private McpToolResult deleteMember(IType type, String memberName, boolean dryRun, boolean force,
 			IProgressMonitor progress) throws McpToolException {
@@ -287,10 +277,6 @@ public final class DeleteTool implements IMcpTool {
 			members = JavaModelSupport.findMembers(type, memberName);
 		} catch (ToolInputException e) {
 			return McpToolResult.error(e.getMessage());
-		}
-		if (members.isEmpty()) {
-			return McpToolResult.error("'%s' has no member named '%s'." //$NON-NLS-1$
-					.formatted(type.getFullyQualifiedName(), memberName));
 		}
 		if (members.size() > 1) {
 			return McpToolResult.error(
@@ -308,9 +294,7 @@ public final class DeleteTool implements IMcpTool {
 		}
 		PackageExports.Export export = new PackageExports().of(type.getJavaProject().getProject(),
 				type.getPackageFragment().getElementName());
-		// every reference counts here, including those in this same file: deleting a
-		// member leaves the file behind, so a use two lines below the declaration is a
-		// compile break exactly like one in another bundle
+		// the file stays, so a use in this same file is a compile break too
 		int references = countReferences(member, false, progress);
 		JsonArray registry = new JsonArray();
 		for (RegistryIndex.Evidence one : evidence) {
@@ -325,17 +309,14 @@ public final class DeleteTool implements IMcpTool {
 		JsonObject result = new JsonObject().put("type", type.getFullyQualifiedName()) //$NON-NLS-1$
 				.put("member", memberName) //$NON-NLS-1$
 				.put("kind", member instanceof IType ? "nested type" //$NON-NLS-1$ //$NON-NLS-2$
-						: member.getElementType() == org.eclipse.jdt.core.IJavaElement.FIELD ? "field" : "method") //$NON-NLS-1$ //$NON-NLS-2$
+						: member.getElementType() == IJavaElement.FIELD ? "field" : "method") //$NON-NLS-1$ //$NON-NLS-2$
 				.put("file", type.getResource() == null ? null : type.getResource().getFullPath().toString()) //$NON-NLS-1$
 				.put("dryRun", Boolean.valueOf(dryRun)) //$NON-NLS-1$
 				.put("references", Integer.valueOf(references)) //$NON-NLS-1$
 				.put("registryEvidence", registry) //$NON-NLS-1$
 				.put("apiTier", export.tier()); //$NON-NLS-1$
 
-		// the same phenomenon as a registry position, one level down: an injection
-		// annotation says a framework reads or writes this member from outside any
-		// compilation unit, so the reference count that would otherwise justify the
-		// deletion is exactly the number that cannot see it
+		// like a registry position: a framework wires the member from outside any compilation unit
 		List<String> injection = InjectionAnnotations.on(member);
 		if (!injection.isEmpty()) {
 			JsonArray annotations = new JsonArray();
@@ -357,10 +338,8 @@ public final class DeleteTool implements IMcpTool {
 			blockers.add("%d registry position(s) name it, and those fail at runtime rather than at compile time"
 					.formatted(Integer.valueOf(registry.size())));
 		}
-		if (PackageExports.PUBLIC.equals(export.tier()) && !org.eclipse.jdt.core.Flags.isPrivate(flags)) {
-			// a private member of a public type is nobody else's business; anything
-			// visible in a plainly exported package can have consumers no search here
-			// can see
+		if (PackageExports.PUBLIC.equals(export.tier()) && !Flags.isPrivate(flags)) {
+			// a private member is nobody else's business
 			blockers.add("it is visible outside its own class in a package exported as public API");
 		}
 		if (!blockers.isEmpty() && !force) {
@@ -383,9 +362,7 @@ public final class DeleteTool implements IMcpTool {
 	/**
 	 * References anywhere in the workspace.
 	 *
-	 * @param wholeFileGoesAway excludes the declaring file, which is right when the
-	 *                          file is what is being deleted and wrong for a member,
-	 *                          whose own file keeps compiling around it
+	 * @param wholeFileGoesAway excludes the declaring file, right for a type delete and wrong for a member
 	 */
 	private static int countReferences(IMember type, boolean wholeFileGoesAway, IProgressMonitor monitor)
 			throws McpToolException {

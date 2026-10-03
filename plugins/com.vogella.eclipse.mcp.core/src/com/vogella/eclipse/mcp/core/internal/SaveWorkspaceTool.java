@@ -115,10 +115,7 @@ public final class SaveWorkspaceTool implements IMcpTool {
 	/**
 	 * What a save would work on, since a save has no list of items to show.
 	 * <p>
-	 * The figures are chosen for the one decision this dry run exists for: a full
-	 * save prunes local history by the workspace's own policy, and without knowing
-	 * how much history there is and what the policy allows, that cost is invisible
-	 * until the files are gone.
+	 * A full save prunes local history by the workspace policy, so the figures show how much history that touches.
 	 */
 	private static JsonObject preview(boolean full) {
 		var workspace = ResourcesPlugin.getWorkspace();
@@ -204,9 +201,7 @@ public final class SaveWorkspaceTool implements IMcpTool {
 	/**
 	 * The status with its children.
 	 * <p>
-	 * The children are the point: the save broadcasts to every save participant and
-	 * merges what each returns, so a plug-in that complains while saving appears
-	 * here by name rather than as one severity on the whole operation.
+	 * Save participants are merged, so a plug-in that complains while saving appears here by name.
 	 */
 	private static JsonObject describe(IStatus status) {
 		if (status == null) {

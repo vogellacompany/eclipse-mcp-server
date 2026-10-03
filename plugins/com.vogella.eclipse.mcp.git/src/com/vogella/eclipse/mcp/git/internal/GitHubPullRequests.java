@@ -15,10 +15,8 @@ import com.vogella.eclipse.mcp.core.json.Json;
 /**
  * Asks the GitHub REST API what it knows about a pull request, best effort.
  * <p>
- * The fetch itself needs none of this, since GitHub advertises every pull
- * request as a plain git ref. What only the API knows is the name of the branch
- * the pull request was opened from, which is what the local branch is named
- * after.
+ * The fetch needs none of this; only the API knows the pull request's source branch name,
+ * which names the local branch.
  */
 final class GitHubPullRequests {
 

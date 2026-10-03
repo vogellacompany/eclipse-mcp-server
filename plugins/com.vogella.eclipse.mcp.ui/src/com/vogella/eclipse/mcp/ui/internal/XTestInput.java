@@ -16,11 +16,8 @@ import org.eclipse.swt.SWT;
 /**
  * Every call into libXtst, which is how a mouse button reaches a GTK3 widget.
  * <p>
- * SWT's {@code Display.post} for a button builds a GdkEventButton and puts it
- * on GDK's queue, and GTK3 drops it: on Xvfb a posted left click on a tab
- * changed nothing while an XTest click at the same point selected it. XTest
- * goes through the X server, so the event arrives the way a real one does.
- * The pointer itself is still moved through SWT, which scales points to pixels.
+ * GTK3 drops the button events {@code Display.post} queues on GDK, while XTest goes through
+ * the X server like a real click. The pointer is still moved through SWT, which scales points to pixels.
  */
 final class XTestInput {
 

@@ -349,9 +349,7 @@ public final class RestartTool implements IMcpTool {
 	 * that hands back what it was given would otherwise be refused.
 	 */
 	public static Path pathOf(String workspace) {
-		// through FileLocations rather than URI.getPath(): that form hands back
-		// "/C:/ws" for a Windows workspace, which is not a path at all, and leaves
-		// %20 wherever the URL was encoded
+		// FileLocations, not URI.getPath(), which yields "/C:/ws" and keeps %20
 		return FileLocations.pathOf(workspace);
 	}
 
@@ -382,19 +380,12 @@ public final class RestartTool implements IMcpTool {
 			return refusal;
 		}
 		JsonObject discarded = guard.discarded();
-		// before the restart, and deliberately not by waiting for either of them. A
-		// build has nothing worth saving across a restart, and a launched JVM that
-		// outlives the IDE keeps its workspace lock with nobody left who knows where
-		// it came from
+		// not waiting for either: a build has nothing to save, and a launched JVM outliving the IDE would keep its workspace lock
 		JsonObject cleared = clearTheWay();
-		// kept so a restart that does not take can put them back: they are global
-		// state, and an attempt that leaves -data behind makes the next one append a
-		// second one
+		// kept so a failed restart can restore them; a leftover -data makes the next attempt append a second one
 		String previousExitData = System.getProperty(EXIT_DATA_PROPERTY);
 		String previousExitCode = System.getProperty(EXIT_CODE_PROPERTY);
-		// before the restart is scheduled: Workbench.buildCommandLine reads this
-		// property and appends the workspace to whatever is already in it, so adding
-		// the argument here is the same channel the platform uses for -data
+		// Workbench.buildCommandLine appends the workspace to this property, the same channel the platform uses for -data
 		boolean splashSuppressed = splash ? false : appendNoSplash();
 		boolean cleaning = clean && appendArgument(CLEAN);
 		String target = workspace == null ? null : String.valueOf(pathOf(workspace));
@@ -406,10 +397,7 @@ public final class RestartTool implements IMcpTool {
 		// answer first, restart after: the server dies with the IDE, so restarting
 		// inside the call gives the caller a dropped connection instead of a result
 		Display display = Workbenches.display();
-		// restart(true), not restart(): the no argument form relaunches without -data,
-		// so the IDE comes back up asking for a workspace and waits for a human.
-		// With a workspace of our own the arguments are already set, and restart(true)
-		// would append the current one after it
+		// restart(true), not restart(): the no argument form relaunches without -data and waits for a human at the workspace chooser
 		boolean current = workspace == null;
 		lastFailure = null;
 		display.timerExec(RESTART_DELAY_MILLIS, () -> performRestart(current, previousExitData, previousExitCode));

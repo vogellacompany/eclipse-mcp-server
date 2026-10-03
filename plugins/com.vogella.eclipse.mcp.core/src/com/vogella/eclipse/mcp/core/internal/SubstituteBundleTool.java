@@ -13,10 +13,12 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
@@ -604,7 +606,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 	 * bundle.
 	 */
 	public static List<String[]> recordsKept(Path configuration, List<String[]> records, List<String> droppedLines) {
-		List<Path> droppedJars = new ArrayList<>();
+		Set<Path> droppedJars = new HashSet<>();
 		for (String line : droppedLines) {
 			Path jar = jarOf(configuration, line);
 			if (jar != null) {

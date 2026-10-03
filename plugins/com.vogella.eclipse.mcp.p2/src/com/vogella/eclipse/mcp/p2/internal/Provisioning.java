@@ -257,9 +257,8 @@ final class Provisioning {
 	/**
 	 * The repositories the IDE is already configured with.
 	 * <p>
-	 * Installing from an arbitrary URL fetches and runs code from the network, which
-	 * is a larger step than anything else here does, so the allowlist is what the
-	 * user already trusted rather than a switch that gets turned on once.
+	 * Installing from an arbitrary URL runs network code, so the allowlist is what the
+	 * user already trusted.
 	 */
 	static List<URI> knownRepositories(IProvisioningAgent agent) {
 		IMetadataRepositoryManager manager = agent.getService(IMetadataRepositoryManager.class);
@@ -276,11 +275,8 @@ final class Provisioning {
 	/**
 	 * Re-reads the configured repositories and reports the state of each.
 	 * <p>
-	 * p2 caches repository metadata, and a cached miss is reported as "no updates
-	 * found", which is exactly what a genuinely current IDE reports. That makes a
-	 * stale cache invisible in the one workflow these tools exist for. The composite
-	 * document itself has to be re-read, because a release replaces the child rather
-	 * than adding one.
+	 * A stale p2 cache reports "no updates found", like a current IDE does. The composite
+	 * document has to be re-read too, because a release replaces the child rather than adding one.
 	 */
 	private static JsonArray describe(IProvisioningAgent agent, boolean refresh, List<URI> locations,
 			IProgressMonitor monitor) {
@@ -348,11 +344,8 @@ final class Provisioning {
 	/**
 	 * Retries an operation against every enabled repository.
 	 * <p>
-	 * Scoping to the repositories that can supply a unit finds where the INSTALLED
-	 * version lives, and an update is by definition somewhere else: with a composite
-	 * whose child location changes per release, the child the current version came
-	 * from is exactly the one that will never hold a newer one. So a scoped
-	 * resolution finding nothing is not an answer, it is a reason to look properly.
+	 * A scope to the repositories supplying a unit finds where the INSTALLED version lives,
+	 * which with a composite whose child changes per release never holds a newer one.
 	 */
 	static void widenToAllRepositories(IProvisioningAgent agent,
 			org.eclipse.equinox.p2.operations.ProfileChangeOperation operation, IProgressMonitor monitor) {
@@ -369,9 +362,7 @@ final class Provisioning {
 	 * The repositories that can supply {@code units}, resolved through composite
 	 * children and references.
 	 * <p>
-	 * Asking p2 which locations matter beats refreshing every configured site: an
-	 * IDE with a dozen of them pays a network round trip for each, and a targeted
-	 * check only ever needed one.
+	 * Cheaper than refreshing every configured site, one network round trip each.
 	 */
 	static URI[] sourcesFor(IProvisioningAgent agent,
 			Collection<org.eclipse.equinox.p2.metadata.IInstallableUnit> units, IProgressMonitor monitor) {
@@ -399,12 +390,8 @@ final class Provisioning {
 	/**
 	 * Refreshes the artifact side of a repository as well as its metadata.
 	 * <p>
-	 * Skipping this looks like a saving, and it is not. A composite site whose
-	 * release replaces the child rather than adding one leaves the cached artifact
-	 * composite pointing at a directory that no longer exists, while the metadata
-	 * refresh happily reports the new version. The update then resolves and fails in
-	 * the download phase with "No repository found containing", which names neither
-	 * the cache nor the site.
+	 * Skipping this leaves the cached artifact composite pointing at a replaced child, so the
+	 * update resolves and then fails in the download phase with "No repository found containing".
 	 */
 	private static void refreshArtifacts(IProvisioningAgent agent, URI uri, IProgressMonitor monitor) {
 		var artifacts = agent.getService(org.eclipse.equinox.p2.repository.artifact.IArtifactRepositoryManager.class);

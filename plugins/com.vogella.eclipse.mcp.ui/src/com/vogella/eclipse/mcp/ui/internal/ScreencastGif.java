@@ -16,11 +16,8 @@ import org.eclipse.swt.graphics.RGB;
 /**
  * Assembles frames into an animated GIF through SWT's own image loader.
  * <p>
- * GIF holds at most 256 colours per frame and SWT writes only indexed data, so
- * every frame is mapped onto a fixed 6x7x6 colour cube plus greys. That is
- * coarser than an adaptive palette, and it is deterministic, needs no second
- * pass and keeps the frames comparable to one another. The PNG frames stay
- * lossless on disk for anything that wants better.
+ * Every frame is mapped onto a fixed 6x7x6 colour cube plus greys: coarser than an adaptive
+ * palette, but deterministic and single pass. The PNG frames stay lossless on disk.
  */
 public final class ScreencastGif {
 

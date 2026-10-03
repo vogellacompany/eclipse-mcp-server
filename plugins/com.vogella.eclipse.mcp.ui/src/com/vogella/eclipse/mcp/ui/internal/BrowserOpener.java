@@ -9,12 +9,8 @@ import org.eclipse.ui.browser.IWorkbenchBrowserSupport;
 import com.vogella.eclipse.mcp.core.TracePages;
 
 /**
- * Opens a trace page in the machine's browser.
- * <p>
- * Through the workbench's browser support first, because that is what honours the
- * user's choice under General &gt; Web Browser, and through SWT's {@code Program} when
- * that fails, which is the platform's own file association and needs no workbench
- * preference to be set.
+ * Opens a trace page in the machine's browser, through the workbench's browser support
+ * first and SWT's {@code Program} when that fails.
  */
 final class BrowserOpener implements TracePages.Opener {
 

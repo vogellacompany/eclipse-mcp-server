@@ -126,14 +126,7 @@ public final class GetTargetPlatformTool implements IMcpTool {
 		}
 	}
 
-	/**
-	 * Waits for a resolve already running, bounded by what fits inside one call.
-	 * <p>
-	 * Bounded rather than blocking: a cold resolve runs for tens of seconds and can
-	 * outlast the server's call timeout, and a call abandoned mid-wait tells the
-	 * caller nothing at all, while a short answer saying the resolve is still going
-	 * costs one more call and loses nothing.
-	 */
+	/** Waits for a resolve already running, bounded by what fits inside one call since a cold resolve can outlast the call timeout. */
 	private static Waited awaitResolve(int requested) {
 		TargetLoad load = TargetLoad.current();
 		if (load == null || !load.isRunning()) {

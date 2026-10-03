@@ -17,7 +17,9 @@ import org.eclipse.jdt.core.IField;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IMember;
 import org.eclipse.jdt.core.IMethod;
+import org.eclipse.jdt.core.ISourceRange;
 import org.eclipse.jdt.core.IType;
+import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.Signature;
 import org.eclipse.jdt.core.search.IJavaSearchConstants;
 import org.eclipse.jdt.core.search.IJavaSearchScope;
@@ -133,10 +135,7 @@ public final class FindReferencesTool implements IMcpTool {
 		IJavaSearchScope scope = projectName == null ? SearchEngine.createWorkspaceScope()
 				: SearchEngine.createJavaSearchScope(new IJavaElement[] { projects.get(0) }, true);
 
-		// A binary type binds to the one jar it was resolved from, so an element based
-		// search finds only references compiled against that copy. When the same
-		// qualified name is supplied by several jars, which is the norm for a library
-		// like JUnit, that silently answers zero. Search the name instead and say so.
+		// an element search on a binary type only finds references compiled against that one jar, so search the name
 		boolean byName = type.isBinary() && memberName == null;
 		Found found = find(type, types, memberName, searched, accessKind, scope, monitor, resolved);
 		if (found == null) {
@@ -145,11 +144,8 @@ public final class FindReferencesTool implements IMcpTool {
 		int rawTotal = found.rawTotal();
 		List<Hit> hits = found.hits();
 
-		// a field written but never read is dead while every text search sees live occurrences,
-		// so the split is reported without the caller having to ask for it twice.
-		// A WRITE_ACCESSES search reports the field's own initializer, which is a
-		// declaration rather than a reference: "can this be final" is exactly the
-		// question that needs the two separated
+		// a field written but never read is dead while text searches see live occurrences; a
+		// WRITE_ACCESSES search also reports the initializer, a declaration, hence the separation
 		Set<String> declarations = declarationsOf(fields);
 		Set<String> reads = null;
 		Set<String> writes = null;
@@ -170,8 +166,7 @@ public final class FindReferencesTool implements IMcpTool {
 			entry.put("offset", match.getOffset()); //$NON-NLS-1$
 			entry.put("length", match.getLength()); //$NON-NLS-1$
 			entry.put("signature", hit.signature()); //$NON-NLS-1$
-			// the workspace path of a linked file does not exist under the project on
-			// disk, so a caller that wants to read it needs the resolved one
+			// a linked file's workspace path does not exist on disk
 			entry.put("location", isBinary(match) || resource == null || resource.getLocation() == null ? null //$NON-NLS-1$
 					: resource.getLocation().toString());
 			entry.put("enclosingElement", //$NON-NLS-1$
@@ -200,12 +195,9 @@ public final class FindReferencesTool implements IMcpTool {
 				.put("accessKind", accessKind) //$NON-NLS-1$
 				.put("total", hits.size()) //$NON-NLS-1$
 				.put("byOrigin", new JsonObject().put("source", hits.size() - binary).put("binary", binary)) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-				// always present, so that "nothing was folded" cannot be read as "the
-				// field is missing from this code path"
 				.put("linkedDuplicates", Integer.valueOf(rawTotal - hits.size())) //$NON-NLS-1$
 				.put("truncated", hits.size() > reported.size()); //$NON-NLS-1$
-		// said where the conclusion is drawn, not in documentation somebody reads
-		// later: a caller sweeping for dead code reads total 0 and moves on
+		// said here because a dead-code sweep reads total 0 and moves on
 		List<String> injection = searched.stream().flatMap(overload -> overload.members().stream())
 				.flatMap(one -> InjectionAnnotations.on(one).stream()).distinct().toList();
 		if (!injection.isEmpty()) {
@@ -223,25 +215,12 @@ public final class FindReferencesTool implements IMcpTool {
 									.formatted(type.getFullyQualifiedName(), Integer.valueOf(types.size())));
 		}
 		if (!searched.isEmpty()) {
-			JsonArray byMember = new JsonArray();
-			for (Overload overload : searched) {
-				int count = 0;
-				for (Hit hit : hits) {
-					if (overload.signature().equals(hit.signature())) {
-						count++;
-					}
-				}
-				byMember.add(new JsonObject().put("signature", overload.signature()) //$NON-NLS-1$
-						.put("total", Integer.valueOf(count))); //$NON-NLS-1$
-			}
+			JsonArray byMember = byMember(searched, hits);
 			result.put("byMember", byMember); //$NON-NLS-1$
 		}
 		if (reads != null) {
 			result.put("byKind", new JsonObject().put("read", reads.size()).put("write", writes.size())); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		} else if (!fields.isEmpty()) {
-			// a byKind here too, so that "is this ever assigned outside its
-			// declaration" is one call rather than a subtraction the caller has to
-			// know to make
 			int declared = 0;
 			for (Hit hit : hits) {
 				if (declarations.contains(locationOf(hit.match()))) {
@@ -298,10 +277,7 @@ public final class FindReferencesTool implements IMcpTool {
 				hits.add(new Hit(match, null));
 			}
 		} else {
-			// one search per overload rather than a single pattern over all of them,
-			// so that every match knows which overload it belongs to. A merged count
-			// cannot tell "this one is dead and that one has sixteen callers" from
-			// "both are live"
+			// one search per overload, so every match knows which overload it belongs to
 			boolean any = false;
 			for (Overload overload : searched) {
 				SearchPattern pattern = pattern(overload.members(), limitTo(accessKind));
@@ -335,10 +311,7 @@ public final class FindReferencesTool implements IMcpTool {
 	/**
 	 * Groups the members named {@code memberName} by signature, across every copy of
 	 * the declaring type.
-	 * <p>
-	 * The copies of one overload are searched together as a single OR pattern, which
-	 * is also what removes the focus a single element pattern carries, so the search
-	 * covers the whole workspace rather than the projects that see one copy.
+	 * The copies of one overload are searched as one OR pattern, which also drops the single element focus.
 	 */
 	private static List<Overload> overloadsOf(List<IType> types, String memberName, List<String> paramTypes)
 			throws ToolInputException, McpToolException {
@@ -372,6 +345,21 @@ public final class FindReferencesTool implements IMcpTool {
 		return bySignature.entrySet().stream().map(entry -> new Overload(entry.getKey(), entry.getValue())).toList();
 	}
 
+	private static JsonArray byMember(List<Overload> searched, List<Hit> hits) {
+		JsonArray byMember = new JsonArray();
+		for (Overload overload : searched) {
+			int count = 0;
+			for (Hit hit : hits) {
+				if (overload.signature().equals(hit.signature())) {
+					count++;
+				}
+			}
+			byMember.add(new JsonObject().put("signature", overload.signature()) //$NON-NLS-1$
+					.put("total", Integer.valueOf(count))); //$NON-NLS-1$
+		}
+		return byMember;
+	}
+
 	private static boolean isBinary(SearchMatch match) {
 		return match.getElement() instanceof IJavaElement element
 				&& element.getAncestor(IJavaElement.CLASS_FILE) != null;
@@ -379,11 +367,8 @@ public final class FindReferencesTool implements IMcpTool {
 
 	/**
 	 * Drops matches that are one physical file seen through another project.
-	 * <p>
-	 * A linked source folder, which is how the SWT fragments share one copy of a
-	 * file across seven projects, otherwise makes a single call site count seven
-	 * times, and "how much code calls this" is exactly the question the count is
-	 * asked for. The projects that were folded away are kept on the surviving match.
+	 * A linked source folder (SWT fragments share files) otherwise counts one call site several times.
+	 * The folded projects are kept on the surviving match.
 	 */
 	private static List<Hit> deduplicate(List<Hit> hits) {
 		Map<String, Hit> unique = new LinkedHashMap<>();
@@ -460,20 +445,17 @@ public final class FindReferencesTool implements IMcpTool {
 	}
 
 	/** Where the fields themselves are declared, as match locations. */
-	private static Set<String> declarationsOf(List<? extends org.eclipse.jdt.core.IMember> fields) {
+	private static Set<String> declarationsOf(List<? extends IMember> fields) {
 		Set<String> locations = new LinkedHashSet<>();
-		for (org.eclipse.jdt.core.IMember field : fields) {
+		for (IMember field : fields) {
 			try {
-				org.eclipse.jdt.core.ISourceRange range = field.getNameRange();
+				ISourceRange range = field.getNameRange();
 				IResource resource = field.getResource();
 				if (range != null && resource != null) {
-					// the same format locationOf produces, because two spellings of one
-					// key is how this silently never matched anything
 					locations.add(locationOf(resource, range.getOffset()));
 				}
-			} catch (org.eclipse.jdt.core.JavaModelException e) {
-				// a field whose range cannot be read simply is not recognised as a
-				// declaration, which reports more rather than less
+			} catch (JavaModelException e) {
+				// an unreadable range just means the declaration is not recognised
 			}
 		}
 		return locations;
@@ -485,11 +467,7 @@ public final class FindReferencesTool implements IMcpTool {
 
 	/**
 	 * Counts references for many elements in one call.
-	 * <p>
-	 * Counts only, deliberately. A sweep asks "how many references" about hundreds
-	 * of candidates and needs the locations for almost none of them, so returning
-	 * matches would make the answer enormous to save the round trips that were the
-	 * problem. The type resolution and the search index are shared across the batch.
+	 * Counts only, since a sweep needs locations for almost none of hundreds of candidates.
 	 */
 	private McpToolResult countAll(List<Map<String, Object>> queries, String projectName, IProgressMonitor monitor)
 			throws McpToolException {
@@ -576,20 +554,8 @@ public final class FindReferencesTool implements IMcpTool {
 		if (types.size() > 1) {
 			entry.put("declaredIn", Integer.valueOf(types.size())); //$NON-NLS-1$
 		}
-		// a merged count over overloads cannot answer the question the sweep asks, so
-		// the split comes back even in the counts only form
 		if (searched.size() > 1) {
-			JsonArray byMember = new JsonArray();
-			for (Overload overload : searched) {
-				int count = 0;
-				for (Hit hit : hits) {
-					if (overload.signature().equals(hit.signature())) {
-						count++;
-					}
-				}
-				byMember.add(new JsonObject().put("signature", overload.signature()) //$NON-NLS-1$
-						.put("total", Integer.valueOf(count))); //$NON-NLS-1$
-			}
+			JsonArray byMember = byMember(searched, hits);
 			entry.put("byMember", byMember); //$NON-NLS-1$
 		}
 		return entry;

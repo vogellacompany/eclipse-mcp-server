@@ -76,10 +76,8 @@ public final class McpToolAdapter {
 			}
 			return answer.build();
 		} catch (TimeoutException e) {
-			// the monitor is what actually stops a cooperative tool; cancel(true) only
-			// interrupts, and a tool blocked on the workspace lock or in native code
-			// keeps its thread whatever we do. What must not happen is that going
-			// unnoticed, because each one holds locks that block later work
+			// the monitor stops a cooperative tool; cancel(true) only interrupts, so a blocked
+			// tool keeps its thread and must be reported through abandon
 			monitor.setCanceled(true);
 			pending.cancel(true);
 			int abandoned = abandon(tool.getName(), running);

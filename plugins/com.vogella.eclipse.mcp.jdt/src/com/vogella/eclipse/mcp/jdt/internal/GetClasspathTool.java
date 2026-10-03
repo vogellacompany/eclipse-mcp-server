@@ -123,9 +123,8 @@ public final class GetClasspathTool implements IMcpTool {
 	}
 
 	/**
-	 * A container path names an intent, not a location. The description and, for the
-	 * JRE container, the install actually bound to it are the parts that decide how
-	 * the project compiles, and neither is in {@code .classpath}.
+	 * A container path names an intent, not a location; the description and the bound JRE decide how the
+	 * project compiles and are not in {@code .classpath}.
 	 */
 	private static void addContainer(IJavaProject javaProject, IClasspathEntry entry, JsonObject json) {
 		try {
@@ -146,9 +145,7 @@ public final class GetClasspathTool implements IMcpTool {
 						.put("location", vm.getInstallLocation() == null ? null //$NON-NLS-1$
 								: vm.getInstallLocation().getAbsolutePath())
 						.put("type", vm.getVMInstallType() == null ? null : vm.getVMInstallType().getName()); //$NON-NLS-1$
-				// a container path with no execution environment segment is the workspace
-				// default VM, which is shared: a project bound to it changes underneath
-				// whenever that setting does, and nothing in the project records it
+				// no execution environment segment means the shared workspace default VM
 				if (entry.getPath().segmentCount() == 1) {
 					bound.put("fromWorkspaceDefault", Boolean.TRUE); //$NON-NLS-1$
 				}

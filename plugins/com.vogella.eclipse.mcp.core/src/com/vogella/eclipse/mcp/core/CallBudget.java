@@ -5,12 +5,7 @@ import org.eclipse.core.runtime.Platform;
 /**
  * How long a tool may block before the server aborts the call.
  * <p>
- * A tool that waits longer than the server's own call timeout is killed, and the
- * caller gets an error instead of the handle it could have polled with. That made
- * the maximum several tools advertise unreachable: asking eclipse_build to wait
- * five minutes never returned a buildId, only "did not finish within 30 seconds",
- * while the id it needed already existed. Waits are bounded here instead, and the
- * tool answers with what it has.
+ * Waits are bounded here so a tool answers with the handle it has instead of being killed at the call timeout.
  */
 public final class CallBudget {
 

@@ -15,10 +15,7 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
 /**
  * What the job manager is doing right now, and waiting for it to stop.
  * <p>
- * The auto-build is nobody's build: it is not started through a tool, so a
- * registry of started builds cannot see it, and after a restart it is the only
- * thing running. Anything timed against a workspace that is still building
- * measures the build as well.
+ * The auto-build is not started through a tool, so the build registry cannot see it.
  */
 final class WorkspaceJobs {
 

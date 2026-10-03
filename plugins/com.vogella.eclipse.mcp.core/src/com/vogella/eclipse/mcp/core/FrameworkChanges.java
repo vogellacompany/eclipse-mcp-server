@@ -4,14 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Remembers that this IDE session changed what the framework runs, so the next
- * restart knows to discard the registry and resolver caches.
- * <p>
- * A hot install refreshes bundles whose registry contributions the cache written
- * at shutdown then describes wrongly, and the editors the workbench restores at
- * the next start fail with {@code InvalidRegistryObjectException}; a substitution
- * changes the jar behind a bundles.info line under the same caches. Both cost a
- * few seconds of {@code -clean} and nothing else.
+ * Remembers that this IDE session changed what the framework runs, so the next restart discards the registry
+ * and resolver caches.
  */
 public final class FrameworkChanges {
 

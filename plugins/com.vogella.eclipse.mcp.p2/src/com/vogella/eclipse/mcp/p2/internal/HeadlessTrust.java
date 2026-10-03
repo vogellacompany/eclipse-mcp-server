@@ -19,16 +19,10 @@ import org.eclipse.equinox.p2.core.UIServices;
 /**
  * Answers p2's trust and credential prompts without a human.
  * <p>
- * The IDE's own {@code UIServices} raises a modal dialog, which blocks the
- * provisioning job until somebody clicks it. From a client that is
- * indistinguishable from a slow download, so an unattended update hangs until
- * the call times out and the real cause never surfaces. This answers instead.
- * <p>
- * Unsigned content is accepted by default on this path, because an install the
- * server performs is unattended by definition and there is nobody to click the
- * dialog. This is not bounded by which sites are configured, because a client can
- * configure a new one through eclipse_add_repository. Whatever was accepted
- * is reported, so a trusted install is auditable rather than silent.
+ * The IDE's own {@code UIServices} raises a modal dialog that hangs an unattended job
+ * like a slow download. Unsigned content is accepted by default, since nobody is there
+ * to click and a client can add sites through eclipse_add_repository anyway; whatever was
+ * accepted is reported.
  */
 public final class HeadlessTrust extends UIServices {
 
@@ -82,10 +76,8 @@ public final class HeadlessTrust extends UIServices {
 	/**
 	 * The overload p2 actually reaches for a signed artifact.
 	 * <p>
-	 * Its default implementation on {@link UIServices} drops the PGP keys and calls
-	 * the pair above, which then answered "no key is trusted" and cancelled the
-	 * install: a locally built repository could not be installed however the caller
-	 * asked. It has to be overridden rather than inherited.
+	 * The default on {@link UIServices} drops the PGP keys and calls the pair above, which
+	 * cancelled installs from locally built repositories, so it must be overridden.
 	 */
 	@Override
 	public TrustInfo getTrustInfo(Certificate[][] untrustedChains, Collection<PGPPublicKey> untrustedKeys,

@@ -23,14 +23,7 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
 /**
  * Writes a single preference and reports what was there before.
  * <p>
- * An allowlist of qualifiers used to stand here. It held back only legitimate
- * work: project preferences are ordinary files under {@code .settings} that
- * eclipse_write_file writes anyway, and a CSS snippet carrying an
- * {@code IEclipsePreferences} block writes any qualifier at all through
- * eclipse_apply_css. A restriction that two other tools of the same server walk
- * around stops the caller with a legitimate need and nobody else. What remains
- * are the two keys where writing the obvious thing does not do the obvious
- * thing.
+ * There is no qualifier allowlist, since other tools of this server write any qualifier anyway.
  */
 public final class SetPreferenceTool implements IMcpTool {
 

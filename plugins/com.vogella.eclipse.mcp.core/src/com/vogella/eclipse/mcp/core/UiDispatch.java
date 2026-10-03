@@ -5,11 +5,7 @@ import java.util.concurrent.Callable;
 /**
  * The bridge from a core tool to the UI thread, for work whose listeners assume it.
  * <p>
- * A preference write fires its change listeners synchronously on the writing
- * thread, and editors answer such a change by touching widgets, so a write from
- * a Jetty worker thread ends in "Invalid thread access" and an error dialog.
- * This bundle must not depend on any UI bundle, so the UI registers an executor
- * here; without one the work runs inline, which is right headless.
+ * The UI bundle registers an executor; without one the work runs inline, which is right headless.
  */
 public final class UiDispatch {
 

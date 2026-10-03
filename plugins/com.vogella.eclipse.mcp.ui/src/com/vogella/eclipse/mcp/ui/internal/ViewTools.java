@@ -153,9 +153,7 @@ public final class ViewTools {
 				return new JsonObject().put("hidden", Boolean.FALSE) //$NON-NLS-1$
 						.put("reason", "The workbench has no active page."); //$NON-NLS-1$ //$NON-NLS-2$
 			}
-			// resolved against the open views rather than the registry, because a view
-			// that is not open cannot be closed and its registered label is not what the
-			// tab says once a secondary id is involved
+			// resolved against open views: a closed view cannot be closed, and the registered label is not the tab text with a secondary id
 			List<IViewReference> open = new ArrayList<>(List.of(page.getViewReferences()));
 			List<IViewReference> matches = new ArrayList<>();
 			for (IViewReference reference : open) {

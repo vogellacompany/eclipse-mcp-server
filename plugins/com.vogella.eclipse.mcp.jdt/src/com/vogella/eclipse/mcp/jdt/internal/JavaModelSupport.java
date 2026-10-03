@@ -12,6 +12,7 @@ import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IField;
@@ -88,12 +89,7 @@ final class JavaModelSupport {
 
 	/**
 	 * Returns the first type resolvable under the given fully qualified name.
-	 * <p>
-	 * A monitor is what makes secondary types findable: JDT's own javadoc says
-	 * {@code findType(String)} excludes them, because without a monitor it resolves
-	 * through the package fragments alone, where a package-private class declared
-	 * in a file of a different name does not appear. The index knows about it and is
-	 * only consulted by the monitor-taking overload.
+	 * A monitor makes secondary types findable, since only the monitor-taking overload consults the index.
 	 *
 	 * @throws ToolInputException if no project resolves the name
 	 */
@@ -104,14 +100,11 @@ final class JavaModelSupport {
 			try {
 				IType type = project.findType(typeName);
 				if (type != null && type.exists()) {
-					// a workspace source type wins over the same type compiled into build
-					// output, which is otherwise found first and has no compilation unit
+					// source wins over the same type compiled into build output
 					if (!type.isBinary()) {
 						return type;
 					}
-					// among compiled candidates prefer one a project actually compiles
-					// against: a copy inside build output binds to nothing, so a search
-					// for references to it correctly finds none, which reads as zero
+					// a copy inside build output binds to nothing, so prefer one a project compiles against
 					if (binaryFallback == null || (isBuildOutput(binaryFallback) && !isBuildOutput(type))) {
 						binaryFallback = type;
 					}
@@ -124,9 +117,7 @@ final class JavaModelSupport {
 		if (binaryFallback != null) {
 			return binaryFallback;
 		}
-		// only now the slower lookup, which goes to the index for secondary types.
-		// Doing it first would put an index query in front of every call that does
-		// not need one
+		// the index lookup for secondary types is slower, so it comes last
 		IType secondary = findSecondaryType(typeName, projects, monitor);
 		if (secondary != null) {
 			return secondary;
@@ -140,19 +131,8 @@ final class JavaModelSupport {
 	/**
 	 * Every source copy of a fully qualified name across the given projects, or the
 	 * single type {@link #findType} resolves when there is no source copy.
-	 * <p>
-	 * One name can be declared more than once. SWT declares
-	 * {@code org.eclipse.swt.graphics.Image} once per window system, and each
-	 * fragment puts its own copy on the build path. A JDT search built from an
-	 * element carries that element as its focus, which narrows the index to the
-	 * projects that can see it, so a search bound to the gtk copy silently answers
-	 * nothing about the win32 and cocoa call sites. A workspace wide question has
-	 * to search every copy.
-	 * <p>
-	 * A copy is a distinct declaration, not a distinct project: {@code findType}
-	 * follows the build path, so every project that depends on the declaring one
-	 * answers with the same handle, and in a platform workspace that made one type
-	 * look declared 23 times.
+	 * One name can be declared more than once (SWT declares {@code Image} per window system), and a search
+	 * bound to one copy misses the others. A copy is a distinct declaration, not a distinct project.
 	 */
 	static List<IType> findTypes(String typeName, List<IJavaProject> projects, IProgressMonitor monitor)
 			throws ToolInputException, McpToolException {
@@ -197,7 +177,7 @@ final class JavaModelSupport {
 		for (IJavaProject project : projects) {
 			try {
 				IType type = project.findType(typeName,
-						monitor == null ? new org.eclipse.core.runtime.NullProgressMonitor() : monitor);
+						monitor == null ? new NullProgressMonitor() : monitor);
 				if (type != null && type.exists() && !type.isBinary()) {
 					return type;
 				}
@@ -211,12 +191,7 @@ final class JavaModelSupport {
 
 	/**
 	 * Records where a search match actually lives.
-	 * <p>
-	 * {@code SearchMatch.getResource()} returns the project that owns the classpath
-	 * entry for a match inside a jar, so its path is a bare project name with no
-	 * file. Reported unchanged that reads as a source match in a project whose
-	 * source does not contain the type at all, which is worse than useless because
-	 * nothing in the answer marks it as second hand.
+	 * {@code SearchMatch.getResource()} names the owning project for a jar match, which would read as a source match.
 	 */
 	static void describeLocation(org.eclipse.jdt.core.search.SearchMatch match, JsonObject entry) {
 		org.eclipse.core.resources.IResource resource = match.getResource();
@@ -225,8 +200,7 @@ final class JavaModelSupport {
 		entry.put("origin", binary ? "binary" : "source"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		if (binary) {
 			IJavaElement root = element.getAncestor(IJavaElement.PACKAGE_FRAGMENT_ROOT);
-			// no path and no project: this match is in compiled code, and attributing it
-			// to the project that happens to reference the jar is what caused the bug
+			// compiled code belongs to no project path
 			entry.put("path", null) //$NON-NLS-1$
 					.put("project", null) //$NON-NLS-1$
 					.put("library", root == null ? null : root.getPath().toString()); //$NON-NLS-1$

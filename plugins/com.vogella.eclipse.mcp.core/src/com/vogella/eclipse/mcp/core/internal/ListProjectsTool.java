@@ -128,11 +128,7 @@ public final class ListProjectsTool implements IMcpTool {
 	 * The natures a closed project declares, or {@code null} when the file cannot be
 	 * read.
 	 * <p>
-	 * {@code IProject.getDescription} fails on a closed project, and reporting that
-	 * as "no natures" is worse than saying nothing: a client classifying projects
-	 * then gets a different answer for the same workspace depending on which
-	 * projects happen to be open. The file is the same information, and the closed
-	 * projects are exactly the ones a cleanup client needs to classify.
+	 * {@code IProject.getDescription} fails on a closed project, and reporting "no natures" would be wrong.
 	 */
 	private static List<String> naturesFromProjectFile(IProject project) {
 		IPath location = project.getLocation();

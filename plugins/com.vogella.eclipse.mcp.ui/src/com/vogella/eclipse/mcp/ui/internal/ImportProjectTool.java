@@ -114,11 +114,7 @@ public final class ImportProjectTool implements IMcpTool {
 		boolean wasAutoBuilding = workspace.isAutoBuilding();
 		Map<File, List<ProjectConfigurator>>[] scanned = newProposalHolder();
 
-		// The scan is part of the work, not something to do before it: asking every
-		// configurator what it recognises walks the whole tree at unlimited depth, and
-		// on a repository of repositories that alone outlasts the call timeout. Doing
-		// it inside the job is what lets the answer say the import is still running
-		// instead of the call dying with the handle.
+		// the scan runs inside the job: asking every configurator walks the whole tree and can outlast the call timeout
 		Job work = Job.create("Smart import of " + directory.getAbsolutePath(), (IProgressMonitor jobMonitor) -> { //$NON-NLS-1$
 			Map<File, List<ProjectConfigurator>> proposals = job.getImportProposals(jobMonitor);
 			if (!configure) {

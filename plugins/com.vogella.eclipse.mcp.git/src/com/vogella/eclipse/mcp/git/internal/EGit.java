@@ -36,10 +36,8 @@ final class EGit {
 	/**
 	 * The repository for a project name or a directory on disk, or {@code null}.
 	 * <p>
-	 * A project name is resolved through EGit's own mapping, so a project inside a
-	 * repository resolves the same way it does in the Git Repositories view. A path
-	 * is looked up directly, which is what makes a repository outside the workspace
-	 * reachable at all.
+	 * A project name goes through EGit's own mapping, a path is looked up directly, which
+	 * makes a repository outside the workspace reachable.
 	 */
 	static Repository lookup(String projectName, String directory) throws IOException {
 		if (projectName != null && !projectName.isBlank()) {
@@ -55,10 +53,7 @@ final class EGit {
 			return known;
 		}
 		File gitDir = gitDir(file);
-		// lookupRepository hands back a bare handle for any directory at all, so a
-		// path that is no repository has to be rejected here. Otherwise it reaches
-		// the status as a repository with no working tree and fails there, which
-		// reads as the repository being broken rather than as the wrong path
+		// lookupRepository hands back a bare handle for any directory, so reject non-repositories here
 		return isRepository(gitDir) ? RepositoryCache.INSTANCE.lookupRepository(gitDir) : null;
 	}
 

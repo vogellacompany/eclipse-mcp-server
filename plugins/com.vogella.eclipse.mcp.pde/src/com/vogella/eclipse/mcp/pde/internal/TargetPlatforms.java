@@ -28,6 +28,7 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
  * caller names, and the JSON view of a target definition.
  */
 final class TargetPlatforms {
+	private static final Pattern REPOSITORY_LOCATION = Pattern.compile("<repository[^>]*location=\"([^\"]*)\""); //$NON-NLS-1$
 
 	private TargetPlatforms() {
 	}
@@ -54,16 +55,7 @@ final class TargetPlatforms {
 		return onDisk.isFile() ? service.getTarget(onDisk.toURI()) : null;
 	}
 
-	/**
-	 * The JRE a target binds, resolved to the install it actually names.
-	 * <p>
-	 * The container path alone says {@code JavaSE-21} and hides which JDK on this
-	 * machine that is. Activating writes the binding into the projects, it outlives
-	 * the target that set it, and a JDK that cannot serve {@code --release} then
-	 * fails every plug-in project at once with a message about ct.sym that names no
-	 * target at all. Naming the install and checking it before the caller commits
-	 * is the difference between a decision and a surprise.
-	 */
+	/** The JRE a target binds, resolved to the install it names, so a JDK that cannot serve {@code --release} is caught before activation. */
 	static JsonObject jre(ITargetDefinition definition) {
 		org.eclipse.core.runtime.IPath container = definition.getJREContainer();
 		if (container == null) {
@@ -198,13 +190,7 @@ final class TargetPlatforms {
 		}
 	}
 
-	/**
-	 * The path a location reads from, where it has one.
-	 * <p>
-	 * A Maven location has none, and PDE answers with the JVM's temp directory,
-	 * which reads as a target configured to load bundles out of /tmp. It is not
-	 * one, so the field is left empty and the label says which location it is.
-	 */
+	/** The path a location reads from, where it has one; a Maven location has none and PDE answers with the temp directory. */
 	private static String location(ITargetLocation location) {
 		try {
 			String path = location.getLocation(false);
@@ -217,13 +203,8 @@ final class TargetPlatforms {
 		}
 	}
 
-	/**
-	 * Compared as paths rather than as strings: java.io.tmpdir ends with a
-	 * separator on Windows and not on Linux, the separator itself differs, and
-	 * Windows paths differing only in case are one directory. A string comparison
-	 * therefore said "not the temp directory" off Linux and let PDE's placeholder
-	 * through as if it were a real location.
-	 */
+	// compared as paths: java.io.tmpdir's trailing separator and case differ per platform
+
 	private static boolean isTemporaryDirectory(String path) {
 		Path candidate = FileLocations.pathOf(path);
 		Path temporary = FileLocations.pathOf(System.getProperty("java.io.tmpdir")); //$NON-NLS-1$
@@ -254,7 +235,7 @@ final class TargetPlatforms {
 			return null;
 		}
 		JsonArray urls = new JsonArray();
-		var matcher = Pattern.compile("<repository[^>]*location=\"([^\"]*)\"").matcher(xml); //$NON-NLS-1$
+		var matcher = REPOSITORY_LOCATION.matcher(xml);
 		while (matcher.find()) {
 			urls.add(matcher.group(1));
 		}

@@ -6,16 +6,8 @@ import java.util.function.IntSupplier;
 /**
  * How many MCP clients are talking to this IDE right now.
  * <p>
- * Several tools answer about "the most recent" run, build or operation when no
- * id is given, and those registries are global. With one client that default is
- * a convenience; with two it is a trap, because the most recent run may be
- * somebody else's and the answer looks exactly like a correct one. Tools consult
- * this to refuse the implicit default rather than guess.
- * <p>
- * Set by the server bundle, which is the only thing that sees the transport.
- * Core cannot depend on it, so the dependency is inverted through here, and
- * without a provider the answer is one, which keeps the defaults working
- * headless and in tests.
+ * Tools consult this to refuse the implicit "most recent" default when a second client could own it.
+ * The server bundle sets the provider; without one the answer is one, which keeps headless runs and tests working.
  */
 public final class ClientSessions {
 

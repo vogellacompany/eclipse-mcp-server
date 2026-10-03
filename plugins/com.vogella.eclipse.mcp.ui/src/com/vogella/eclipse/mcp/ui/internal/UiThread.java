@@ -108,9 +108,7 @@ public final class UiThread {
 	 */
 	public static void completeFrom(CompletableFuture<JsonObject> pending, Supplier<JsonObject> work) {
 		if (pending.isDone()) {
-			// the wait gave up and cancelled the future: an editor closed or a theme
-			// switched minutes after the answer said nothing happened is worse than
-			// the timeout
+			// the wait gave up and cancelled the future: running it minutes after the answer said nothing happened is worse than the timeout
 			return;
 		}
 		try {

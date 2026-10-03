@@ -17,7 +17,6 @@ import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.osgi.service.resolver.BundleDescription;
-import org.eclipse.osgi.service.resolver.ExportPackageDescription;
 import org.eclipse.osgi.service.resolver.ImportPackageSpecification;
 import org.eclipse.pde.core.plugin.IPluginModelBase;
 import org.eclipse.pde.core.plugin.PluginRegistry;
@@ -111,12 +110,8 @@ public final class EditManifestTool implements IMcpTool {
 			return McpToolResult.error("'%s' is not a plug-in project; it has no bundle manifest." //$NON-NLS-1$
 					.formatted(project.getName()));
 		}
-		// PDE's model carries name, version, friends and the api flag and nothing
-		// else, and apply() writes the WHOLE model back. Any attribute or directive it
-		// cannot represent is silently dropped from every other clause of the header,
-		// which on org.eclipse.ui.workbench meant losing the split-package attributes
-		// that make it resolve at all. Refusing is the only safe answer: this tool
-		// cannot edit a manifest it cannot faithfully rewrite
+		// apply() writes the whole PDE model back and drops any attribute or directive
+		// it cannot represent, so a manifest it cannot rewrite faithfully is refused
 		String unsupported = unsupported(project);
 		if (unsupported != null) {
 			return McpToolResult.error(unsupported);
@@ -149,10 +144,8 @@ public final class EditManifestTool implements IMcpTool {
 						.put("importedBy", array(importers))); //$NON-NLS-1$
 			}
 			if (!requiring.isEmpty()) {
-				// these see every exported package of this bundle without naming one,
-				// so they MIGHT use it. Reporting that as consumption refused almost
-				// every removal on a platform bundle, where dozens of bundles require
-				// it and none touches the package in question
+				// Require-Bundle dependents only MIGHT use the package; blocking on them
+				// refused almost every removal on a platform bundle
 				dependents.add(new JsonObject().put("package", exported) //$NON-NLS-1$
 						.put("requireBundleDependents", array(requiring)) //$NON-NLS-1$
 						.put("note", //$NON-NLS-1$
@@ -210,9 +203,7 @@ public final class EditManifestTool implements IMcpTool {
 					Boolean.TRUE.equals(entry.get("optional")))); //$NON-NLS-1$
 		}
 
-		// the change, not the whole manifest: dumping every header of a platform
-		// bundle was seventy kilobytes of JSON to describe one added line, and it
-		// buried the one entry the caller asked about
+		// the change only: a whole platform manifest is tens of kilobytes of JSON
 		JsonObject changes = new JsonObject()
 				.put("exportPackage", //$NON-NLS-1$
 						difference(exportsBefore, exports, IPackageExportDescription::getName,

@@ -10,20 +10,8 @@ import java.nio.file.Path;
 /**
  * Turns the {@code file:} URLs the framework hands out into filesystem paths.
  * <p>
- * Every {@code Location} in Equinox answers with a {@code URL}, and the obvious
- * ways of getting a path back out of one are both wrong off Linux.
- * {@code url.getPath()} on Windows yields {@code /C:/eclipse}, which
- * {@link Path#of(String, String...)} rejects outright, and it leaves {@code %20}
- * in place wherever the URL was encoded, so an installation under
- * {@code Program Files} misses on any window system. Going through
- * {@link Path#of(URI)} is the only form that decodes the escapes and knows about
- * drive letters and UNC shares.
- * <p>
- * That alone is not enough either: Equinox does not always encode what it puts
- * in a Location URL, so a path with a space in it is not a valid URI and
- * {@link URI#create(String)} throws. The raw form is therefore decoded by hand
- * as the fallback, which is what keeps this from failing on exactly the
- * installations it is meant to describe.
+ * Goes through {@link Path#of(URI)} for drive letters, UNC shares and escapes, and decodes by hand when Equinox
+ * left a space unencoded and the URI is invalid.
  */
 public final class FileLocations {
 

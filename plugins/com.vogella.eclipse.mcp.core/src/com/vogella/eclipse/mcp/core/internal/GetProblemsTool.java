@@ -130,6 +130,7 @@ public final class GetProblemsTool implements IMcpTool {
 
 		List<String> types = stringList(arguments, "types"); //$NON-NLS-1$
 		List<String> excludeTypes = stringList(arguments, "excludeTypes"); //$NON-NLS-1$
+		String lowerFilter = messageFilter == null ? null : messageFilter.toLowerCase(Locale.ROOT);
 		List<Problem> problems = new ArrayList<>();
 		for (IMarker marker : markers) {
 			if (monitor.isCanceled()) {
@@ -139,8 +140,8 @@ public final class GetProblemsTool implements IMcpTool {
 				continue;
 			}
 			Problem problem = toProblem(marker, severity, projectName, pathPrefix);
-			if (problem != null && (messageFilter == null || problem.message()
-					.toLowerCase(Locale.ROOT).contains(messageFilter.toLowerCase(Locale.ROOT)))) {
+			if (problem != null && (lowerFilter == null || problem.message()
+					.toLowerCase(Locale.ROOT).contains(lowerFilter))) {
 				problems.add(problem);
 			}
 		}

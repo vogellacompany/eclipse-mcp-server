@@ -119,19 +119,10 @@ public final class GetInstallationTool implements IMcpTool {
 	/**
 	 * What the framework actually started, compared against what the profile says.
 	 * <p>
-	 * Everything above this comes out of the p2 profile, which is what p2 BELIEVES
-	 * is installed. That is the same question as what is running only while nothing
-	 * has gone sideways, and when it has, the profile is the more confident of the
-	 * two and the wrong one: it was reported as a landed update while the IDE went
-	 * on running the previous build. A surrogate profile pointing at a deleted
-	 * shared install did exactly that here for a day. A hot
-	 * {@code eclipse_install_bundle}, a dropin and a bundle the reconciler refused
-	 * all produce the same divergence for other reasons.
-	 * <p>
-	 * The live {@code BundleContext} cannot be wrong about this, so it is what
-	 * decides. Bundles p2 does not know are skipped rather than reported as
-	 * mismatches, since a dropin or a hot install is legitimately outside the
-	 * profile and saying so for hundreds of them would bury the real ones.
+	 * The p2 profile is what p2 BELIEVES is installed, and it can diverge from what runs (a
+	 * surrogate profile, a hot {@code eclipse_install_bundle}, a dropin, a refused bundle),
+	 * so the live {@code BundleContext} decides. Bundles p2 does not know are skipped,
+	 * since a dropin or hot install is legitimately outside the profile.
 	 */
 	private static JsonObject runtimeCheck(IProfile profile, IProgressMonitor monitor, int maxResults) {
 		Bundle self = org.osgi.framework.FrameworkUtil.getBundle(GetInstallationTool.class);
@@ -141,11 +132,8 @@ public final class GetInstallationTool implements IMcpTool {
 					.put("note", //$NON-NLS-1$
 							"The running bundles could not be read, so everything above is the p2 profile's view alone and nothing here confirms the IDE is running it."); //$NON-NLS-1$
 		}
-		// EVERY version, not the first one found. An installation legitimately carries
-		// several versions of a bundle, junit-jupiter-api 5 and 6 side by side here,
-		// and the framework resolves one of them. Keeping a single version per id
-		// reported each of those as a mismatch, which is nine false alarms out of
-		// twelve on this machine and exactly the noise that makes a check unusable.
+		// EVERY version: an installation legitimately carries several versions of a bundle
+		// (junit-jupiter-api 5 and 6), and one version per id reports false mismatches
 		Map<String, java.util.Set<String>> inProfile = new java.util.HashMap<>();
 		for (IInstallableUnit unit : profile.query(QueryUtil.createIUAnyQuery(), monitor)) {
 			// a bundle IU carries the symbolic name as its id, so this is the join
@@ -166,9 +154,7 @@ public final class GetInstallationTool implements IMcpTool {
 			if (expected == null) {
 				continue;
 			}
-			// installed is not running: of two copies of a singleton only the higher
-			// version resolves, and a leftover substitution's older copy was reported
-			// here as the one running while the framework never loaded it
+			// installed is not running: of two copies of a singleton only the higher version resolves
 			if ((bundle.getState() & (Bundle.INSTALLED | Bundle.UNINSTALLED)) != 0) {
 				unresolved++;
 				if (notResolved.size() < maxResults) {
