@@ -63,6 +63,14 @@ com.vogella.eclipse.mcp.server/enabled=true
 com.vogella.eclipse.mcp.server/port=8642
 ```
 
+The product only reads `plugin_customization.ini` when it points at it, with the `preferenceCustomization` product property or `-pluginCustomization <file>` on the command line.
+
+The server bundle's built manifest requires the `osgi.component` extender, so without `org.apache.felix.scr` in the product it does not resolve.
+A product materialized by Tycho does not start bundles on its own, so start `org.apache.felix.scr` (`org.apache.felix.scr@2:start` in `config.ini`) for the server, and `org.eclipse.core.runtime@start` and `org.eclipse.equinox.common@2:start` for the application itself, in the `.product` configuration or as `osgi.bundles` entries; an application whose runtime bundles are not started fails with "Unable to acquire application service".
+
+The ui bundle is optional: `core` plus `server` run the server without any UI tools.
+Adding `com.vogella.eclipse.mcp.ui` pulls in the workbench, SWT, JFace, compare and debug UI bundles listed in its `META-INF/MANIFEST.MF`, so leave it out unless you want the editor, view, compare and screenshot tools.
+
 ## Connecting a client
 
 The server writes a discovery file:
