@@ -240,7 +240,7 @@ public final class SelectionTools {
 				ISelectionProvider provider = part.getSite().getSelectionProvider();
 				if (provider == null) {
 					throw new IllegalArgumentException(
-							"The part '%s' has no selection provider, so nothing can be selected in it." //$NON-NLS-1$
+							"The part '%s' has no selection provider, so nothing can be selected in it. A Tree or Table row of a custom view is selected with eclipse_press_widget and a row path from eclipse_get_widget_tree with includeRows." //$NON-NLS-1$
 									.formatted(part.getSite().getId()));
 				}
 				JsonObject before = describeSelection("beforeSetting", provider.getSelection()); //$NON-NLS-1$
