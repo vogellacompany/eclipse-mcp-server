@@ -156,7 +156,7 @@ Tools marked ✎ change something; the rest are read-only.
 | ✎ `eclipse_rename` | Rename through the JDT refactoring |
 | ✎ `eclipse_clean_up`, `eclipse_remove_unused_imports`, `eclipse_organize_imports`, `eclipse_format` | JDT clean-ups, import handling and formatting |
 | ✎ `eclipse_set_java_version` | Set a project's compiler level and JDK |
-| ✎ `eclipse_run_tests`, `eclipse_get_test_results` | Run JUnit tests and read the results |
+| ✎ `eclipse_run_tests`, `eclipse_get_test_results` | Run JUnit tests with optional VM arguments and read the results |
 | ✎ `eclipse_hot_code_replace` | Redefine classes in the running IDE |
 
 **Plug-in development**

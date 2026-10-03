@@ -97,6 +97,7 @@ public final class RunTestsTool implements IMcpTool {
 				    "workspacePlugins": {"type":"string","enum":["required","all"],"default":"required","description":"Which workspace plug-ins the launched platform gets. required is the test bundle and what it needs; all adds every plug-in in the workspace, which is the PDE launch tab's own default and which breaks a UI test launch in a workspace holding unbuilt copies of platform bundles."},
 				    "ui":             {"type":"boolean","default":false,"description":"Use the UI test application, which opens a workbench window on the user's screen. Off by default: a launched IDE should never be a surprise. A UI launch depends on generated artefacts being current in a way the headless one does not: the OSGI-INF declarative services descriptors carry the wiring between components, they are build output rather than committed source, and no compilation error flags a mismatch. A run that comes back with zero tests is usually that, so read descriptorGeneration and buildBeforeLaunch in the answer before suspecting the test bundle."},
 				    "debug":          {"type":"boolean","default":false,"description":"Launch in debug mode instead of plain run. The session appears in eclipse_debug_status and its state at a failure is readable through eclipse_debug_get_frames and eclipse_debug_evaluate."},
+				    "vmArguments":    {"type":"string","description":"VM arguments for the test JVM, as in a launch configuration's Arguments tab."},
 				    "runtimeWorkspace": {"type":"string","description":"Workspace directory for the launched platform. Defaults to a sibling junit-workspace, and it is cleared on every run."},
 				    "maxResults":     {"type":"integer","default":50,"minimum":1,"maximum":2000,"description":"Reported cases. A suite of several hundred truncates; omitted says how many were dropped and eclipse_get_test_results returns the rest."},
 				    "flightRecording":{"type":"string","enum":["off","default","profile"],"default":"off","description":"Record the test JVM with Java Flight Recorder. 'profile' includes allocation and execution samples at a few percent overhead, 'default' covers GC and threads at about one percent. The file is written when the test JVM EXITS and is read with eclipse_stop_flight_recording by passing its path as 'file'. This is what answers why a suite is slow or where its memory goes: the IDE's own recording tools record the IDE's process, not the one the tests run in."},
@@ -137,9 +138,10 @@ public final class RunTestsTool implements IMcpTool {
 					return McpToolResult.error("No type '%s' in project '%s'.".formatted(testClass, projectName)); //$NON-NLS-1$
 				}
 			}
+			String vmArguments = args.getString("vmArguments"); //$NON-NLS-1$
 			if (args.getBoolean("dryRun", false)) { //$NON-NLS-1$
 				return McpToolResult.of(dryRun(javaProject, type, monitor, args.getInt("maxResults", 50, 1, 2000), //$NON-NLS-1$
-						launchedAs(project, args)).toString());
+						launchedAs(project, args), vmArguments).toString());
 			}
 
 			TestRunRegistry.Run active = TestRunRegistry.getInstance().findRunning();
@@ -196,6 +198,9 @@ public final class RunTestsTool implements IMcpTool {
 					}
 				}
 				Path recordingFile = null;
+				if (vmArguments != null && !vmArguments.isBlank()) {
+					configuration.setAttribute(IJavaLaunchConfigurationConstants.ATTR_VM_ARGUMENTS, vmArguments);
+				}
 				String recording = args.getString("flightRecording", "off"); //$NON-NLS-1$ //$NON-NLS-2$
 				if (LaunchRecording.wanted(recording)) {
 					recordingFile = LaunchRecording.fileFor(run.launchName());
@@ -613,11 +618,14 @@ public final class RunTestsTool implements IMcpTool {
 	}
 
 	private static JsonObject dryRun(IJavaProject javaProject, IType type, IProgressMonitor monitor, int maxResults,
-			String launchedAs) throws CoreException {
+			String launchedAs, String vmArguments) throws CoreException {
 		List<String> names = new ArrayList<>();
 		JsonObject result = new JsonObject().put("dryRun", Boolean.TRUE) //$NON-NLS-1$
 				.put("testKind", testKind(type == null ? javaProject : type)) //$NON-NLS-1$
 				.put("launchedAs", launchedAs); //$NON-NLS-1$
+		if (vmArguments != null && !vmArguments.isBlank()) {
+			result.put("vmArguments", vmArguments); //$NON-NLS-1$
+		}
 		try {
 			for (IType candidate : JUnitCore.findTestTypes(type == null ? javaProject : type, monitor)) {
 				names.add(candidate.getFullyQualifiedName());

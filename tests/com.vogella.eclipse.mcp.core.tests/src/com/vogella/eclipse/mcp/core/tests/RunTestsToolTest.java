@@ -77,6 +77,30 @@ class RunTestsToolTest {
 		return project;
 	}
 
+	private IJavaProject withVmArgumentTest() throws Exception {
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		IClasspathEntry[] existing = project.getRawClasspath();
+		IClasspathEntry[] withJUnit = new IClasspathEntry[existing.length + 1];
+		System.arraycopy(existing, 0, withJUnit, 0, existing.length);
+		withJUnit[existing.length] = JavaCore.newContainerEntry(
+				IPath.fromOSString("org.eclipse.jdt.junit.JUNIT_CONTAINER/5"));
+		project.setRawClasspath(withJUnit, null);
+
+		TestFixture.addType(project, "sample", "VmArgumentTest", """
+				package sample;
+				import org.junit.jupiter.api.Test;
+				import static org.junit.jupiter.api.Assertions.assertEquals;
+				public class VmArgumentTest {
+					@Test
+					public void receivesTheVmArgument() {
+						assertEquals("ordinary", System.getProperty("example.test.scenario"));
+					}
+				}
+				""");
+		TestFixture.build(project.getProject());
+		return project;
+	}
+
 	/**
 	 * A project whose Jupiter API is version 6, which JDT launches through its own
 	 * runner. The jar is built here because the test IDE resolves JUnit 5 only;
@@ -167,6 +191,40 @@ class RunTestsToolTest {
 				"sample.SampleTest", "testMethod", "passes", "timeoutSeconds", Integer.valueOf(120)));
 		assertEquals("done", result.get("state"), "the run did not finish: " + result);
 		assertEquals(Integer.valueOf(1), result.get("total"), "only the named method should run: " + result);
+		assertEquals(Integer.valueOf(1), result.get("passed"), result.toString());
+	}
+
+	@Test
+	void aDryRunReportsTheSuppliedVmArguments() throws Exception {
+		withTests();
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL,
+				Map.of("project", PROJECT, "dryRun", Boolean.TRUE, "pluginTest", "false",
+						"vmArguments", "-Dexample.test.scenario=dry-run"));
+
+		assertEquals("-Dexample.test.scenario=dry-run", result.get("vmArguments"));
+	}
+
+	@Test
+	void aBlankVmArgumentsDryRunDoesNotAddLaunchArguments() throws Exception {
+		withTests();
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL,
+				Map.of("project", PROJECT, "dryRun", Boolean.TRUE, "pluginTest", "false", "vmArguments", "  "));
+
+		assertNull(result.get("vmArguments"), result.toString());
+	}
+
+	@Test
+	void anOrdinaryJUnitLaunchPassesVmArgumentsToTheTestJvm() throws Exception {
+		withVmArgumentTest();
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL,
+				Map.of("project", PROJECT, "testClass", "sample.VmArgumentTest", "pluginTest", "false",
+						"vmArguments", "-Dexample.test.scenario=ordinary", "timeoutSeconds", Integer.valueOf(120)));
+
+		assertEquals("done", result.get("state"), "the run did not finish: " + result);
+		assertEquals(Integer.valueOf(1), result.get("total"), result.toString());
 		assertEquals(Integer.valueOf(1), result.get("passed"), result.toString());
 	}
 
