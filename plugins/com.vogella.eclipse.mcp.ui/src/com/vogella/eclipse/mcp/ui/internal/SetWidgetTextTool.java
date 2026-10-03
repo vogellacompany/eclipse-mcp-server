@@ -10,6 +10,7 @@ import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.Text;
@@ -185,20 +186,25 @@ public final class SetWidgetTextTool implements IMcpTool {
 
 	/** Types each character: KeyDown, an insert through the widget, KeyUp. Answers how many KeyDown listeners vetoed. */
 	private static int typeEach(Control control, Request request) {
-		if (request.replace()) {
+		return typeText(control, request.text(), request.replace());
+	}
+
+	/** Types the text as keystrokes; answers how many KeyDown listeners vetoed a character. */
+	public static int typeText(Control control, String text, boolean replace) {
+		if (replace) {
 			selectAll(control);
-			if (request.text().isEmpty()) {
-				insert(control, ""); //$NON-NLS-1$
+			if (text.isEmpty()) {
+				insertKeyed(control, "", SWT.BS); //$NON-NLS-1$
 				return 0;
 			}
 		}
 		int vetoed = 0;
-		String text = request.text();
 		for (int i = 0; i < text.length() && !control.isDisposed();) {
 			int codePoint = text.codePointAt(i);
 			String unit = new String(Character.toChars(codePoint));
 			i += unit.length();
-			char character = unit.charAt(0);
+			// a supplementary character has no single char, a real keystroke delivers it as character 0 too
+			char character = unit.length() == 1 ? unit.charAt(0) : 0;
 			Event down = keyEvent(character);
 			control.notifyListeners(SWT.KeyDown, down);
 			if (control.isDisposed()) {
@@ -207,7 +213,7 @@ public final class SetWidgetTextTool implements IMcpTool {
 			if (control instanceof StyledText) {
 				// StyledText types from its own KeyDown listener, VerifyKey and Verify included
 			} else if (down.doit) {
-				insert(control, unit);
+				insertKeyed(control, unit, character);
 			} else {
 				vetoed++;
 			}
@@ -243,6 +249,31 @@ public final class SetWidgetTextTool implements IMcpTool {
 		case Combo combo -> combo.setSelection(new Point(0, combo.getText().length()));
 		case CCombo combo -> combo.setSelection(new Point(0, combo.getText().length()));
 		default -> throw new IllegalStateException();
+		}
+	}
+
+	/**
+	 * Inserts like {@link #insert}, stamping the Verify event with the key a real keystroke carries, because
+	 * the widget raises it with character 0 and key-inspecting listeners (numeric or validating fields) veto those.
+	 */
+	private static void insertKeyed(Control control, String value, char character) {
+		Display display = control.getDisplay();
+		Listener stamp = event -> {
+			if (event.widget == control && event.character == 0) {
+				Event key = keyEvent(character);
+				event.character = key.character;
+				event.keyCode = key.keyCode;
+				event.stateMask = key.stateMask;
+			}
+		};
+		display.addFilter(SWT.Verify, stamp);
+		try {
+			insert(control, value);
+		} finally {
+			// a listener may have closed the dialog and its display with it
+			if (!display.isDisposed()) {
+				display.removeFilter(SWT.Verify, stamp);
+			}
 		}
 	}
 
