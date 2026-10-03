@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+   <extension point="com.vogella.eclipse.mcp.core.tools">
+      <tool class="com.vogella.eclipse.mcp.ide.internal.OpenInEditorTool"/>
+      <tool class="com.vogella.eclipse.mcp.ide.internal.CompareTool"/>
+      <tool class="com.vogella.eclipse.mcp.ide.internal.LaunchShortcutTool"/>
+      <tool class="com.vogella.eclipse.mcp.ide.internal.ImportProjectTool"/>
+   </extension>
+
+</plugin>

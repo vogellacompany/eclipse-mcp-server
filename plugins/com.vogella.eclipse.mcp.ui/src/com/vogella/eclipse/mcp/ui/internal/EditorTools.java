@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.core.resources.IFile;
+import org.eclipse.core.runtime.Adapters;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.ui.IEditorPart;
@@ -192,8 +194,9 @@ public final class EditorTools {
 	/** The workspace path the editor shows, or {@code null} for anything not file backed. */
 	static String path(IEditorReference reference) {
 		try {
-			if (reference.getEditorInput() instanceof org.eclipse.ui.IFileEditorInput input) {
-				return input.getFile().getFullPath().toString();
+			IFile file = Adapters.adapt(reference.getEditorInput(), IFile.class);
+			if (file != null) {
+				return file.getFullPath().toString();
 			}
 		} catch (PartInitException e) {
 			// an editor whose input cannot be restored still has a title

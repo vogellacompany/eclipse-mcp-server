@@ -1,4 +1,4 @@
-package com.vogella.eclipse.mcp.ui.internal;
+package com.vogella.eclipse.mcp.ide.internal;
 
 import java.util.Map;
 
@@ -22,6 +22,8 @@ import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
+import com.vogella.eclipse.mcp.ui.internal.UiThread;
+import com.vogella.eclipse.mcp.ui.internal.Workbenches;
 
 /**
  * Opens a file in the IDE and puts the cursor on a line.

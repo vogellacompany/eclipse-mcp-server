@@ -1,11 +1,14 @@
 package com.vogella.eclipse.mcp.core.tests;
 
 import static com.vogella.eclipse.mcp.core.tests.TestFixture.assertRefused;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -13,13 +16,19 @@ import org.eclipse.compare.ISharedDocumentAdapter;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.SWTError;
+import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Shell;
+import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.IFileEditorInput;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
-import com.vogella.eclipse.mcp.ui.internal.CompareTool;
+import com.vogella.eclipse.mcp.ide.internal.CompareTool;
+import com.vogella.eclipse.mcp.ui.internal.SetWidgetTextTool;
 
 /**
  * The UI tools, as far as they can be reached without a workbench.
@@ -196,6 +205,40 @@ class UiToolsTest {
 	void settingWidgetTextRefusesWithoutAWorkbench() throws Exception {
 		assertRefused(TestFixture.call("eclipse_set_widget_text", Map.of("path", "0/0/1", "text", "44")),
 				"no running workbench");
+	}
+
+	@Test
+	void typedCharactersReachVerifyListenersWithTheirKey() throws Exception {
+		Display display;
+		try {
+			display = new Display();
+		} catch (SWTError | UnsatisfiedLinkError e) {
+			assumeTrue(false, "no display: " + e.getMessage());
+			return;
+		}
+		try {
+			Shell shell = new Shell(display);
+			Text text = new Text(shell, SWT.SINGLE);
+			text.setText("0");
+			// like Riena's numeric ridget: only a verify event that carries a digit or a delete key passes
+			text.addVerifyListener(e -> e.doit = Character.isDigit(e.character) || e.character == '\b'
+					|| e.keyCode == SWT.BS);
+			SetWidgetTextTool.typeText(text, "42", true);
+			assertEquals("42", text.getText());
+			SetWidgetTextTool.typeText(text, "", true);
+			assertEquals("", text.getText());
+			List<Integer> characters = new ArrayList<>();
+			text.addVerifyListener(e -> {
+				characters.add(Integer.valueOf(e.character));
+				e.doit = true;
+			});
+			SetWidgetTextTool.typeText(text, "\uD83D\uDE00", true);
+			assertEquals("\uD83D\uDE00", text.getText());
+			assertEquals(Integer.valueOf(0), characters.get(characters.size() - 1));
+			shell.dispose();
+		} finally {
+			display.dispose();
+		}
 	}
 
 	@Test

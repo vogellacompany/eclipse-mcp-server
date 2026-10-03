@@ -1,4 +1,4 @@
-package com.vogella.eclipse.mcp.ui.internal;
+package com.vogella.eclipse.mcp.ide.internal;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -36,6 +36,7 @@ import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
 import com.vogella.eclipse.mcp.core.WorkspaceSync;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
+import com.vogella.eclipse.mcp.ui.internal.UiThread;
 
 /**
  * Opens Eclipse's compare editor on a workspace file, or the file's own editor with
