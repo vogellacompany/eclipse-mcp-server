@@ -55,13 +55,21 @@ If the port is taken, the server stays down and the page says why; it never move
 
 The server starts through a declarative service, so an RCP application needs `org.apache.felix.scr` and a workspace, but no `org.eclipse.ui.startup`.
 Install `com.vogella.eclipse.mcp.core`, `com.vogella.eclipse.mcp.basic`, `com.vogella.eclipse.mcp.server` and the third party bundles the feature lists; specialized provider bundles are optional and each adds its own tools.
-`com.vogella.eclipse.mcp.ui` also resolves in a pure E4 application, which then gets the widget, screenshot, keyboard, dialog and settle tools, with parts named by their model element id; the tools built on editors, views, perspectives and workbench commands need the 3.x workbench and say so.
+`com.vogella.eclipse.mcp.ui` also resolves in a pure E4 application that ships the `org.eclipse.ui` bundles it requires, which then gets the widget, screenshot, keyboard, dialog and settle tools, with parts named by their model element id; the tools built on editors, views, perspectives and workbench commands need the 3.x workbench and say so.
 Without the ui bundle there is no preference page, so enable the server in `plugin_customization.ini`:
 
 ```
 com.vogella.eclipse.mcp.server/enabled=true
 com.vogella.eclipse.mcp.server/port=8642
 ```
+
+The product only reads `plugin_customization.ini` when it points at it, with the `preferenceCustomization` product property or `-pluginCustomization <file>` on the command line.
+
+The server bundle's built manifest requires the `osgi.component` extender, so without `org.apache.felix.scr` in the product it does not resolve.
+A product materialized by Tycho does not start bundles on its own, so start `org.apache.felix.scr` (`org.apache.felix.scr@2:start` in `config.ini`) for the server, and `org.eclipse.core.runtime@start` and `org.eclipse.equinox.common@2:start` for the application itself, in the `.product` configuration or as `osgi.bundles` entries; an application whose runtime bundles are not started fails with "Unable to acquire application service".
+
+The ui bundle is optional: `core`, `basic` and `server` run the server with the workspace, file, build and log tools but no UI tools.
+Adding `com.vogella.eclipse.mcp.ui` requires the 3.x workbench and the other bundles listed in its `META-INF/MANIFEST.MF`, so leave it out unless you want the screenshot, widget and keyboard tools, or in an IDE the editor, view and compare tools.
 
 ## Connecting a client
 
