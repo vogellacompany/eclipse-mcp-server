@@ -1,0 +1,24 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Eclipse MCP IDE Tools
+Bundle-SymbolicName: com.vogella.eclipse.mcp.ide;singleton:=true
+Bundle-Version: 1.0.0.qualifier
+Bundle-Vendor: vogella GmbH
+Bundle-RequiredExecutionEnvironment: JavaSE-25
+Automatic-Module-Name: com.vogella.eclipse.mcp.ide
+Export-Package: com.vogella.eclipse.mcp.ide.internal;x-friends:="com.vogella.eclipse.mcp.core.tests"
+Require-Bundle: org.eclipse.core.runtime;bundle-version="3.31.0",
+ org.eclipse.core.resources;bundle-version="3.20.0",
+ org.eclipse.core.filesystem;bundle-version="1.10.0",
+ org.eclipse.swt;bundle-version="3.128.0",
+ org.eclipse.jface;bundle-version="3.35.0",
+ org.eclipse.jface.text;bundle-version="3.26.0",
+ org.eclipse.ui;bundle-version="3.205.0",
+ org.eclipse.ui.ide;bundle-version="3.22.0",
+ org.eclipse.ui.workbench.texteditor;bundle-version="3.17.0",
+ org.eclipse.compare;bundle-version="3.12.0",
+ org.eclipse.debug.core;bundle-version="3.22.0",
+ org.eclipse.debug.ui;bundle-version="3.18.0",
+ org.eclipse.jgit;bundle-version="[7.0.0,8.0.0)";resolution:=optional,
+ com.vogella.eclipse.mcp.core;bundle-version="1.0.0",
+ com.vogella.eclipse.mcp.ui;bundle-version="1.0.0"

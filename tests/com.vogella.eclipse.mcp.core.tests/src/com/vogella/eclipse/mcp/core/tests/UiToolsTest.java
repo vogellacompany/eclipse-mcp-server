@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test;
 
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
-import com.vogella.eclipse.mcp.ui.internal.CompareTool;
+import com.vogella.eclipse.mcp.ide.internal.CompareTool;
 import com.vogella.eclipse.mcp.ui.internal.SetWidgetTextTool;
 
 /**

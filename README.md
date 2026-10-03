@@ -69,7 +69,8 @@ The server bundle's built manifest requires the `osgi.component` extender, so wi
 A product materialized by Tycho does not start bundles on its own, so start `org.apache.felix.scr` (`org.apache.felix.scr@2:start` in `config.ini`) for the server, and `org.eclipse.core.runtime@start` and `org.eclipse.equinox.common@2:start` for the application itself, in the `.product` configuration or as `osgi.bundles` entries; an application whose runtime bundles are not started fails with "Unable to acquire application service".
 
 The ui bundle is optional: `core` plus `server` run the server without any UI tools.
-Adding `com.vogella.eclipse.mcp.ui` pulls in the workbench, SWT, JFace, compare and debug UI bundles listed in its `META-INF/MANIFEST.MF`, so leave it out unless you want the editor, view, compare and screenshot tools.
+Adding `com.vogella.eclipse.mcp.ui` pulls in the workbench, SWT and JFace bundles listed in its `META-INF/MANIFEST.MF`, but not `org.eclipse.ui.ide`, `org.eclipse.compare` or `org.eclipse.debug.ui`, so it adds no p2, navigator or Debug perspective to a product.
+`com.vogella.eclipse.mcp.ide` holds the IDE-only tools, `eclipse_open`, `eclipse_open_compare`, `eclipse_run_launch_shortcut` and `eclipse_import_project`; leave it out of an RCP product.
 
 ## Connecting a client
 
@@ -251,6 +252,7 @@ See `AGENTS.md` for the full set of rules.
 | `com.vogella.eclipse.mcp.debug` | Breakpoint and debug session tools |
 | `com.vogella.eclipse.mcp.pde` | Plug-in development tools |
 | `com.vogella.eclipse.mcp.git` | EGit tools |
+| `com.vogella.eclipse.mcp.ide` | IDE-only tools: open in editor, compare, launch shortcuts, project import |
 | `com.vogella.eclipse.mcp.p2` | Provisioning tools |
 
 ## Commercial support

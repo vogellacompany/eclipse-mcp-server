@@ -20,7 +20,6 @@
       <tool class="com.vogella.eclipse.mcp.ui.internal.ThemeTools$SetTheme"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ThemeTools$RegisterTheme"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ThemeDefinitionTool"/>
-      <tool class="com.vogella.eclipse.mcp.ui.internal.OpenInEditorTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.SamplingTools$Start"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.SamplingTools$Stop"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ShowTraceTool"/>
@@ -47,8 +46,6 @@
       <tool class="com.vogella.eclipse.mcp.ui.internal.PerspectiveTools$Switch"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.PerspectiveTools$Reset"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.MovePartTool"/>
-      <tool class="com.vogella.eclipse.mcp.ui.internal.CompareTool"/>
-      <tool class="com.vogella.eclipse.mcp.ui.internal.LaunchShortcutTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.VisibilityTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ModelVisibilityTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.EditorTools$ListEditors"/>
@@ -56,7 +53,6 @@
       <tool class="com.vogella.eclipse.mcp.ui.internal.CommandTools$ListCommands"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.CommandTools$Run"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.WindowTools"/>
-      <tool class="com.vogella.eclipse.mcp.ui.internal.ImportProjectTool"/>
    </extension>
 
    <extension point="org.eclipse.ui.preferencePages">
