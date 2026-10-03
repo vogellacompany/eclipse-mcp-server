@@ -30,8 +30,8 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
  * Everything that talks to the e4 CSS engine.
  * <p>
  * The engine bundles are optional, so every reference to them lives in this one
- * class and callers catch {@link LinkageError}, the way {@code GitContent}
- * isolates jgit. The theme engine itself is reached reflectively: the two
+ * class and callers catch {@link LinkageError}, the way {@code GitContent} in
+ * the ide bundle isolates jgit. The theme engine itself is reached reflectively: the two
  * methods a snippet needs, {@code resetCurrentTheme} and {@code getCSSEngines},
  * are on the internal implementation and not on {@code IThemeEngine}, which is
  * the same gap PDE's CSS scratch pad works around with a cast.

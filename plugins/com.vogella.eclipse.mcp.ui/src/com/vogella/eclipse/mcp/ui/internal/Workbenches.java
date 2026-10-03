@@ -63,7 +63,7 @@ public final class Workbenches {
 	}
 
 	/** Why nothing ran: no workbench at all, or only one that is not the IDE's. */
-	static String noIde() {
+	public static String noIde() {
 		return running() ? NEEDS_IDE : UiThread.NO_WORKBENCH;
 	}
 
