@@ -350,7 +350,7 @@ public final class InstallBundleTool implements IMcpTool {
 			try {
 				self.start(Bundle.START_TRANSIENT);
 			} catch (BundleException e) {
-				ILog.get().warn("The core bundle could not be started for eclipse_install_bundle: %s" //$NON-NLS-1$
+				ILog.get().warn("The bundle containing eclipse_install_bundle could not be started: %s" //$NON-NLS-1$
 						.formatted(rootMessage(e)));
 			}
 		}

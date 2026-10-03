@@ -22,7 +22,8 @@ The first run downloads the Eclipse SDK; later runs reuse `~/.m2/repository/.cac
 ## Layout
 
 ```
-plugins/com.vogella.eclipse.mcp.core     tool API, registry, extension point, workspace tools
+plugins/com.vogella.eclipse.mcp.core     provider-independent tool API, registry, extension point, shared infrastructure
+plugins/com.vogella.eclipse.mcp.basic    general-purpose workspace, file, build, preference, log, command and related tools
 plugins/com.vogella.eclipse.mcp.server   MCP protocol, embedded Jetty, bearer token, startup component
 plugins/com.vogella.eclipse.mcp.jdt      Java model tools, declaration sweep and registry index
 plugins/com.vogella.eclipse.mcp.ui       editor, view, perspective and layout tools, compare, screenshots, preference page, startup hook
@@ -58,8 +59,9 @@ A workaround for an Eclipse bug is recorded in `docs/platform-bugs.md` with what
 
 **`com.vogella.eclipse.mcp.core` stays clean.**
 No reference to the MCP SDK, Jetty or any UI bundle, because it is a candidate for contribution to the Eclipse Platform; that is also why it has its own JSON reader and writer in `com.vogella.eclipse.mcp.core.json`.
-When a core tool needs the UI, core declares a hook and `McpUiPlugin.start` registers the implementation, as `LogClearedHandlers` and `UiDispatch` do.
+When a tool outside the UI bundle needs UI integration, core declares a hook and `McpUiPlugin.start` registers the implementation, as `LogClearedHandlers` and `UiDispatch` do.
 A failing handler never turns a completed operation into a failed call.
+Core remains provider-independent and must not depend on basic.
 
 **The server starts through a declarative service, not `org.eclipse.ui.startup`.**
 `McpServerComponent` is an immediate DS component that publishes `McpServerService`, so an RCP application runs the same path as the IDE.
@@ -79,13 +81,13 @@ No tool opens a dialog.
 Tool calls arrive on Jetty worker threads; never call `Display.syncExec` from one.
 Queue UI work through `UiThread.exec`, which runs inline when already on the UI thread; `eclipse_run_script` with `atomic` runs a batch inside one Display runnable and would deadlock otherwise.
 A UI request whose wait gave up is withdrawn (`completeFrom` skips cancelled futures), except `UiThread.timed`, which `eclipse_run_workbench_command` uses to keep running and log the outcome.
-A preference write fires its listeners on the writing thread, and editors touch widgets in them, so any core tool writing something UI listeners react to goes through `UiDispatch`.
+A preference write fires its listeners on the writing thread, and editors touch widgets in them, so the basic preference tool goes through `UiDispatch` for writes that UI listeners react to.
 Marker reads and JDT searches are safe off the UI thread and need no workspace lock.
 
 **The call timeout.**
 The server aborts a call after `McpPreferences.getCallTimeout()`, 30 seconds by default, read per call by `McpToolAdapter`.
 A tool that can outlast it starts a job and returns a handle (`eclipse_build` and `eclipse_get_build_status`); any bounded wait goes through `CallBudget` and answers with the handle plus a `waitNote`.
-`eclipse_build` defaults `timeoutSeconds` to 25; core cannot read the server preference, so the two are kept in step by hand.
+`eclipse_build` defaults `timeoutSeconds` to 25; the basic provider cannot read the server preference, so the two are kept in step by hand.
 On timeout the adapter cancels the monitor first, and `abandon` records calls that keep running and reports them to the next caller, because they hold locks that look like a slow IDE.
 
 **Dialogs.**
@@ -118,7 +120,7 @@ The build, test run, sampling and provisioning registries are per IDE, so those 
 
 - `com.vogella.eclipse.mcp.core.tests` requires the ui bundle and runs headless: nothing there may call a ui tool that needs a workbench, and never `eclipse_restart` or `eclipse_exit` (the latter ends the test JVM). `ShutdownGuardsTest` checks them by declaration.
 - No test may run `eclipse_update` or `eclipse_install`. `ProvisioningGuardsTest` asserts their registration, that `eclipse_update` defaults to a dry run and has `acknowledgeSelfUpdate`, and that the descriptions announce what they do. `eclipse_install` has no dry run.
-- `callsEveryRegisteredTool` in the server tests only sees core, server and jdt tools; a green run is not protocol coverage of the other bundles.
+- `callsEveryRegisteredTool` in the server tests only sees basic, server and jdt tools; a green run is not protocol coverage of the other bundles.
 - Tests never write the real token: the surefire `argLine` sets `-Dcom.vogella.eclipse.mcp.tokenDirectory` to `target/`, and a test fails if that redirect is lost.
 - JUnit comes from the Eclipse SDK (bundle `junit-jupiter-api` 6.x); do not add a Maven location for it.
 - Generated output that carries semantics, `OSGI-INF` descriptors above all, can diverge from source silently, which is why `eclipse_run_tests` always reports `descriptorGeneration` and `buildBeforeLaunch`. A never-read `@Reference` field can be an ordering guarantee, not dead code.
@@ -146,7 +148,7 @@ Do not undo these without understanding why they are there.
 - The MCP SDK gets an explicit `jsonMapper` and `jsonSchemaValidator`; `ServiceLoader` discovery across bundles is fragile.
 - Profiles leave the server out through `ServerFrames` and report how much was dropped; `includeMcpFrames` profiles the server itself.
 
-### Workspace, build and log (core)
+### Workspace, build and log tools
 
 - `eclipse_get_problems` never starts a build: it refreshes, waits for a running build and reports `upToDate` false with `staleness` when auto-build is off. Starting a build is `eclipse_build`'s job.
 - Everything slow runs inside the build job, the refresh included: `BuildRegistry.Request` carries it, `scopes` limits it, and `refreshMillis` and `buildMillis` are reported apart.

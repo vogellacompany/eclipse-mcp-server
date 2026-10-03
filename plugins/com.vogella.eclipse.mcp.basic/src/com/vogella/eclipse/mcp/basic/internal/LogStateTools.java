@@ -243,7 +243,7 @@ public final class LogStateTools {
 					  "properties": {
 					    "message":           {"type":"string","description":"Text of the entry."},
 					    "severity":          {"type":"string","enum":["info","warning","error"],"default":"info"},
-					    "pluginId":          {"type":"string","description":"Bundle symbolic name the entry is attributed to. Defaults to this server's bundle id."},
+					    "pluginId":          {"type":"string","description":"Bundle symbolic name the entry is attributed to. Defaults to the bundle containing this tool."},
 					    "includeStackTrace": {"type":"boolean","default":false,"description":"Attach a throwable, so the entry carries a stack trace like a real failure."}
 					  },
 					  "additionalProperties": false
