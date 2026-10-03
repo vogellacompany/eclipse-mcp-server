@@ -12,7 +12,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import com.vogella.eclipse.mcp.core.internal.SubstituteBundleTool;
+import com.vogella.eclipse.mcp.basic.internal.SubstituteBundleTool;
 
 /**
  * What the framework has actually loaded, which is the field a caller is meant

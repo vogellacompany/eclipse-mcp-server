@@ -13,8 +13,8 @@ import org.eclipse.core.runtime.Platform;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import com.vogella.eclipse.mcp.core.internal.PlatformFilters;
-import com.vogella.eclipse.mcp.core.internal.PlatformFilters.Verdict;
+import com.vogella.eclipse.mcp.basic.internal.PlatformFilters;
+import com.vogella.eclipse.mcp.basic.internal.PlatformFilters.Verdict;
 
 /**
  * Whether a project's bundle can run here: the manifest header first, the name only as a fallback.

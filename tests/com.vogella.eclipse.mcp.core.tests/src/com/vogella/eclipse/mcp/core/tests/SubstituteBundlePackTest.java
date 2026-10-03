@@ -18,7 +18,7 @@ import java.util.jar.JarFile;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import com.vogella.eclipse.mcp.core.internal.SubstituteBundleTool;
+import com.vogella.eclipse.mcp.basic.internal.SubstituteBundleTool;
 
 /**
  * Packing a project must never leave the project. A CRLF build.properties

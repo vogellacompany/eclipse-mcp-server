@@ -7,10 +7,6 @@ Bundle-Vendor: vogella GmbH
 Bundle-RequiredExecutionEnvironment: JavaSE-25
 Automatic-Module-Name: com.vogella.eclipse.mcp.core
 Require-Bundle: org.eclipse.core.runtime;bundle-version="3.31.0",
- org.eclipse.core.resources;bundle-version="3.20.0",
- org.eclipse.search.core;bundle-version="3.16.0"
-Import-Package: jdk.jfr;resolution:=optional,
- jdk.jfr.consumer;resolution:=optional
+ org.eclipse.core.resources;bundle-version="3.20.0"
 Export-Package: com.vogella.eclipse.mcp.core,
- com.vogella.eclipse.mcp.core.json,
- com.vogella.eclipse.mcp.core.internal;x-friends:="com.vogella.eclipse.mcp.core.tests"
+ com.vogella.eclipse.mcp.core.json

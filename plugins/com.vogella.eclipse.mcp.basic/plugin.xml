@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+   <extension point="com.vogella.eclipse.mcp.core.tools">
+      <tool class="com.vogella.eclipse.mcp.basic.internal.ListProjectsTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.RunCommandTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.GetCommandOutputTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.GetProblemsTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.GetLogEntriesTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.GetPreferencesTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.BuildTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.CancelBuildTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.RefreshTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.SaveWorkspaceTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.GetBuildStatusTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.WaitUntilQuietTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.RunScriptTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.SetPreferenceTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.SetProjectStateTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.RemoveProjectTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.SubstituteBundleTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.GetProjectDependenciesTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.ReadFileTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.ReadImageTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.WriteFileTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.EditFileTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.LocalHistoryTools$Get"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.LocalHistoryTools$Restore"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.ResolvePathTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.SearchTextTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.LogStateTools$Mark"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.LogStateTools$Clear"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.LogStateTools$Write"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.MarkProblemsTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.FlightRecordingTools$Start"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.FlightRecordingTools$Stop"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.InstallBundleTool"/>
+   </extension>
+
+</plugin>

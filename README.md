@@ -54,7 +54,7 @@ If the port is taken, the server stays down and the page says why; it never move
 ### In an RCP application
 
 The server starts through a declarative service, so an RCP application needs `org.apache.felix.scr` and a workspace, but no `org.eclipse.ui.startup`.
-Install `com.vogella.eclipse.mcp.core`, `com.vogella.eclipse.mcp.server` and the third party bundles the feature lists; the other bundles are optional and each only adds its own tools.
+Install `com.vogella.eclipse.mcp.core`, `com.vogella.eclipse.mcp.basic`, `com.vogella.eclipse.mcp.server` and the third party bundles the feature lists; specialized provider bundles are optional and each adds its own tools.
 `com.vogella.eclipse.mcp.ui` also resolves in a pure E4 application, which then gets the widget, screenshot, keyboard, dialog and settle tools, with parts named by their model element id; the tools built on editors, views, perspectives and workbench commands need the 3.x workbench and say so.
 Without the ui bundle there is no preference page, so enable the server in `plugin_customization.ini`:
 
@@ -236,7 +236,8 @@ See `AGENTS.md` for the full set of rules.
 
 | Bundle | Contains |
 |---|---|
-| `com.vogella.eclipse.mcp.core` | The tool API, registry and extension point, plus workspace, file, build, preference, log and command tools; no MCP, Jetty or UI dependency |
+| `com.vogella.eclipse.mcp.core` | Provider-independent tool API, registry, extension point and shared infrastructure; no MCP, Jetty or UI dependency |
+| `com.vogella.eclipse.mcp.basic` | General-purpose workspace, file, build, preference, log, command and other basic tools; provider depending on core |
 | `com.vogella.eclipse.mcp.server` | MCP protocol, embedded Jetty, bearer token and discovery file |
 | `com.vogella.eclipse.mcp.ui` | Workbench tools, screenshots, widget inspection, preference page |
 | `com.vogella.eclipse.mcp.jdt` | Java model, refactoring, clean-up and test tools |
