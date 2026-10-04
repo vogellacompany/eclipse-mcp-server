@@ -15,8 +15,10 @@ import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Table;
+import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Tree;
+import org.eclipse.swt.widgets.TreeColumn;
 import org.eclipse.swt.widgets.TreeItem;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -140,5 +142,73 @@ class PressRowTest {
 		assertTrue(PressWidgetTool.pressRow(row, "r0", null, false).toString().contains("not visible"));
 		assertTrue(events.isEmpty());
 		assertEquals(0, tree.getSelectionCount());
+	}
+
+	@Test
+	void aTableColumnPressSortsThroughItsListener() {
+		Table table = new Table(shell, SWT.SINGLE);
+		table.setHeaderVisible(true);
+		TableColumn name = new TableColumn(table, SWT.NONE);
+		name.setWidth(80);
+		name.setText("&Name");
+		name.addListener(SWT.Selection, e -> {
+			events.add(e);
+			table.setSortColumn(name);
+			table.setSortDirection(SWT.UP);
+		});
+		shell.open();
+
+		String result = PressWidgetTool.pressColumn(name, "0/i0", "name").toString();
+
+		assertEquals(1, events.size());
+		assertSame(name, events.get(0).widget);
+		assertTrue(result.contains("\"sortColumnBefore\": null"), result);
+		assertTrue(result.contains("\"sortDirectionBefore\": \"none\""), result);
+		assertTrue(result.contains("\"sortColumnAfter\": \"Name\""), result);
+		assertTrue(result.contains("\"sortDirectionAfter\": \"up\""), result);
+		assertTrue(result.contains("\"selectionListeners\": 1"), result);
+	}
+
+	@Test
+	void aStaleColumnLabelOrADisabledTableRefuses() {
+		Table table = new Table(shell, SWT.SINGLE);
+		table.setHeaderVisible(true);
+		TableColumn name = new TableColumn(table, SWT.NONE);
+		name.setWidth(80);
+		name.setText("Name");
+		name.addListener(SWT.Selection, events::add);
+		shell.open();
+
+		assertTrue(PressWidgetTool.pressColumn(name, "0/i0", "Size").toString().contains("reads 'Name'"));
+		table.setEnabled(false);
+		assertTrue(PressWidgetTool.pressColumn(name, "0/i0", null).toString().contains("disabled"));
+		table.setEnabled(true);
+		table.setHeaderVisible(false);
+		assertTrue(PressWidgetTool.pressColumn(name, "0/i0", null).toString().contains("header hidden"));
+		table.setHeaderVisible(true);
+		name.setWidth(0);
+		assertTrue(PressWidgetTool.pressColumn(name, "0/i0", null).toString().contains("zero width"));
+		assertTrue(events.isEmpty());
+	}
+
+	@Test
+	void aTreeColumnPressReportsTheTreesSortState() {
+		Tree tree = new Tree(shell, SWT.SINGLE);
+		tree.setHeaderVisible(true);
+		TreeColumn size = new TreeColumn(tree, SWT.NONE);
+		size.setWidth(80);
+		size.setText("Size");
+		size.addListener(SWT.Selection, e -> {
+			events.add(e);
+			tree.setSortColumn(size);
+			tree.setSortDirection(SWT.DOWN);
+		});
+		shell.open();
+
+		String result = PressWidgetTool.pressColumn(size, "0/i0", "size").toString();
+
+		assertEquals(1, events.size());
+		assertTrue(result.contains("\"sortColumnAfter\": \"Size\""), result);
+		assertTrue(result.contains("\"sortDirectionAfter\": \"down\""), result);
 	}
 }
