@@ -14,10 +14,12 @@ import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Item;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Table;
+import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.ToolBar;
 import org.eclipse.swt.widgets.ToolItem;
 import org.eclipse.swt.widgets.Tree;
+import org.eclipse.swt.widgets.TreeColumn;
 import org.eclipse.swt.widgets.TreeItem;
 import org.eclipse.swt.widgets.Widget;
 
@@ -27,7 +29,7 @@ import com.vogella.eclipse.mcp.core.ToolArguments;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
 /**
- * Presses a Button or ToolItem, or selects a Tree or Table row, through the widget's own listeners, without OS input or focus.
+ * Presses a Button, ToolItem or Tree or Table column header, or selects a Tree or Table row, through the widget's own listeners, without OS input or focus.
  */
 public final class PressWidgetTool implements IMcpTool {
 
@@ -38,7 +40,7 @@ public final class PressWidgetTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Presses a Button or a ToolItem, or selects a row of a Tree or Table, addressed by part or shell plus the path eclipse_get_widget_tree reports (a ToolItem as an item path such as 0/i2, listed with includeItems; a row as an r path such as 0/r25, listed with includeRows); pass label to have a stale path refused rather than pressing whatever now sits there. CHANGES WHAT THE IDE DOES, which is whatever the button's listeners do: Apply applies, OK closes a dialog. It sends the Selection event to the widget's own listeners rather than going through the window system, so it works without OS focus, on native Wayland, under a compositing desktop and inside modal dialogs, where eclipse_click and eclipse_press_key refuse; it therefore tests the button's behaviour, not the platform's mouse handling. A push button is pressed. A check box or toggle flips its state first, or takes 'selected' when given. A radio button is selected and, as SWT does for a click, the other radio buttons of its group are deselected and told so; a ToolItem radio group is its run of adjacent radio items. A ROW is selected the way a click selects it: its parents are expanded, it is scrolled into view, the selection of its Tree or Table is set to it and Selection is sent to that widget with the row as event item, which reaches views that have no ISelectionProvider and rows scrolled out of sight where eclipse_click misses; defaultSelection also sends DefaultSelection, what a double click or Enter sends, which usually opens the row. The answer for a row reports selectedItem and selectionHoldsItem. A disabled, invisible or separator widget, or a row of a disabled or invisible Tree or Table, is refused. The answer reports the selection before and after, how many Selection listeners the widget had, and whether the press disposed the widget or closed its shell (widgetDisposed, shellClosed). A listener that opens a modal dialog keeps the press from returning; the call then answers timedOut, the press is not withdrawn, and the dialog can be handled with eclipse_list_ui_targets and eclipse_dismiss_dialog. A dialog button addressed by its label is also reachable through eclipse_dismiss_dialog."; //$NON-NLS-1$
+		return "Presses a Button, a ToolItem or a column header of a Tree or Table, or selects a row of a Tree or Table, addressed by part or shell plus the path eclipse_get_widget_tree reports (a ToolItem or column as an item path such as 0/i2, listed with includeItems; a row as an r path such as 0/r25, listed with includeRows); pass label to have a stale path refused rather than pressing whatever now sits there. CHANGES WHAT THE IDE DOES, which is whatever the button's listeners do: Apply applies, OK closes a dialog. It sends the Selection event to the widget's own listeners rather than going through the window system, so it works without OS focus, on native Wayland, under a compositing desktop and inside modal dialogs, where eclipse_click and eclipse_press_key refuse; it therefore tests the button's behaviour, not the platform's mouse handling. A push button is pressed. A check box or toggle flips its state first, or takes 'selected' when given. A radio button is selected and, as SWT does for a click, the other radio buttons of its group are deselected and told so; a ToolItem radio group is its run of adjacent radio items. A ROW is selected the way a click selects it: its parents are expanded, it is scrolled into view, the selection of its Tree or Table is set to it and Selection is sent to that widget with the row as event item, which reaches views that have no ISelectionProvider and rows scrolled out of sight where eclipse_click misses; defaultSelection also sends DefaultSelection, what a double click or Enter sends, which usually opens the row. The answer for a row reports selectedItem and selectionHoldsItem. A COLUMN header is pressed by sending Selection to the column, as a click on it does, which is what sorts a JFace viewer; the answer reports sortColumn (its text or null) and sortDirection (up, down or none) of the Tree or Table before and after. A disabled, invisible or separator widget, or a row or column of a disabled or invisible Tree or Table, is refused. The answer reports the selection before and after, how many Selection listeners the widget had, and whether the press disposed the widget or closed its shell (widgetDisposed, shellClosed). A listener that opens a modal dialog keeps the press from returning; the call then answers timedOut, the press is not withdrawn, and the dialog can be handled with eclipse_list_ui_targets and eclipse_dismiss_dialog. A dialog button addressed by its label is also reachable through eclipse_dismiss_dialog."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -50,8 +52,8 @@ public final class PressWidgetTool implements IMcpTool {
 				    "part":           {"type":"string","description":"Part id the path is rooted in. Use eclipse_list_ui_targets."},
 				    "shellTitle":     {"type":"string","description":"Shell to root the path in, by title substring; omit both for the active shell."},
 				    "shell":          {"type":"string","description":"Shell independent of title: 'popup', an index from eclipse_list_ui_targets, or its bounds. Wins over shellTitle."},
-				    "path":           {"type":"string","description":"Widget path from eclipse_get_widget_tree, such as 1, 0/i2 for a ToolItem or 0/r25 for a Tree or Table row."},
-				    "label":          {"type":"string","description":"The label the widget is expected to have, matched case insensitively; the press is refused when it differs, which guards against a path that went stale since eclipse_get_widget_tree. For a row it is the row text."},
+				    "path":           {"type":"string","description":"Widget path from eclipse_get_widget_tree, such as 1, 0/i2 for a ToolItem or a Tree or Table column header, 0/r25 for a Tree or Table row."},
+				    "label":          {"type":"string","description":"The label the widget is expected to have, matched case insensitively; the press is refused when it differs, which guards against a path that went stale since eclipse_get_widget_tree. For a row or column it is its text."},
 				    "defaultSelection": {"type":"boolean","default":false,"description":"Row only: also send DefaultSelection after Selection, as a double click or Enter does."},
 				    "selected":       {"type":"boolean","description":"Check box, toggle or check ToolItem only: the state to set instead of flipping it. Not accepted for a radio button, which a press always selects."},
 				    "timeoutSeconds": {"type":"integer","minimum":1,"maximum":25,"default":10,"description":"How long to wait for the listeners, which do not return while one shows a modal dialog."}
@@ -105,11 +107,20 @@ public final class PressWidgetTool implements IMcpTool {
 			}
 			return pressRow((Item) target, request.path(), request.label(), request.defaultSelection());
 		}
+		if (target instanceof TableColumn || target instanceof TreeColumn) {
+			if (request.selected() != null || request.defaultSelection()) {
+				return refusal("'%s' does not apply to a column header; a press only sends Selection." //$NON-NLS-1$
+						.formatted(request.selected() != null ? "selected" : "defaultSelection")); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+			return pressColumn((Item) target, request.path(), request.label());
+		}
 		if (!(target instanceof Button || target instanceof ToolItem)) {
 			return refusal("'%s' is a %s, not a Button or ToolItem.%s".formatted(request.path(), //$NON-NLS-1$
-					target.getClass().getSimpleName(), target instanceof Control
-							? " eclipse_set_widget_text drives text fields and combos." //$NON-NLS-1$
-							: "")); //$NON-NLS-1$
+					target.getClass().getSimpleName(), target instanceof Tree || target instanceof Table
+							? " Address a row as an r path (includeRows) or a column header as an i path (includeItems)." //$NON-NLS-1$
+							: target instanceof Control
+									? " eclipse_set_widget_text drives text fields and combos." //$NON-NLS-1$
+									: "")); //$NON-NLS-1$
 		}
 		if ((target.getStyle() & SWT.SEPARATOR) != 0) {
 			return refusal("'%s' is a separator, which cannot be pressed.".formatted(request.path())); //$NON-NLS-1$
@@ -180,6 +191,70 @@ public final class PressWidgetTool implements IMcpTool {
 		return result;
 	}
 
+	/** Sends Selection to a column header, as a click on it does, and reports the sort state around it. */
+	public static JsonObject pressColumn(Item column, String path, String label) {
+		if (!(column instanceof TableColumn || column instanceof TreeColumn)) {
+			return refusal("'%s' is not a Tree or Table column.".formatted(path)); //$NON-NLS-1$
+		}
+		Control owner = column instanceof TreeColumn tree ? tree.getParent() : ((TableColumn) column).getParent();
+		if (owner.isDisposed() || column.isDisposed()) {
+			return refusal("The column at '%s' or its %s is already disposed.".formatted(path, owner.getClass().getSimpleName())); //$NON-NLS-1$
+		}
+		String text = column.getText();
+		String name = owner.getClass().getSimpleName();
+		if (!matchesLabel(text, label)) {
+			return refusal("The column at '%s' reads '%s', not '%s'; the path may have changed since the widget tree was read." //$NON-NLS-1$
+					.formatted(path, text, label));
+		}
+		if (!owner.isEnabled()) {
+			return refusal("The %s holding the column at '%s' is disabled.".formatted(name, path)); //$NON-NLS-1$
+		}
+		if (!owner.isVisible()) {
+			return refusal("The %s holding the column at '%s' is not visible.".formatted(name, path)); //$NON-NLS-1$
+		}
+		if (!(owner instanceof Tree tree ? tree.getHeaderVisible() : ((Table) owner).getHeaderVisible())) {
+			return refusal("The %s holding the column at '%s' has its header hidden, so no click could reach it.".formatted(name, path)); //$NON-NLS-1$
+		}
+		if ((column instanceof TreeColumn tree ? tree.getWidth() : ((TableColumn) column).getWidth()) == 0) {
+			return refusal("The column at '%s' has zero width, so no click could reach it.".formatted(path)); //$NON-NLS-1$
+		}
+		Shell shell = owner.getShell();
+		int listeners = column.getListeners(SWT.Selection).length;
+		JsonObject result = new JsonObject().put("widget", column.getClass().getSimpleName()) //$NON-NLS-1$
+				.put("label", text.replace("&", "").trim()) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				.put("selectionListeners", Integer.valueOf(listeners)); //$NON-NLS-1$
+		putSort(result, "Before", owner); //$NON-NLS-1$
+		column.notifyListeners(SWT.Selection, new Event());
+		boolean disposed = owner.isDisposed() || column.isDisposed();
+		result.put("pressed", Boolean.TRUE).put("widgetDisposed", Boolean.valueOf(disposed)) //$NON-NLS-1$ //$NON-NLS-2$
+				.put("shellClosed", Boolean.valueOf(shell.isDisposed())); //$NON-NLS-1$
+		if (!owner.isDisposed()) {
+			putSort(result, "After", owner); //$NON-NLS-1$
+		}
+		if (listeners == 0) {
+			result.put("note", "The column has no Selection listener, so the press reached nothing; the sorting may hang off a mouse listener instead, which only eclipse_click reaches."); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		return result;
+	}
+
+	/** Whether an item's text matches the expected label, raw as eclipse_get_widget_tree reports it or without mnemonics. */
+	private static boolean matchesLabel(String text, String label) {
+		if (label == null || label.isBlank()) {
+			return true;
+		}
+		String wanted = label.trim();
+		return text.trim().equalsIgnoreCase(wanted)
+				|| text.replace("&", "").trim().equalsIgnoreCase(wanted.replace("&", "")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+	}
+
+	private static void putSort(JsonObject result, String suffix, Control owner) {
+		Item column = owner instanceof Tree tree ? tree.getSortColumn() : ((Table) owner).getSortColumn();
+		int direction = owner instanceof Tree tree ? tree.getSortDirection() : ((Table) owner).getSortDirection();
+		boolean live = column != null && !column.isDisposed();
+		result.put("sortColumn" + suffix, live ? column.getText().replace("&", "").trim() : null) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				.put("sortDirection" + suffix, direction == SWT.UP ? "up" : direction == SWT.DOWN ? "down" : "none"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
+	}
+
 	/** Selects a row and notifies its Tree or Table as SWT does for a click. */
 	public static JsonObject pressRow(Item row, String path, String label, boolean defaultSelection) {
 		if (!(row instanceof TreeItem || row instanceof TableItem)) {
@@ -191,10 +266,7 @@ public final class PressWidgetTool implements IMcpTool {
 		}
 		String text = row.getText();
 		String name = owner.getClass().getSimpleName();
-		String wanted = label == null ? null : label.trim();
-		// eclipse_get_widget_tree reports the raw text, a caller may also pass it without mnemonics
-		if (wanted != null && !text.trim().equalsIgnoreCase(wanted)
-				&& !text.replace("&", "").trim().equalsIgnoreCase(wanted.replace("&", ""))) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+		if (!matchesLabel(text, label)) {
 			return refusal("The row at '%s' reads '%s', not '%s'; the path may have changed since the widget tree was read." //$NON-NLS-1$
 					.formatted(path, text, label));
 		}
