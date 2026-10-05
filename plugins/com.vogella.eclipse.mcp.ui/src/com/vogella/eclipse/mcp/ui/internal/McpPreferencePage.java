@@ -8,6 +8,8 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.IJobChangeEvent;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.core.runtime.jobs.JobChangeAdapter;
+import org.eclipse.core.runtime.preferences.IEclipsePreferences;
+import org.eclipse.core.runtime.preferences.InstanceScope;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.preference.BooleanFieldEditor;
 import org.eclipse.jface.preference.FieldEditorPreferencePage;
@@ -29,6 +31,7 @@ import org.eclipse.ui.IWorkbench;
 import org.eclipse.ui.IWorkbenchPreferencePage;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
+import org.osgi.service.prefs.BackingStoreException;
 
 import com.vogella.eclipse.mcp.server.McpEndpoint;
 import com.vogella.eclipse.mcp.server.McpPreferences;
@@ -47,6 +50,8 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 	private static final String COPY_BUTTON = "copyButton";
 
 	private final List<Button> copyButtons = new ArrayList<>();
+
+	private IntegerFieldEditor portField;
 
 	private Label status;
 
@@ -70,9 +75,9 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 	@Override
 	protected void createFieldEditors() {
 		addField(new BooleanFieldEditor(McpPreferences.KEY_ENABLED, "&Enable MCP server", getFieldEditorParent()));
-		IntegerFieldEditor port = new IntegerFieldEditor(McpPreferences.KEY_PORT, "&Port:", getFieldEditorParent());
-		port.setValidRange(1024, 65535);
-		addField(port);
+		portField = new IntegerFieldEditor(McpPreferences.KEY_PORT, "&Port:", getFieldEditorParent());
+		portField.setValidRange(1024, 65535);
+		addField(portField);
 		IntegerFieldEditor timeout = new IntegerFieldEditor(McpPreferences.KEY_CALL_TIMEOUT_SECONDS,
 				"&Tool call timeout (seconds):", getFieldEditorParent());
 		timeout.setValidRange(McpPreferences.MIN_CALL_TIMEOUT_SECONDS, McpPreferences.MAX_CALL_TIMEOUT_SECONDS);
@@ -176,17 +181,20 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 	@Override
 	public boolean performOk() {
 		boolean result = super.performOk();
-		boolean enabled = McpPreferences.isEnabled();
+		reconcile(McpPreferences.isEnabled());
+		return result;
+	}
+
+	private void reconcile(boolean reportFailure) {
 		McpServerLifecycle.reconcile().addJobChangeListener(new JobChangeAdapter() {
 			@Override
 			public void done(IJobChangeEvent event) {
 				refreshLater();
-				if (enabled) {
+				if (reportFailure) {
 					reportStartFailure();
 				}
 			}
 		});
-		return result;
 	}
 
 	/**
@@ -197,7 +205,7 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 	 * started. The startup hook stays silent on purpose; this is the one path where
 	 * a person is known to be sitting in front of the IDE.
 	 */
-	private static void reportStartFailure() {
+	private void reportStartFailure() {
 		Workbenches.display().asyncExec(() -> {
 			McpServerService service = McpServerService.getInstance();
 			String error = service.getLastError();
@@ -206,9 +214,40 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 			}
 			IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
 			Shell shell = window != null ? window.getShell() : Workbenches.display().getActiveShell();
-			MessageDialog.openError(shell, "MCP server not started", error
-					+ "\n\nThe port is probably held by another process, often a second Eclipse instance with the MCP server enabled on the same port. Choose a different port on the MCP preference page, or stop the other process, and press Apply again.");
+			if (!service.isLastErrorPortFailure()) {
+				MessageDialog.openError(shell, "MCP server not started", error);
+				return;
+			}
+			String message = error
+					+ "\n\nThe port is probably held by another process, often a second Eclipse instance with the MCP server enabled on the same port.";
+			int free = McpServerService.findFreePort(McpPreferences.getPort());
+			if (free < 0) {
+				MessageDialog.openError(shell, "MCP server not started", message
+						+ " Choose a different port on the MCP preference page, or stop the other process, and press Apply again.");
+				return;
+			}
+			MessageDialog dialog = new MessageDialog(shell, "MCP server not started", null, message
+					+ "\n\nPort %d is free. Using it means every configured client has to be pointed to the new URL.".formatted(free),
+					MessageDialog.ERROR, 1, "&Use Port %d".formatted(free), "&Close");
+			if (dialog.open() == 0) {
+				usePort(free);
+			}
 		});
+	}
+
+	private void usePort(int port) {
+		IEclipsePreferences node = InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER);
+		node.putInt(McpPreferences.KEY_PORT, port);
+		try {
+			node.flush();
+		} catch (BackingStoreException e) {
+			ILog.get().error("Could not save the MCP server port", e);
+		}
+		// otherwise OK on a still open page writes the occupied port back
+		if (portField != null && url != null && !url.isDisposed()) {
+			portField.load();
+		}
+		reconcile(true);
 	}
 
 	private void refreshLater() {
