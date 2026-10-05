@@ -26,7 +26,7 @@ plugins/com.vogella.eclipse.mcp.core     provider-independent tool API, registry
 plugins/com.vogella.eclipse.mcp.basic    general-purpose workspace, file, build, preference, log, command and related tools
 plugins/com.vogella.eclipse.mcp.server   MCP protocol, embedded Jetty, bearer token, startup component
 plugins/com.vogella.eclipse.mcp.jdt      Java model tools, declaration sweep and registry index
-plugins/com.vogella.eclipse.mcp.ui       editor, view, perspective and layout tools, screenshots, preference page, startup hook
+plugins/com.vogella.eclipse.mcp.ui       editor, view, perspective and layout tools, screenshots, preference page, UI hooks component
 plugins/com.vogella.eclipse.mcp.pde      PDE tools
 plugins/com.vogella.eclipse.mcp.debug    breakpoint tools, debug session tools, session registry
 plugins/com.vogella.eclipse.mcp.git      EGit tools, checkout and pull request fetch
@@ -60,7 +60,7 @@ A workaround for an Eclipse bug is recorded in `docs/platform-bugs.md` with what
 
 **`com.vogella.eclipse.mcp.core` stays clean.**
 No reference to the MCP SDK, Jetty or any UI bundle, so tools are written and tested against a small stable API, run headless and in RCP applications, and do not change when the protocol library does; that is also why it has its own JSON reader and writer in `com.vogella.eclipse.mcp.core.json`.
-When a tool outside the UI bundle needs UI integration, core declares a hook and `McpUiPlugin.start` registers the implementation, as `LogClearedHandlers` and `UiDispatch` do.
+When a tool outside the UI bundle needs UI integration, core declares a hook and the immediate DS component `McpUiComponent` registers the implementation; the ui bundle has no activator and no `org.eclipse.ui.startup` extension, as `LogClearedHandlers` and `UiDispatch` do.
 A failing handler never turns a completed operation into a failed call.
 Core remains provider-independent and must not depend on basic.
 
@@ -212,7 +212,7 @@ Do not undo these without understanding why they are there.
 - The CSS engine API is not binary stable across releases, and the IDE here runs a newer platform than the target, so `CssStyling` reaches `parseStyleSheet`, the rule count, the error handler (`divertErrors`) and the computed style reflectively under every known spelling. Check a new call with `javap` against both jars, and check the answer on a newer IDE, not only that the call returned.
 - `eclipse_apply_css` reaches `ThemeEngine.resetCurrentTheme()` and `getCSSEngines()` reflectively and looks the engine up by name through `IEclipseContext`; re-applying the theme first is what `reset` does.
 - `eclipse_open_compare` always returns a `DiffNode` and reports `identical`, so the "no differences" dialog never opens.
-- `McpUiPlugin.stop` calls `VisibilityTool.restoreIfHidden`, so disabling the server cannot leave the IDE hidden.
+- `McpUiComponent.deactivate` calls `VisibilityTool.restoreIfHidden`, so disabling the server cannot leave the IDE hidden.
 - `eclipse_restart` uses `restart(true)`, which keeps `-data`. `IWorkbench.restart` is a cancellable close, so `force` closes every window's dirty parts itself, a `false` return is reported as `previousRestartFailed` on the next call, and `--launcher.oldUserArgsStart` in `eclipse.commands` marks a real relaunch. It refuses while a modal dialog is open.
 - On Windows, `NativeForeground` attaches to the foreground input queue for a raise, detaches in a `finally`, skips windows `IsHungAppWindow` reports, and reports `foregroundMethod`. Read foreground back through `NativeForeground.isForeground`, never `Display.getActiveShell`, which on GTK reports the request before the compositor has answered; `eclipse_press_key` gates on it. Unverified on Windows.
 - Screencasts default to the target's own width; both capture tools report a non-integer scale, and `crispWidth` snaps to a whole divisor.

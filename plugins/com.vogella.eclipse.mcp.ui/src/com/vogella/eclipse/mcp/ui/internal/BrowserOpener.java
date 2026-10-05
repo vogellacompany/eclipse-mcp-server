@@ -17,10 +17,6 @@ final class BrowserOpener implements TracePages.Opener {
 	/** An id of our own, so repeated opens reuse one external browser rather than piling up. */
 	private static final String BROWSER_ID = "com.vogella.eclipse.mcp.trace"; //$NON-NLS-1$
 
-	static void install() {
-		TracePages.setOpener(new BrowserOpener());
-	}
-
 	@Override
 	public String open(String url) {
 		if (!PlatformUI.isWorkbenchRunning()) {

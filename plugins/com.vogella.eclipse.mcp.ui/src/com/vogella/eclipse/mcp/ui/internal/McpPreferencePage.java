@@ -8,11 +8,13 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.IJobChangeEvent;
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.core.runtime.jobs.JobChangeAdapter;
+import org.eclipse.core.runtime.preferences.DefaultScope;
 import org.eclipse.core.runtime.preferences.IEclipsePreferences;
 import org.eclipse.core.runtime.preferences.InstanceScope;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.preference.BooleanFieldEditor;
 import org.eclipse.jface.preference.FieldEditorPreferencePage;
+import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.preference.IntegerFieldEditor;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.dnd.Clipboard;
@@ -31,6 +33,7 @@ import org.eclipse.ui.IWorkbench;
 import org.eclipse.ui.IWorkbenchPreferencePage;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
+import org.eclipse.ui.preferences.ScopedPreferenceStore;
 import org.osgi.service.prefs.BackingStoreException;
 
 import com.vogella.eclipse.mcp.server.McpEndpoint;
@@ -53,6 +56,8 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 
 	private IntegerFieldEditor portField;
 
+	private static IPreferenceStore serverPreferences;
+
 	private Label status;
 
 	private Text url;
@@ -67,9 +72,22 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 
 	@Override
 	public void init(IWorkbench workbench) {
-		setPreferenceStore(McpUiPlugin.getDefault().getServerPreferenceStore());
+		setPreferenceStore(serverPreferenceStore());
 		setDescription(
 				"Exposes information about this IDE to MCP clients over HTTP on the loopback interface. Most tools only read; a few format a file, run a build, open and close projects or change plug-in and IDE settings.");
+	}
+
+	/** The store for the server bundle's preference node, with the defaults applied. */
+	private static synchronized IPreferenceStore serverPreferenceStore() {
+		if (serverPreferences != null) {
+			return serverPreferences;
+		}
+		IEclipsePreferences defaults = DefaultScope.INSTANCE.getNode(McpPreferences.QUALIFIER);
+		defaults.putBoolean(McpPreferences.KEY_ENABLED, McpPreferences.DEFAULT_ENABLED);
+		defaults.putInt(McpPreferences.KEY_PORT, McpPreferences.DEFAULT_PORT);
+		defaults.putInt(McpPreferences.KEY_CALL_TIMEOUT_SECONDS, McpPreferences.DEFAULT_CALL_TIMEOUT_SECONDS);
+		serverPreferences = new ScopedPreferenceStore(InstanceScope.INSTANCE, McpPreferences.QUALIFIER);
+		return serverPreferences;
 	}
 
 	@Override

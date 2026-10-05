@@ -63,8 +63,4 @@
       </page>
    </extension>
 
-   <extension point="org.eclipse.ui.startup">
-      <startup class="com.vogella.eclipse.mcp.ui.internal.McpStartup"/>
-   </extension>
-
 </plugin>

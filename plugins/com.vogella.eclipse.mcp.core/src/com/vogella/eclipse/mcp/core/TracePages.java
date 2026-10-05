@@ -43,6 +43,13 @@ public final class TracePages {
 		opener = newOpener;
 	}
 
+	/** Removes {@code registered}, unless something else took its place meanwhile. */
+	public static void unsetOpener(Opener registered) {
+		if (opener == registered) {
+			opener = null;
+		}
+	}
+
 	/** Whether a page can be served at all, which is false while the server is stopped. */
 	public static boolean isAvailable() {
 		return publisher != null;
