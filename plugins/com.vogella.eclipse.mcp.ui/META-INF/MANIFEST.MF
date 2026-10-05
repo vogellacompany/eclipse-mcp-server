@@ -5,7 +5,6 @@ Bundle-SymbolicName: com.vogella.eclipse.mcp.ui;singleton:=true
 Bundle-Version: 2.0.0.qualifier
 Bundle-Vendor: vogella GmbH
 Bundle-RequiredExecutionEnvironment: JavaSE-25
-Bundle-Activator: com.vogella.eclipse.mcp.ui.internal.McpUiPlugin
 Bundle-ActivationPolicy: lazy
 Automatic-Module-Name: com.vogella.eclipse.mcp.ui
 Export-Package: com.vogella.eclipse.mcp.ui.internal;x-friends:="com.vogella.eclipse.mcp.ide,com.vogella.eclipse.mcp.core.tests"
@@ -29,3 +28,4 @@ Require-Bundle: org.eclipse.core.runtime;bundle-version="3.31.0",
 Import-Package: org.eclipse.equinox.app;version="1.1.0",
  org.eclipse.osgi.service.datalocation;version="1.4.0",
  org.osgi.service.prefs;version="1.1.0"
+Service-Component: OSGI-INF/com.vogella.eclipse.mcp.ui.internal.McpUiComponent.xml

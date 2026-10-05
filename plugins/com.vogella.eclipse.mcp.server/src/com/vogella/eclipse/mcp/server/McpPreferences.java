@@ -3,7 +3,6 @@ package com.vogella.eclipse.mcp.server;
 import java.time.Duration;
 
 import org.eclipse.core.runtime.Platform;
-import org.eclipse.core.runtime.preferences.ConfigurationScope;
 
 /**
  * The preferences that control the embedded MCP server.
@@ -19,15 +18,6 @@ public final class McpPreferences {
 
 	public static final String KEY_CALL_TIMEOUT_SECONDS = "callTimeoutSeconds"; //$NON-NLS-1$
 
-	/** Whether this plug-in replaces the IDE's splash screen; configuration scoped, since config.ini belongs to the installation. */
-	public static final String KEY_REPLACE_SPLASH = "replaceSplash"; //$NON-NLS-1$
-
-	/**
-	 * Off, because repainting the branding of an IDE somebody else installed is a
-	 * bigger surprise than opening a socket, and harder to trace back to its cause.
-	 */
-	public static final boolean DEFAULT_REPLACE_SPLASH = false;
-
 	/** A process that listens on a socket and answers questions about the user's code must be opt-in. */
 	public static final boolean DEFAULT_ENABLED = false;
 
@@ -41,12 +31,6 @@ public final class McpPreferences {
 	public static final int MAX_CALL_TIMEOUT_SECONDS = 3600;
 
 	private McpPreferences() {
-	}
-
-	/** Read from the configuration scope, which is the installation this splash belongs to. */
-	public static boolean isReplaceSplash() {
-		return ConfigurationScope.INSTANCE.getNode(QUALIFIER).getBoolean(KEY_REPLACE_SPLASH,
-				DEFAULT_REPLACE_SPLASH);
 	}
 
 	public static boolean isEnabled() {

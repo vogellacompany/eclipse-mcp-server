@@ -13,8 +13,6 @@ Most tools are read-only; every tool that changes something says so in its own d
   <img src="docs/images/splash-animated.webp" alt="The Eclipse MCP Server splash screen" width="600">
 </p>
 
-Optionally the IDE can come up under this splash: set `replaceSplash` in the installation's configuration scope, and it takes effect at the restart after the one that applies it.
-
 ## Installing
 
 In Eclipse, choose *Help > Install New Software*, add

@@ -470,7 +470,7 @@ public final class CommandTools {
 		private static void logLateCompletion(String wanted, String answer, Throwable error) {
 			String outcome = error != null ? "it failed with: " + error //$NON-NLS-1$
 					: answer == null ? "no result" : "its answer was: " + cap(answer); //$NON-NLS-1$ //$NON-NLS-2$
-			ILog.get().log(new Status(IStatus.INFO, McpUiPlugin.PLUGIN_ID,
+			ILog.get().log(new Status(IStatus.INFO, McpUiComponent.PLUGIN_ID,
 					"eclipse_run_workbench_command: '%s' finished after its call had already timed out; the caller never saw this answer. %s" //$NON-NLS-1$
 							.formatted(wanted, outcome)));
 		}
