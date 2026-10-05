@@ -18,6 +18,7 @@ import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IEditorReference;
 import org.eclipse.ui.IWorkbenchPage;
+import org.eclipse.ui.IWorkbenchPartReference;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.texteditor.ITextEditor;
@@ -52,11 +53,12 @@ public final class KeyboardTools {
 			}
 		} else {
 			editor = null;
-			for (IEditorReference reference : page.getEditorReferences()) {
-				if (partId.equals(reference.getId())) {
-					editor = reference.getEditor(true);
-					break;
-				}
+			IWorkbenchPartReference found = PartAddress.find(page, partId);
+			if (found instanceof IEditorReference reference) {
+				editor = reference.getEditor(true);
+			}
+			if (editor == null && found != null) {
+				throw new IllegalStateException("The part '%s' is open but is not an editor.".formatted(partId)); //$NON-NLS-1$
 			}
 			if (editor == null) {
 				throw new IllegalStateException(
@@ -89,7 +91,7 @@ public final class KeyboardTools {
 					  "type": "object",
 					  "properties": {
 					    "text": {"type":"string","description":"The text to insert at the caret. A current selection is replaced by it."},
-					    "part": {"type":"string","description":"Editor part id. Defaults to the active editor."}
+					    "part": {"type":"string","description":"Editor part id. Defaults to the active editor. Several parts with one id: id@editor input path or title."}
 					  },
 					  "required": ["text"],
 					  "additionalProperties": false

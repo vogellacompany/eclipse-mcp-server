@@ -155,20 +155,37 @@ public final class ScreenshotTools {
 						.put("bounds", Overlays.describe(bounds))); //$NON-NLS-1$
 			}
 			JsonArray parts = new JsonArray();
+			var e4Candidates = Workbenches.e4Candidates();
 			for (MPart part : Workbenches.e4Parts()) {
-				parts.add(new JsonObject().put("id", part.getElementId()) //$NON-NLS-1$
+				String address = e4Candidates.stream().filter(c -> c.ref() == part.getWidget()).findFirst()
+						.map(c -> PartAddress.address(c, e4Candidates)).orElse(part.getElementId());
+				JsonObject entry = new JsonObject().put("id", part.getElementId()) //$NON-NLS-1$
 						.put("title", part.getLocalizedLabel()) //$NON-NLS-1$
 						.put("kind", "part") //$NON-NLS-1$ //$NON-NLS-2$
-						.put("visible", Boolean.valueOf(((Control) part.getWidget()).isVisible()))); //$NON-NLS-1$
+						.put("visible", Boolean.valueOf(((Control) part.getWidget()).isVisible())); //$NON-NLS-1$
+				if (!address.equals(part.getElementId())) {
+					entry.put("address", address); //$NON-NLS-1$
+				}
+				parts.add(entry);
 			}
 			IWorkbenchWindow window = Workbenches.ide() ? PlatformUI.getWorkbench().getActiveWorkbenchWindow() : null;
 			IWorkbenchPage page = window == null ? null : window.getActivePage();
 			if (page != null) {
-				for (IWorkbenchPartReference reference : allReferences(page)) {
-					parts.add(new JsonObject().put("id", reference.getId()) //$NON-NLS-1$
-							.put("title", reference.getTitle()) //$NON-NLS-1$
+				var candidates = PartAddress.candidates(page);
+				for (var candidate : candidates) {
+					var reference = candidate.ref();
+					JsonObject entry = new JsonObject().put("id", candidate.id()) //$NON-NLS-1$
+							.put("title", candidate.title()) //$NON-NLS-1$
 							.put("kind", reference instanceof IViewReference ? "view" : "editor") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-							.put("visible", page.isPartVisible(reference.getPart(false)))); //$NON-NLS-1$
+							.put("visible", candidate.visible()); //$NON-NLS-1$
+					if (candidate.path() != null) {
+						entry.put("input", candidate.path()); //$NON-NLS-1$
+					}
+					String address = PartAddress.address(candidate, candidates);
+					if (!address.equals(candidate.id())) {
+						entry.put("address", address); //$NON-NLS-1$
+					}
+					parts.add(entry);
 				}
 			}
 			JsonObject result = new JsonObject().put("shells", shells).put("parts", parts); //$NON-NLS-1$ //$NON-NLS-2$
@@ -226,7 +243,7 @@ public final class ScreenshotTools {
 					  "type": "object",
 					  "properties": {
 					    "target":     {"type":"string","enum":["part","shell","display"],"default":"part"},
-					    "part":       {"type":"string","description":"Part id, e.g. org.eclipse.ui.views.ProblemView. Use eclipse_list_ui_targets to find it."},
+					    "part":       {"type":"string","description":"Part id, e.g. org.eclipse.ui.views.ProblemView. Use eclipse_list_ui_targets to find it. Several parts with one id: id@editor input path or title."},
 					    "shellTitle": {"type":"string","description":"Title of the shell to capture, or a substring. Ambiguous when several shells share a title, e.g. the empty title of the workbench and the content assist popup; use 'shell' then."},
 				    "shell":      {"type":"string","description":"Shell to capture, independent of title: 'popup' for the topmost untitled non-workbench shell (the content assist proposals), an index from eclipse_list_ui_targets ('1' or '#1'), or its bounds as printed ('151,334 402x255'). Wins over shellTitle."},
 					    "activate":   {"type":"boolean","default":false,"description":"Bring the part to the front first. This visibly rearranges the user's IDE, so it is off by default."},
@@ -1068,13 +1085,7 @@ public final class ScreenshotTools {
 			if (page == null) {
 				return null;
 			}
-			IWorkbenchPartReference reference = null;
-			for (IWorkbenchPartReference candidate : ListTargets.allReferences(page)) {
-				if (partId.equals(candidate.getId())) {
-					reference = candidate;
-					break;
-				}
-			}
+			IWorkbenchPartReference reference = PartAddress.find(page, partId);
 			if (reference == null) {
 				return null;
 			}

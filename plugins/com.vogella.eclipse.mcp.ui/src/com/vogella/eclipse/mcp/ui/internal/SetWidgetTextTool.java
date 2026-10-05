@@ -48,7 +48,7 @@ public final class SetWidgetTextTool implements IMcpTool {
 				{
 				  "type": "object",
 				  "properties": {
-				    "part":         {"type":"string","description":"Part id the path is rooted in, an editor id included. Use eclipse_list_ui_targets."},
+				    "part":         {"type":"string","description":"Part id the path is rooted in, an editor id included. Use eclipse_list_ui_targets. Several parts with one id: id@editor input path or title."},
 				    "shellTitle":   {"type":"string","description":"Shell to root the path in, by title substring; omit both for the active shell."},
 				    "shell":        {"type":"string","description":"Shell independent of title: 'popup', an index from eclipse_list_ui_targets, or its bounds. Wins over shellTitle."},
 				    "path":         {"type":"string","description":"Widget path from eclipse_get_widget_tree, such as 0/0/1."},

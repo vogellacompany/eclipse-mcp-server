@@ -29,6 +29,7 @@ import org.eclipse.swt.widgets.Event;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IEditorReference;
 import org.eclipse.ui.IWorkbenchPage;
+import org.eclipse.ui.IWorkbenchPartReference;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.texteditor.ITextEditor;
@@ -75,14 +76,17 @@ public final class TextBoundsTools {
 				return Target.failed("There is no active editor. Give 'part' to name one."); //$NON-NLS-1$
 			}
 		} else {
-			IEditorPart active = page.getActiveEditor();
-			if (active != null && partId.equals(active.getSite().getId())) {
-				editor = active;
+			IWorkbenchPartReference found;
+			try {
+				found = PartAddress.find(page, partId);
+			} catch (IllegalStateException e) {
+				return Target.failed(e.getMessage());
 			}
-			for (IEditorReference reference : page.getEditorReferences()) {
-				if (editor == null && partId.equals(reference.getId())) {
-					editor = reference.getEditor(true);
-				}
+			if (found instanceof IEditorReference reference) {
+				editor = reference.getEditor(true);
+			}
+			if (editor == null && found != null) {
+				return Target.failed("The part '%s' is open but is not an editor.".formatted(partId)); //$NON-NLS-1$
 			}
 			if (editor == null) {
 				return Target.failed("No open editor has the id '%s'. eclipse_list_ui_targets lists the open parts." //$NON-NLS-1$
@@ -180,7 +184,7 @@ public final class TextBoundsTools {
 					{
 					  "type": "object",
 					  "properties": {
-					    "part":   {"type":"string","description":"Editor part id, e.g. org.eclipse.jdt.ui.CompilationUnitEditor. Defaults to the active editor."},
+					    "part":   {"type":"string","description":"Editor part id, e.g. org.eclipse.jdt.ui.CompilationUnitEditor. Defaults to the active editor. Several parts with one id: id@editor input path or title."},
 					    "line":   {"type":"integer","minimum":1,"description":"1-based document line."},
 					    "column": {"type":"integer","minimum":1,"default":1,"description":"1-based column within the line."},
 					    "offset": {"type":"integer","minimum":0,"description":"Document offset, instead of line and column."},
@@ -260,7 +264,7 @@ public final class TextBoundsTools {
 					{
 					  "type": "object",
 					  "properties": {
-					    "part":   {"type":"string","description":"Editor part id, e.g. org.eclipse.ui.DefaultTextEditor. Defaults to the active editor."},
+					    "part":   {"type":"string","description":"Editor part id, e.g. org.eclipse.ui.DefaultTextEditor. Defaults to the active editor. Several parts with one id: id@editor input path or title."},
 					    "line":   {"type":"integer","minimum":1,"description":"1-based document line."},
 					    "column": {"type":"integer","minimum":1,"default":1,"description":"1-based column within the line."},
 					    "offset": {"type":"integer","minimum":0,"description":"Document offset, instead of line and column."}
@@ -390,7 +394,7 @@ public final class TextBoundsTools {
 					{
 					  "type": "object",
 					  "properties": {
-					    "part":          {"type":"string","description":"Editor part id. Defaults to the active editor."},
+					    "part":          {"type":"string","description":"Editor part id. Defaults to the active editor. Several parts with one id: id@editor input path or title."},
 					    "typePattern":   {"type":"string","description":"Regular expression matched anywhere in the annotation type, e.g. error|warning or projection."},
 					    "fromLine":      {"type":"integer","minimum":1,"description":"Only annotations starting at or after this 1-based line."},
 					    "toLine":        {"type":"integer","minimum":1,"description":"Only annotations starting at or before this 1-based line."},

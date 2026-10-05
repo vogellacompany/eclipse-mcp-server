@@ -59,14 +59,10 @@ public final class WidgetTools {
 		if (page == null) {
 			return null;
 		}
-		for (IWorkbenchPartReference reference : ScreenshotTools.ListTargets.allReferences(page)) {
-			if (partId.equals(reference.getId())) {
-				var part = reference.getPart(true);
-				Control control = part == null ? null : ScreenshotTools.Capture.controlOf(part);
-				return control != null && includeToolbar ? ScreenshotTools.Capture.stackOf(control) : control;
-			}
-		}
-		return null;
+		IWorkbenchPartReference reference = PartAddress.find(page, partId);
+		var part = reference == null ? null : reference.getPart(true);
+		Control control = part == null ? null : ScreenshotTools.Capture.controlOf(part);
+		return control != null && includeToolbar ? ScreenshotTools.Capture.stackOf(control) : control;
 	}
 
 	/**
@@ -291,7 +287,7 @@ public final class WidgetTools {
 					{
 					  "type": "object",
 					  "properties": {
-					    "part":       {"type":"string","description":"Part id, from eclipse_list_ui_targets. Omit to walk a shell instead."},
+					    "part":       {"type":"string","description":"Part id, from eclipse_list_ui_targets. Omit to walk a shell instead. Several parts with one id: id@editor input path or title."},
 					    "shellTitle": {"type":"string","description":"Shell to walk when no part is given, by title substring. Ambiguous when shells share a title; use 'shell'."},
 					    "shell":      {"type":"string","description":"Shell independent of title: 'popup' for the content assist proposals, an index from eclipse_list_ui_targets ('1'), or its bounds ('151,334 402x255'). Wins over shellTitle."},
 					    "path":       {"type":"string","description":"Start from this widget rather than the root, e.g. '0/2'."},
@@ -524,7 +520,7 @@ public final class WidgetTools {
 					  "type": "object",
 					  "required": ["path"],
 					  "properties": {
-					    "part":       {"type":"string","description":"Part id the path is rooted in, e.g. org.eclipse.ui.views.ContentOutline."},
+					    "part":       {"type":"string","description":"Part id the path is rooted in, e.g. org.eclipse.ui.views.ContentOutline. Several parts with one id: id@editor input path or title."},
 					    "shellTitle": {"type":"string","description":"Shell to root the path in, by title substring; omit both for the active shell."},
 					    "shell":      {"type":"string","description":"Shell independent of title: 'popup', an index from eclipse_list_ui_targets, or its bounds. Wins over shellTitle."},
 					    "path":       {"type":"string","description":"Row path from eclipse_get_widget_tree with includeRows, such as 0/0/1/r1. A nested row is addressed by chaining, as in 0/0/1/r1/r2."},
@@ -640,7 +636,7 @@ public final class WidgetTools {
 					  "type": "object",
 					  "required": ["path"],
 					  "properties": {
-					    "part":        {"type":"string","description":"Part id the path is rooted in. Use eclipse_list_ui_targets."},
+					    "part":        {"type":"string","description":"Part id the path is rooted in. Use eclipse_list_ui_targets. Several parts with one id: id@editor input path or title."},
 					    "shellTitle":  {"type":"string","description":"Shell to root the path in, by title substring; omit both for the active shell."},
 					    "shell":       {"type":"string","description":"Shell independent of title: 'popup', an index from eclipse_list_ui_targets, or its bounds. Wins over shellTitle."},
 					    "path":        {"type":"string","description":"Path of the tab item, such as 0/0/0/i2, or of the folder itself when 'index' is given."},
@@ -763,7 +759,7 @@ public final class WidgetTools {
 					{
 					  "type": "object",
 					  "properties": {
-					    "part":           {"type":"string","description":"Part id the path is rooted in. Use eclipse_list_ui_targets."},
+					    "part":           {"type":"string","description":"Part id the path is rooted in. Use eclipse_list_ui_targets. Several parts with one id: id@editor input path or title."},
 					    "shellTitle":     {"type":"string","description":"Shell to root the path in, by title substring; omit both for the active shell."},
 					    "shell":          {"type":"string","description":"Shell independent of title: 'popup', an index from eclipse_list_ui_targets, or its bounds. Wins over shellTitle."},
 					    "includeToolbar": {"type":"boolean","default":false,"description":"Root the path in the surrounding part stack, where a view's toolbar and its tabs are."},
@@ -938,7 +934,7 @@ public final class WidgetTools {
 					{
 					  "type": "object",
 					  "properties": {
-					    "part":       {"type":"string","description":"Part id, from eclipse_list_ui_targets. Omit to address a shell instead."},
+					    "part":       {"type":"string","description":"Part id, from eclipse_list_ui_targets. Omit to address a shell instead. Several parts with one id: id@editor input path or title."},
 					    "shellTitle": {"type":"string","description":"Shell when no part is given, by title substring."},
 					    "shell":      {"type":"string","description":"Shell independent of title: 'popup', an index from eclipse_list_ui_targets, or its bounds. Wins over shellTitle."},
 					    "path":       {"type":"string","description":"Slash separated indices from eclipse_get_widget_tree, e.g. '0/2/1'. An i prefixed segment is an item rather than a child control, as in '2/i0' for the first button of a toolbar. Omit for the root."},

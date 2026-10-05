@@ -23,6 +23,7 @@ import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IEditorReference;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchPart;
+import org.eclipse.ui.IWorkbenchPartReference;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
 
@@ -61,7 +62,7 @@ public final class MovePartTool implements IMcpTool {
 				  "type": "object",
 				  "required": ["part"],
 				  "properties": {
-				    "part":       {"type":"string","description":"Id of the view or editor to move, from eclipse_list_ui_targets. An editor can also be named by a substring of its tab title; when several editors match, the active one wins."},
+				    "part":       {"type":"string","description":"Id of the view or editor to move, from eclipse_list_ui_targets, or the id@path address it reports when several parts share an id. An editor can also be named by a substring of its tab title; when several editors match, the active one wins."},
 				    "target":     {"type":"string","description":"Id of a part to move it to, or of a stack from the stacks this tool reports. An editor id or tab title works here too. Required unless position is detached."},
 				    "position":   {"type":"string","enum":["stack","left","right","above","below","detached"],"default":"stack","description":"stack puts it in the target's stack as another tab; left, right, above and below put it in a new stack next to the target's; detached opens a window of its own."},
 				    "index":      {"type":"integer","minimum":0,"description":"Tab position within the stack, for position stack. Omit for last."},
@@ -114,7 +115,12 @@ public final class MovePartTool implements IMcpTool {
 			return refused("This window has no e4 model to move parts in."); //$NON-NLS-1$
 		}
 
-		MPart part = resolvePart(partService, request.partId());
+		MPart part;
+		try {
+			part = resolvePart(partService, request.partId());
+		} catch (IllegalStateException e) {
+			return refused(e.getMessage()).put("layout", layout(modelService, modelWindow, request.maxResults())); //$NON-NLS-1$
+		}
 		if (part == null) {
 			return refused("No open part '%s'. Use eclipse_list_ui_targets.".formatted(request.partId())) //$NON-NLS-1$
 					.put("layout", layout(modelService, modelWindow, request.maxResults())); //$NON-NLS-1$
@@ -152,7 +158,12 @@ public final class MovePartTool implements IMcpTool {
 			result.put("bounds", "%d,%d %dx%d".formatted(Integer.valueOf(bounds[0]), Integer.valueOf(bounds[1]), //$NON-NLS-1$ //$NON-NLS-2$
 					Integer.valueOf(bounds[2]), Integer.valueOf(bounds[3])));
 		} else {
-			MPartStack targetStack = findStack(modelService, modelWindow, partService, request.target());
+			MPartStack targetStack;
+			try {
+				targetStack = findStack(modelService, modelWindow, partService, request.target());
+			} catch (IllegalStateException e) {
+				return refused(e.getMessage()).put("layout", layout(modelService, modelWindow, request.maxResults())); //$NON-NLS-1$
+			}
 			if (targetStack == null) {
 				return refused("No part or stack '%s' in the active perspective.".formatted(request.target())) //$NON-NLS-1$
 						.put("layout", layout(modelService, modelWindow, request.maxResults())); //$NON-NLS-1$
@@ -265,12 +276,19 @@ public final class MovePartTool implements IMcpTool {
 	 * its editor id or a substring of its title, the active editor first.
 	 */
 	private static MPart resolvePart(EPartService partService, String id) {
+		IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+		IWorkbenchPage page = window == null ? null : window.getActivePage();
+		// PartAddress picks the visible one of several parts sharing an id and takes the id@path form
+		IWorkbenchPartReference addressed = page == null ? null : PartAddress.find(page, id);
+		IWorkbenchPart addressedPart = addressed == null ? null : addressed.getPart(true);
+		if (addressedPart != null) {
+			// no fall back to the id lookup, which finds the first of several parts sharing it
+			return modelOf(addressedPart);
+		}
 		MPart byId = partService.findPart(id);
 		if (byId != null) {
 			return byId;
 		}
-		IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
-		IWorkbenchPage page = window == null ? null : window.getActivePage();
 		if (page == null) {
 			return null;
 		}

@@ -126,7 +126,7 @@ public final class ScreencastTools {
 					  "type": "object",
 					  "properties": {
 					    "target":         {"type":"string","enum":["part","shell"],"default":"shell","description":"What to record. Inferred from part when that is given."},
-					    "part":           {"type":"string","description":"Part id, from eclipse_list_ui_targets. It has to be visible; a part behind another tab is not painted at all."},
+					    "part":           {"type":"string","description":"Part id, from eclipse_list_ui_targets. It has to be visible; a part behind another tab is not painted at all. Several parts with one id: id@editor input path or title."},
 					    "shellTitle":     {"type":"string","description":"Title of the shell to record, or a substring. Omit for the active shell."},
 					    "intervalMillis": {"type":"integer","default":500,"minimum":100,"maximum":10000,"description":"Time between frames. The paint itself is added on top, so the real spacing is reported per frame in the GIF."},
 					    "maxFrames":      {"type":"integer","default":120,"minimum":1,"maximum":1000,"description":"Recording stops on its own after this many frames."},

@@ -132,14 +132,33 @@ public final class Workbenches {
 	}
 
 	/** The control of the E4 part with this element id, or null. */
-	static Control e4Part(String elementId) {
+	static Control e4Part(String argument) {
+		var candidates = e4Candidates();
+		var query = PartAddress.parse(argument);
+		var chosen = PartAddress.choose(candidates, query);
+		if (chosen == null && query.qualifier() != null) {
+			throw new IllegalStateException(PartAddress.refusal(argument, candidates));
+		}
+		return chosen == null ? null : chosen.ref();
+	}
+
+	/** The rendered E4 parts as address candidates; E4 parts have no editor input, so no path. */
+	static List<PartAddress.Candidate<Control>> e4Candidates() {
+		List<PartAddress.Candidate<Control>> candidates = new ArrayList<>();
+		MPart active = activeE4Part();
 		for (MPart part : e4Parts()) {
-			if (elementId.equals(part.getElementId()) && part.getWidget() instanceof Control control
-					&& !control.isDisposed()) {
-				return control;
+			if (part.getWidget() instanceof Control control && !control.isDisposed()) {
+				candidates.add(new PartAddress.Candidate<>(control, part.getElementId(), part.getLocalizedLabel(), null,
+						part == active, control.isVisible()));
 			}
 		}
-		return null;
+		return candidates;
+	}
+
+	private static MPart activeE4Part() {
+		MApplication application = ide() ? null : e4Application();
+		var leaf = application == null ? null : application.getContext().getActiveLeaf();
+		return leaf != null && leaf.get(MPart.class) instanceof MPart part ? part : null;
 	}
 
 	private static List<Shell> e4WindowShells() {
