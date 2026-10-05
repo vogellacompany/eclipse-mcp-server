@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.InetAddress;
@@ -45,6 +46,7 @@ import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolRegistry;
 import com.vogella.eclipse.mcp.server.McpEndpoint;
 import com.vogella.eclipse.mcp.server.McpPreferences;
+import com.vogella.eclipse.mcp.server.McpServerException;
 import com.vogella.eclipse.mcp.server.McpServerService;
 
 import io.modelcontextprotocol.client.McpClient;
@@ -183,6 +185,31 @@ class McpServerServiceTest {
 		assertTrue(McpServerService.getInstance().isRunning());
 		assertEquals(testPort, McpServerService.getInstance().getPort());
 		assertEquals("http://127.0.0.1:%d/mcp".formatted(testPort), endpoint().url());
+	}
+
+	@Test
+	void suggestsAFreePortPastAnOccupiedOne() throws Exception {
+		// the running server holds testPort, the first port the search looks at
+		int free = McpServerService.findFreePort(testPort - 1);
+		assertTrue(free > testPort, "Expected a port after the occupied " + testPort + ", got " + free);
+		try (ServerSocket socket = new ServerSocket(free, 0, InetAddress.getLoopbackAddress())) {
+			assertEquals(free, socket.getLocalPort());
+		}
+	}
+
+	@Test
+	void flagsAnOccupiedPortAsAPortFailure() throws Exception {
+		McpServerService service = McpServerService.getInstance();
+		service.stop();
+		try (ServerSocket blocker = new ServerSocket(0, 0, InetAddress.getLoopbackAddress())) {
+			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putInt(McpPreferences.KEY_PORT,
+					blocker.getLocalPort());
+			assertThrows(McpServerException.class, service::start);
+			assertTrue(service.isLastErrorPortFailure());
+		} finally {
+			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putInt(McpPreferences.KEY_PORT, testPort);
+			service.start();
+		}
 	}
 
 	@Test

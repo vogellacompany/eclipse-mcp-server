@@ -1,5 +1,8 @@
 package com.vogella.eclipse.mcp.server;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.nio.file.Path;
 import java.util.EnumSet;
 import java.util.List;
@@ -57,6 +60,8 @@ public final class McpServerService {
 	/** How long a request waits for the tools to load, kept below the 30 seconds Claude Code gives a connection. */
 	private static final long READY_WAIT_MILLIS = 25_000;
 
+	private static final int PORT_SEARCH_RANGE = 20;
+
 	private static final McpServerService INSTANCE = new McpServerService();
 
 	private Server jetty;
@@ -74,6 +79,7 @@ public final class McpServerService {
 	private int runningPort = -1;
 
 	private String lastError;
+	private boolean lastErrorIsPort;
 
 	private McpServerService() {
 	}
@@ -112,6 +118,38 @@ public final class McpServerService {
 	 */
 	public synchronized String getLastError() {
 		return lastError;
+	}
+
+	/** Whether {@link #getLastError()} is a failure to bind the port, as opposed to a later startup failure. */
+	public synchronized boolean isLastErrorPortFailure() {
+		return lastError != null && lastErrorIsPort;
+	}
+
+	/**
+	 * The first port after {@code taken} that can be bound on the loopback interface, or
+	 * {@code -1} when none of the next {@value #PORT_SEARCH_RANGE} is free. Only a
+	 * suggestion for the user; the server never moves on its own.
+	 */
+	public static int findFreePort(int taken) {
+		for (int port = taken + 1; port <= Math.min(taken + PORT_SEARCH_RANGE, 65535); port++) {
+			try (ServerSocket probe = new ServerSocket()) {
+				probe.setReuseAddress(false);
+				probe.bind(new InetSocketAddress(LOOPBACK, port));
+				return port;
+			} catch (IOException e) {
+				// taken as well, try the next one
+			}
+		}
+		return -1;
+	}
+
+	private static boolean isBindFailure(Throwable failure) {
+		for (Throwable t = failure; t != null; t = t.getCause()) {
+			if (t instanceof java.net.BindException) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -155,6 +193,7 @@ public final class McpServerService {
 			jetty.start();
 		} catch (Exception e) {
 			stopQuietly();
+			lastErrorIsPort = isBindFailure(e);
 			lastError = "Could not listen on %s:%d. %s".formatted(LOOPBACK, port, //$NON-NLS-1$
 					e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
 			throw new McpServerException("Could not start the MCP server on %s:%d".formatted(LOOPBACK, port), e); //$NON-NLS-1$
@@ -178,6 +217,7 @@ public final class McpServerService {
 			EndpointFile.write(endpoint);
 		} catch (RuntimeException | Error e) {
 			stopQuietly();
+			lastErrorIsPort = false;
 			lastError = "Could not load the tools or publish the endpoint. %s".formatted( //$NON-NLS-1$
 					e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
 			throw new McpServerException("Could not load the MCP tools", e); //$NON-NLS-1$
