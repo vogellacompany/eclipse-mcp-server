@@ -52,7 +52,7 @@ public final class SelectMenuItemTool implements IMcpTool {
 				  "type": "object",
 				  "properties": {
 				    "path":   {"type":"string","description":"Labels from the top, separated by /, without mnemonics or accelerators, matched case insensitively, e.g. 'File/New/Project...' or 'Team/Pull'. A trailing '...' may be left off. Empty with dryRun lists the top level."},
-				    "part":   {"type":"string","description":"Use this part's context menu instead of the menu bar, by part id from eclipse_list_ui_targets."},
+				    "part":   {"type":"string","description":"Use this part's context menu instead of the menu bar, by part id from eclipse_list_ui_targets. Several parts with one id: id@editor input path or title."},
 				    "contextMenu": {"type":"boolean","default":false,"description":"Use the active part's context menu instead of the menu bar. Implied by 'part'."},
 				    "dryRun": {"type":"boolean","default":false,"description":"Resolve and report without selecting anything."}
 				  },

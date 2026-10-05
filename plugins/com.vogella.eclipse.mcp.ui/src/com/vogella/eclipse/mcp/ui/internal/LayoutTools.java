@@ -135,7 +135,7 @@ public final class LayoutTools {
 					{
 					  "type": "object",
 					  "properties": {
-					    "part":  {"type":"string","description":"Part id, from eclipse_list_ui_targets."},
+					    "part":  {"type":"string","description":"Part id, from eclipse_list_ui_targets. Several parts with one id: id@editor input path or title."},
 					    "state": {"type":"string","enum":["maximized","minimized","restored","activated"],"description":"Omit to only activate. activated gives focus and brings the part forward; it is not a window state, so the answer reports focusGiven and 'state' stays the window state the part had."}
 					  },
 					  "required": ["part"],
@@ -160,12 +160,11 @@ public final class LayoutTools {
 			if (page == null) {
 				return new JsonObject().put("changed", Boolean.FALSE).put("reason", "There is no active page."); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 			}
-			IWorkbenchPartReference reference = null;
-			for (IWorkbenchPartReference candidate : ScreenshotTools.ListTargets.allReferences(page)) {
-				if (partId.equals(candidate.getId())) {
-					reference = candidate;
-					break;
-				}
+			IWorkbenchPartReference reference;
+			try {
+				reference = PartAddress.find(page, partId);
+			} catch (IllegalStateException e) {
+				return new JsonObject().put("changed", Boolean.FALSE).put("reason", e.getMessage()); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 			if (reference == null) {
 				return new JsonObject().put("changed", Boolean.FALSE) //$NON-NLS-1$
