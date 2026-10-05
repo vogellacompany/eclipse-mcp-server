@@ -106,6 +106,22 @@ public final class WidgetTools {
 		return current;
 	}
 
+	/** The path eclipse_get_widget_tree reports for a Control under {@code root}, or null when it is not below it; Items are not addressed. */
+	static String pathOf(Control root, Control control) {
+		StringBuilder path = new StringBuilder();
+		for (Control current = control; current != root; current = current.getParent()) {
+			if (current == null) {
+				return null;
+			}
+			int index = Arrays.asList(current.getParent() == null ? new Control[0] : current.getParent().getChildren()).indexOf(current);
+			if (index < 0) {
+				return null;
+			}
+			path.insert(0, path.isEmpty() ? String.valueOf(index) : index + "/"); //$NON-NLS-1$
+		}
+		return path.isEmpty() ? "/" : path.toString(); //$NON-NLS-1$
+	}
+
 	/**
 	 * The rows of a Table or Tree, which an r prefixed path segment addresses.
 	 * <p>

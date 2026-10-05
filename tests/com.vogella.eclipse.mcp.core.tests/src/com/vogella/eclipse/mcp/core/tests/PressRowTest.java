@@ -13,10 +13,12 @@ import org.eclipse.swt.SWTError;
 import org.eclipse.swt.SWTException;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
+import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.TableItem;
+import org.eclipse.swt.widgets.Text;
 import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeColumn;
 import org.eclipse.swt.widgets.TreeItem;
@@ -72,6 +74,92 @@ class PressRowTest {
 		assertSame(child, tree.getSelection()[0]);
 		assertTrue(result.contains("\"selectedItem\": \"child\""), result);
 		assertTrue(result.contains("\"selectionHoldsItem\": true"), result);
+	}
+
+	@Test
+	void focusMovesTheKeyboardFocusToTheTreeBeforeSelecting() {
+		Text other = new Text(shell, SWT.SINGLE);
+		Tree tree = new Tree(shell, SWT.SINGLE);
+		TreeItem row = new TreeItem(tree, SWT.NONE);
+		row.setText("row");
+		shell.open();
+		shell.forceActive();
+		other.forceFocus();
+
+		String result = PressWidgetTool.pressRow(row, "r0", null, false, new PressWidgetTool.Focus(shell)).toString();
+
+		for (String field : List.of("focusControlBefore", "focusControlAfter", "focused", "shellActive")) {
+			assertTrue(result.contains("\"" + field + "\""), result);
+		}
+		assertTrue(result.contains("\"path\": \"1\""), result);
+		boolean focused = result.contains("\"focused\": true");
+		assertEquals(focused, display.getFocusControl() == tree, result);
+		assertEquals(!focused, result.contains("\"focusNote\""), result);
+		if (focused) {
+			assertTrue(result.contains("\"class\": \"Tree\""), result);
+		}
+		assertSame(row, tree.getSelection()[0]);
+	}
+
+	@Test
+	void focusMovesTheKeyboardFocusToTheButton() {
+		Text other = new Text(shell, SWT.SINGLE);
+		Button button = new Button(shell, SWT.PUSH);
+		shell.open();
+		shell.forceActive();
+		other.forceFocus();
+
+		String result = PressWidgetTool.pressButton(button, "1", new PressWidgetTool.Focus(shell)).toString();
+
+		boolean focused = result.contains("\"focused\": true");
+		assertEquals(focused, display.getFocusControl() == button, result);
+		assertTrue(result.contains("\"focusControlBefore\""), result);
+		assertTrue(result.contains("\"pressed\": true"), result);
+	}
+
+	@Test
+	void aFocusListenerThatDisposesTheButtonGivesAStructuredAnswer() {
+		Button button = new Button(shell, SWT.PUSH);
+		Text other = new Text(shell, SWT.SINGLE);
+		shell.open();
+		shell.forceActive();
+		other.forceFocus();
+		button.addListener(SWT.FocusIn, e -> button.dispose());
+
+		String result = PressWidgetTool.pressButton(button, "0", new PressWidgetTool.Focus(shell)).toString();
+
+		// the display may not deliver FocusIn here, so the disposal path is then not reached
+		assumeTrue(button.isDisposed(), result);
+		assertTrue(result.contains("\"widgetDisposed\": true"), result);
+		assertTrue(result.contains("\"pressed\": false"), result);
+	}
+
+	@Test
+	void focusMovesTheKeyboardFocusToTheTableOfAColumnHeader() {
+		Text other = new Text(shell, SWT.SINGLE);
+		Table table = new Table(shell, SWT.NONE);
+		TableColumn name = new TableColumn(table, SWT.NONE);
+		name.setText("Name");
+		name.setWidth(50);
+		table.setHeaderVisible(true);
+		shell.open();
+		shell.forceActive();
+		other.forceFocus();
+
+		String result = PressWidgetTool.pressColumn(name, "1/i0", null, new PressWidgetTool.Focus(shell)).toString();
+
+		boolean focused = result.contains("\"focused\": true");
+		assertEquals(focused, display.getFocusControl() == table, result);
+		assertTrue(result.contains("\"sortColumnBefore\""), result);
+	}
+
+	@Test
+	void focusIsNotReportedUnlessAsked() {
+		Tree tree = new Tree(shell, SWT.SINGLE);
+		TreeItem row = new TreeItem(tree, SWT.NONE);
+		shell.open();
+
+		assertTrue(!PressWidgetTool.pressRow(row, "r0", null, false).toString().contains("focused"));
 	}
 
 	@Test
