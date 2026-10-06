@@ -36,7 +36,7 @@ public final class LayoutTools {
 
 		@Override
 		public String getDescription() {
-			return "Moves, resizes, maximizes or restores a window. CHANGES WHAT THE USER SEES, in the same way eclipse_set_ide_visibility does. Its purpose is the states that only exist at a particular size: tab overflow and its chevron, text truncation and ellipsis, scrollbars, sash and border rendering at the edges between stacks, and reflowing form layouts. None of those can be reached by any other tool here, and each is drawn by a different set of CSS selectors. The answer reports previousBounds and previousMaximized, so a caller can put the window back exactly as it was, which is what makes this safe to use on somebody's running IDE. Give x, y, width and height in points, any subset, or maximized on its own."; //$NON-NLS-1$
+			return "Moves, resizes, maximizes or restores a window. CHANGES WHAT THE USER SEES, in the same way eclipse_set_ide_visibility does. Its purpose is the states that only exist at a particular size: tab overflow and its chevron, text truncation and ellipsis, scrollbars, sash and border rendering at the edges between stacks, and reflowing form layouts. None of those can be reached by any other tool here, and each is drawn by a different set of CSS selectors. The answer reports previousBounds and previousMaximized, so a caller can put the window back exactly as it was, which is what makes this safe to use on somebody's running IDE. Give x, y, width and height in points, any subset, or maximized on its own. monitor moves the window onto another monitor, by its index in eclipse_get_display_info, which is how a scale factor change is reached on a mixed-DPI setup; on Wayland, where a client cannot position its window, it goes through a fullscreen on that monitor and back, and the answer reports placement and onRequestedMonitor, read there from the window's scale factor since a Wayland client cannot see its own position."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -46,6 +46,7 @@ public final class LayoutTools {
 					  "type": "object",
 					  "properties": {
 					    "shellTitle": {"type":"string","description":"Title of the shell, or a substring. Omit for the active one."},
+					    "monitor":    {"type":"integer","minimum":0,"description":"Index of the monitor to move the window onto, as eclipse_get_display_info lists them. x and y then count from that monitor's client area, and the window is centred there when they are omitted. A maximized window stays maximized unless maximized is given."},
 					    "x":          {"type":"integer","description":"Left edge in points, not pixels, on the display the shell is on."},
 					    "y":          {"type":"integer","description":"Top edge in points."},
 					    "width":      {"type":"integer","minimum":100,"description":"Width in points, not pixels: on a scaled display the widget covers more pixels than this."},
@@ -64,11 +65,45 @@ public final class LayoutTools {
 			Integer y = optional(arguments, "y"); //$NON-NLS-1$
 			Integer width = optional(arguments, "width"); //$NON-NLS-1$
 			Integer height = optional(arguments, "height"); //$NON-NLS-1$
+			Integer monitorIndex = optional(arguments, "monitor"); //$NON-NLS-1$
 			Boolean maximized = arguments != null && arguments.get("maximized") instanceof Boolean value ? value : null; //$NON-NLS-1$
-			if (x == null && y == null && width == null && height == null && maximized == null) {
-				return McpToolResult.error("Give at least one of x, y, width, height or maximized."); //$NON-NLS-1$
+			if (x == null && y == null && width == null && height == null && maximized == null
+					&& monitorIndex == null) {
+				return McpToolResult.error("Give at least one of monitor, x, y, width, height or maximized."); //$NON-NLS-1$
+			}
+			if (monitorIndex != null) {
+				return moveToMonitor(shellTitle, monitorIndex.intValue(), x, y, width, height, maximized, monitor);
 			}
 			return UiThread.call(15, () -> apply(shellTitle, x, y, width, height, maximized));
+		}
+
+		private static McpToolResult moveToMonitor(String shellTitle, int index, Integer x, Integer y,
+				Integer width, Integer height, Boolean maximized, IProgressMonitor monitor) {
+			MonitorPlacement.Ui ui = step -> {
+				UiThread.Outcome outcome = UiThread.run(5, () -> {
+					step.run();
+					return new JsonObject();
+				});
+				if (outcome.error() != null) {
+					throw new IllegalStateException(outcome.error());
+				}
+			};
+			try {
+				Shell[] shell = new Shell[1];
+				ui.run(() -> shell[0] = ScreenshotTools.Capture.findShell(Workbenches.display(), shellTitle));
+				JsonObject result = shell[0] == null ? noShell(shellTitle)
+						: MonitorPlacement.move(ui, shell[0], index, x, y, width, height, maximized, monitor);
+				return McpToolResult.of(result.toString());
+			} catch (IllegalStateException e) {
+				return McpToolResult.error(e.getMessage());
+			}
+		}
+
+		private static JsonObject noShell(String shellTitle) {
+			return new JsonObject().put("changed", Boolean.FALSE) //$NON-NLS-1$
+					.put("reason", shellTitle == null //$NON-NLS-1$
+							? "This IDE has no window to resize." //$NON-NLS-1$
+							: "No shell matching '%s'.".formatted(shellTitle)); //$NON-NLS-1$
 		}
 
 		private static JsonObject apply(String shellTitle, Integer x, Integer y, Integer width, Integer height,
@@ -76,10 +111,7 @@ public final class LayoutTools {
 			Display display = Workbenches.display();
 			Shell shell = ScreenshotTools.Capture.findShell(display, shellTitle);
 			if (shell == null) {
-				return new JsonObject().put("changed", Boolean.FALSE) //$NON-NLS-1$
-						.put("reason", shellTitle == null //$NON-NLS-1$
-								? "This IDE has no window to resize." //$NON-NLS-1$
-								: "No shell matching '%s'.".formatted(shellTitle)); //$NON-NLS-1$
+				return noShell(shellTitle);
 			}
 			Rectangle before = shell.getBounds();
 			boolean wasMaximized = shell.getMaximized();
