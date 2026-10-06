@@ -9,6 +9,14 @@ rather than because we are.
 
 ## Open
 
+### SWT GTK: `GC.copyArea` on a display GC returns a stale root read at GDK scale 2
+
+At `GDK_SCALE=2` the first `copyArea(Image, x, y)` of a display GC for an area is returned again for every later read of that area, while a read of a different area is current and `gdk_pixbuf_get_from_window` on the same area is current too.
+A dialog opened after a first capture was photographed as the workbench under it, and a closed dialog stayed in the picture.
+`GC.java` `copyArea(Image, int, int)` sets `gdk_cairo_set_source_window` on the root window and paints through a group.
+`ScreenPixels` reads through the pixbuf call instead, and `ScreenshotTools` falls back to `copyArea` where that is unavailable.
+Filed as https://github.com/eclipse-platform/eclipse.platform.swt/issues/3685.
+
 ### SWT: `Control.print` does not paint a `CTabFolder`'s `topRight` control
 
 A print of a `CTabFolder` omits its `topRight` children, which in the workbench
@@ -22,7 +30,7 @@ about x=460, which cannot happen on screen. So the folder paints itself without
 its `topRight` rather than merely skipping a child.
 
 Observed on GTK at zoom 200 through `eclipse_screenshot` with `includeToolbar`.
-Nothing filed yet. The consequence for this project is that `includeToolbar`
+Filed as https://github.com/eclipse-platform/eclipse.platform.swt/issues/3685. The consequence for this project is that `includeToolbar`
 cannot show a view toolbar; capture the shell and crop to bounds from
 `eclipse_get_widget_tree` instead.
 
