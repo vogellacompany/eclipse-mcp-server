@@ -481,13 +481,16 @@ public final class ScreenshotTools {
 			Image image = DeviceScale.screenTarget(display, area.width, area.height, zoom);
 			String method = "rootCapture"; //$NON-NLS-1$
 			try {
-				GC gc = new GC(display);
-				try {
-					gc.copyArea(image, area.x, area.y);
-				} finally {
-					gc.dispose();
+				ImageData rootData = screenUnreliable ? null : ScreenPixels.read(area.x, area.y, area.width, area.height, zoom);
+				if (rootData == null) {
+					GC gc = new GC(display);
+					try {
+						gc.copyArea(image, area.x, area.y);
+					} finally {
+						gc.dispose();
+					}
+					rootData = screenUnreliable ? null : DeviceScale.screenData(image, zoom);
 				}
-				ImageData rootData = screenUnreliable ? null : DeviceScale.screenData(image, zoom);
 				boolean useWidgetPrint = screenUnreliable || isBlank(rootData);
 				if (useWidgetPrint && printable instanceof Shell shell
 						&& shell.getChildren().length > 0) {
