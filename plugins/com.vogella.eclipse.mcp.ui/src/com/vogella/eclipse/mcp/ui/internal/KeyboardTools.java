@@ -180,7 +180,7 @@ public final class KeyboardTools {
 
 		@Override
 		public String getDescription() {
-			return "Posts real key events through Display.post to whatever control has focus, for the cases the document API cannot reach: Ctrl+Space to open content assist, Escape to close a popup, Enter to accept a proposal, arrow keys to move the selection in a proposal table, Tab, Backspace. CHANGES WHAT THE IDE DOES, which is whatever that key does with the current focus. Take a key like 'Ctrl+Space', 'Escape', 'Down', 'Enter', 'Tab', 'BackSpace', or a single character. Display.post goes to the window that has OS focus, so this refuses when the IDE is not the active window rather than sending the key somewhere else. On Wayland Display.post is often ignored by the compositor; the answer reports whether the post was accepted and whether focus was inside the IDE, and for entering plain characters eclipse_type_text is the reliable path. count repeats the key."; //$NON-NLS-1$
+			return "Posts real key events through Display.post to whatever control has focus, for the cases the document API cannot reach: Ctrl+Space to open content assist, Escape to close a popup, Enter to accept a proposal, arrow keys to move the selection in a proposal table, Tab, Backspace. CHANGES WHAT THE IDE DOES, which is whatever that key does with the current focus. Take a key like 'Ctrl+Space', 'Escape', 'Down', 'Enter', 'Tab', 'BackSpace', or a single character. There is no Menu key: Shift+F10 opens the focused control's context menu instead, and on GTK it opens at the pointer rather than at the selected row, so put the pointer there first with eclipse_click and button none. Display.post goes to the window that has OS focus, so this refuses when the IDE is not the active window rather than sending the key somewhere else. On Wayland Display.post is often ignored by the compositor; the answer reports whether the post was accepted and whether focus was inside the IDE, and for entering plain characters eclipse_type_text is the reliable path. count repeats the key."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -288,6 +288,10 @@ public final class KeyboardTools {
 		int keyCode = named(main);
 		char character = 0;
 		if (keyCode == 0) {
+			if (List.of("menu", "contextmenu", "apps", "application").contains(main.toLowerCase(Locale.ROOT))) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+				throw new IllegalArgumentException(
+						"SWT cannot post the Menu key. Send Shift+F10, which opens the focused control's context menu; on GTK it opens at the pointer, so move the pointer onto the row first with eclipse_click and button none."); //$NON-NLS-1$
+			}
 			if (main.length() != 1) {
 				throw new IllegalArgumentException(
 						"'%s' is not a known key. Use a name like Ctrl+Space, Escape, Down or Enter, or a single character." //$NON-NLS-1$

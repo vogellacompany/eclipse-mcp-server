@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -67,5 +68,17 @@ class KeyboardToolsTest {
 		Map<String, Object> plain = TestFixture.parse(KeyboardTools.describe("+").toString());
 		assertEquals("+", plain.get("character"));
 		assertTrue(((List<Object>) plain.get("modifiers")).isEmpty());
+	}
+
+	@Test
+	void theMenuKeyIsRefusedWithShiftF10AsTheWayToAContextMenu() throws Exception {
+		IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+				() -> KeyboardTools.describe("Menu"));
+		assertTrue(refused.getMessage().contains("Shift+F10"), refused.getMessage());
+		for (String alias : List.of("ContextMenu", "Apps", "application")) {
+			assertThrows(IllegalArgumentException.class, () -> KeyboardTools.describe(alias), alias);
+		}
+		assertEquals(Integer.valueOf(SWT.F10),
+				TestFixture.parse(KeyboardTools.describe("Shift+F10").toString()).get("keyCode"));
 	}
 }
