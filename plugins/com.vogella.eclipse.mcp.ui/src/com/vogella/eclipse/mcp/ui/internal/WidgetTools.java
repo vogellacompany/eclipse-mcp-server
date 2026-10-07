@@ -10,6 +10,7 @@ import java.util.Set;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
@@ -178,10 +179,25 @@ public final class WidgetTools {
 	 * A {@code part} capture prints the part from its top left corner, which is
 	 * where {@code Display.map} answers from, so the map is used as is. A stack
 	 * capture is not trustworthy on a HiDPI monitor (see docs/platform-bugs.md),
-	 * so no attempt is made to correct its client-area offset here.
+	 * so no attempt is made to correct its client-area offset here. A shell
+	 * capture reads the screen from the shell's bounds, which on Cocoa include
+	 * the title bar above the client area {@code Display.map} answers in.
 	 */
-	static Rectangle mapToCapture(Display display, Control from, Control target, Rectangle rectangle) {
-		return display.map(from, target, rectangle);
+	public static Rectangle mapToCapture(Display display, Control from, Control target, Rectangle rectangle) {
+		Rectangle mapped = display.map(from, target, rectangle);
+		if (target instanceof Shell shell) {
+			Point inset = clientInset(shell);
+			mapped.x += inset.x;
+			mapped.y += inset.y;
+		}
+		return mapped;
+	}
+
+	/** Where the shell's client area starts inside its bounds: the title bar on Cocoa, nothing where the bounds exclude the decorations. */
+	static Point clientInset(Shell shell) {
+		Point client = shell.getDisplay().map(shell, null, 0, 0);
+		Rectangle bounds = shell.getBounds();
+		return new Point(client.x - bounds.x, client.y - bounds.y);
 	}
 
 	private static Rectangle rectangleOf(Widget widget) {
@@ -230,15 +246,12 @@ public final class WidgetTools {
 	}
 
 	/**
-	 * Where a widget sits, in the shell's client coordinates and on the screen.
+	 * Where a widget sits, in a shell capture and on the screen.
 	 * <p>
 	 * Both, because neither answers on its own. The parent-relative bounds cannot
 	 * be summed up the ancestor chain: a Group offsets its children by its label,
-	 * so the total misses by the trim of every composite on the way. And the shell
-	 * relative position is not where a synthetic click goes either, since it is
-	 * measured from the shell's client area while the window manager's title bar
-	 * sits above that; taking the two for the same thing lands a click one row off
-	 * and looks like the bounds themselves were wrong.
+	 * so the total misses by the trim of every composite on the way. And a click
+	 * needs the screen position, not the one in the image.
 	 */
 	private static void addPlacement(JsonObject json, Widget widget) {
 		Control parent = parentOf(widget);
@@ -255,7 +268,7 @@ public final class WidgetTools {
 		// a shell's own bounds are already display coordinates, and mapping them
 		// from a parent it does not have would answer about the wrong window
 		Rectangle inShell = widget == shell ? new Rectangle(0, 0, own.width, own.height)
-				: parent == null ? null : display.map(parent, shell, own);
+				: parent == null ? null : mapToCapture(display, parent, shell, own);
 		if (inShell == null) {
 			return;
 		}
@@ -278,7 +291,7 @@ public final class WidgetTools {
 
 		@Override
 		public String getDescription() {
-			return "Lists the SWT widget hierarchy of a part or a shell, with each widget's class, bounds, CSS id and CSS class, and the path that addresses it. Changes nothing. This is the answer to 'what am I actually looking at', which otherwise has to be inferred from a screenshot or from reading somebody else's source, and it is where the paths for eclipse_inspect_widget come from. Filter by class to ask a narrow question, such as which Trees a view contains and what their ids are. Paths are slash separated indices, which is deliberate: most SWT widgets have no stable name, while an index survives a resize and a restart in a way screen coordinates do not. THREE COORDINATE SYSTEMS ARE REPORTED and they are not interchangeable: 'bounds' is relative to the widget's own parent and cannot be summed up the ancestor chain, since a Group offsets its children by its label; 'boundsInShell' is measured from the shell's CLIENT area, which is what a shell capture shows and what a highlight on one needs; 'boundsInDisplay' is absolute screen position, which is the only one a synthetic click or an external screen tool can use. The shell's title bar sits above its client area, so adding the shell's own position to boundsInShell lands short by the height of the window decorations, which reads as bounds that are one row out. Set includeItems to enumerate Items as well, the buttons of a toolbar above all: a ToolItem is not a Control, so it appears in no walk over the control hierarchy, while the CSS engine styles each one as its own element."; //$NON-NLS-1$
+			return "Lists the SWT widget hierarchy of a part or a shell, with each widget's class, bounds, CSS id and CSS class, and the path that addresses it. Changes nothing. This is the answer to 'what am I actually looking at', which otherwise has to be inferred from a screenshot or from reading somebody else's source, and it is where the paths for eclipse_inspect_widget come from. Filter by class to ask a narrow question, such as which Trees a view contains and what their ids are. Paths are slash separated indices, which is deliberate: most SWT widgets have no stable name, while an index survives a resize and a restart in a way screen coordinates do not. THREE COORDINATE SYSTEMS ARE REPORTED and they are not interchangeable: 'bounds' is relative to the widget's own parent and cannot be summed up the ancestor chain, since a Group offsets its children by its label; 'boundsInShell' is measured from the shell's own bounds, which is what an eclipse_screenshot of the shell shows and what a highlight on one needs, title bar included where the window system counts it into the bounds (macOS); 'boundsInDisplay' is absolute screen position, which is the only one a synthetic click or an external screen tool can use. Set includeItems to enumerate Items as well, the buttons of a toolbar above all: a ToolItem is not a Control, so it appears in no walk over the control hierarchy, while the CSS engine styles each one as its own element."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -294,7 +307,7 @@ public final class WidgetTools {
 					    "filter":     {"type":"string","description":"Only report widgets whose simple class name contains this text, case insensitive, e.g. 'Tree' or 'ToolBar'. The walk still descends through everything."},
 				    "includeToolbar": {"type":"boolean","default":false,"description":"Start from the surrounding part stack rather than the part. A view's toolbar is built in the stack's CTabFolder, not in the part, so it is in no plain part tree at all; this is how to reach it."},
 					    "includeItems": {"type":"boolean","default":false,"description":"Also enumerate Items, which are not Controls and are therefore in no plain walk: ToolItems, CTabItems, TabItems, CoolItems, ExpandItems and the columns of a Table or Tree. Their paths carry an i prefix, as in 2/i0, and that is the only way eclipse_inspect_widget can address one. Off by default to keep the tree short."},
-				    "includeRows": {"type":"boolean","default":false,"description":"Also enumerate the rows of a Table or Tree, with an r prefixed path (0/r2) that eclipse_inspect_widget, eclipse_set_selection and eclipse_expand_row accept and, beside the row bounds, boundsInShell mapped to the shell's client area so a row can be highlighted on a shell=popup screenshot, and boundsInDisplay for a click. selected marks the row the widget has selected. ONLY THE ROWS THE TREE HAS CREATED ARE ROWS: the children of a collapsed node do not exist yet and have no path, so a view that comes up collapsed reports two or three entries and looks complete. Each tree row therefore carries childCount and expanded, and a collapsed node with children says so; open it with eclipse_expand_row and ask again. The children of an expanded node ARE reported, nested under its own path. Off by default because a big Table has many rows."},
+				    "includeRows": {"type":"boolean","default":false,"description":"Also enumerate the rows of a Table or Tree, with an r prefixed path (0/r2) that eclipse_inspect_widget, eclipse_set_selection and eclipse_expand_row accept and, beside the row bounds, boundsInShell so a row can be highlighted on a shell=popup screenshot, and boundsInDisplay for a click. selected marks the row the widget has selected. ONLY THE ROWS THE TREE HAS CREATED ARE ROWS: the children of a collapsed node do not exist yet and have no path, so a view that comes up collapsed reports two or three entries and looks complete. Each tree row therefore carries childCount and expanded, and a collapsed node with children says so; open it with eclipse_expand_row and ask again. The children of an expanded node ARE reported, nested under its own path. Off by default because a big Table has many rows."},
 				    "maxDepth":   {"type":"integer","default":6,"minimum":1,"maximum":30,"description":"How far down the widget hierarchy to walk. A whole workbench window is dozens of levels deep, so the default stops well short of it."},
 					    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000}
 					  },
@@ -433,7 +446,7 @@ public final class WidgetTools {
 				boolean expanded = node && ((org.eclipse.swt.widgets.TreeItem) rows[i]).getExpanded();
 				total[0]++;
 				if (into.size() < maxResults) {
-					org.eclipse.swt.graphics.Rectangle inShell = table.getDisplay().map(table, shell, rowBounds);
+					org.eclipse.swt.graphics.Rectangle inShell = mapToCapture(table.getDisplay(), table, shell, rowBounds);
 					JsonObject row = new JsonObject().put("path", rowPath) //$NON-NLS-1$
 							.put("kind", "row") //$NON-NLS-1$ //$NON-NLS-2$
 							.put("class", rows[i].getClass().getName()) //$NON-NLS-1$

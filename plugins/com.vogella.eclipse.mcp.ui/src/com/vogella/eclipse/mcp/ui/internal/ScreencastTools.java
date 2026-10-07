@@ -9,6 +9,7 @@ import java.util.Map;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.swt.graphics.ImageData;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
@@ -70,7 +71,12 @@ public final class ScreencastTools {
 		}
 	}
 
-	/** The union of the parts' bounds in the shell's client area, which is what a shell frame is drawn in. */
+	/** A region given in boundsInShell, moved to the client area a composed shell frame paints. */
+	public static Rectangle inClientArea(Rectangle inShell, Point inset) {
+		return new Rectangle(inShell.x - inset.x, inShell.y - inset.y, inShell.width, inShell.height);
+	}
+
+	/** The union of the parts' bounds in boundsInShell coordinates. */
 	private static Rectangle unionOfParts(Display display, Shell shell, List<String> partIds) {
 		Rectangle union = null;
 		for (String id : partIds) {
@@ -79,7 +85,7 @@ public final class ScreencastTools {
 				throw new IllegalArgumentException(
 						"No part '%s', or it is not visible, so it cannot bound the recording.".formatted(id)); //$NON-NLS-1$
 			}
-			Rectangle inShell = display.map(control.getParent(), shell, control.getBounds());
+			Rectangle inShell = WidgetTools.mapToCapture(display, control.getParent(), shell, control.getBounds());
 			union = union == null ? inShell : union.union(inShell);
 		}
 		return union;
@@ -132,7 +138,7 @@ public final class ScreencastTools {
 					    "maxFrames":      {"type":"integer","default":120,"minimum":1,"maximum":1000,"description":"Recording stops on its own after this many frames."},
 					    "maxWidth":       {"type":"integer","minimum":100,"maximum":4000,"description":"Cap the frame width. Defaults to the target's own width, which keeps every frame pixel-exact. A cap below the target width resamples every frame, and unless the target width is a whole multiple of the cap the fraction softens all the text; the answer reports downscaledTo and resampled so that is never a surprise. A GIF of full HD frames is tens of megabytes, which is the only reason to cap."},
 					    "directory":      {"type":"string","description":"Absolute directory for the frames. Created when missing; defaults to a temporary directory."},
-					    "bounds":         {"type":"string","description":"Record only this region, as x,y widthxheight in points: for a shell in its client area, the coordinate system eclipse_get_widget_tree reports as boundsInShell, for a part relative to the part. Clipped to the target."},
+					    "bounds":         {"type":"string","description":"Record only this region, as x,y widthxheight in points: for a shell the coordinate system eclipse_get_widget_tree reports as boundsInShell, for a part relative to the part. Clipped to the target."},
 					    "parts":          {"type":"array","items":{"type":"string"},"description":"For a shell recording, record only the union of these parts' bounds, by part id, so a shell recording covers the editor area alone. The parts have to be visible. Cannot be combined with bounds."},
 					    "caption":        {"type":"string","description":"Text drawn on every frame of this segment, white on a dark bar, for a recording a person reads."},
 					    "captionPosition":{"type":"string","enum":["over","above","below"],"default":"over","description":"over draws the bar translucently over the bottom of the picture; above and below add an opaque bar of the bar's height to the frame outside the picture, so a cropped editor's page tabs stay readable. With resume, omitted keeps the previous segment's."},
@@ -226,6 +232,9 @@ public final class ScreencastTools {
 					described = "shell '" + shell.getText() + "'"; //$NON-NLS-1$ //$NON-NLS-2$
 					if (!partIds.isEmpty()) {
 						crop = unionOfParts(display, shell, partIds);
+					}
+					if (crop != null && composed) {
+						crop = inClientArea(crop, WidgetTools.clientInset(shell));
 					}
 				} else {
 					if (!partIds.isEmpty()) {

@@ -43,6 +43,20 @@ class OverlaysTest {
 	}
 
 	@Test
+	void aClientAreaCanvasMovesHighlightsUpByTheTitleBar() {
+		Overlays.Highlight combo = new Overlays.Highlight("0/2", null, new Rectangle(333, 97, 120, 24),
+				Overlays.DEFAULT_COLOR, null, false, 3, null, null);
+		Overlays.Highlight shell = new Overlays.Highlight("/", null, new Rectangle(0, 0, 760, 560),
+				Overlays.DEFAULT_COLOR, null, false, 3, null, null);
+
+		List<Overlays.Highlight> moved = Overlays.translate(List.of(combo, shell), 0, -28,
+				new Rectangle(0, 0, 760, 532));
+
+		assertEquals(new Rectangle(333, 69, 120, 24), moved.get(0).points());
+		assertEquals(new Rectangle(0, 0, 760, 532), moved.get(1).points());
+	}
+
+	@Test
 	void paddingWidensTheRectangleInPointsBeforeItIsScaled() throws Exception {
 		assertArrayEquals(new int[] { 4, 4, 4, 4 }, Overlays.parsePadding(Integer.valueOf(4)));
 		assertArrayEquals(new int[] { 1, 2, 3, 4 }, Overlays.parsePadding("1,2,3,4"));
