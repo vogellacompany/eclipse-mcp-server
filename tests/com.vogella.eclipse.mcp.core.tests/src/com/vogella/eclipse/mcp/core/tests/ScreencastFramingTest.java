@@ -3,6 +3,7 @@ package com.vogella.eclipse.mcp.core.tests;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +27,12 @@ class ScreencastFramingTest {
 		assertNull(ScreencastTools.parseBounds("10,20"));
 		assertNull(ScreencastTools.parseBounds("ten,20 300x200"));
 		assertNull(ScreencastTools.parseBounds(null));
+	}
+
+	@Test
+	void aShellRegionIsMovedIntoTheClientArea() {
+		assertEquals(new Rectangle(333, 69, 120, 24),
+				ScreencastTools.inClientArea(new Rectangle(333, 97, 120, 24), new Point(0, 28)));
 	}
 
 	@Test

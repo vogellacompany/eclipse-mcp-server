@@ -24,6 +24,7 @@ import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.ImageData;
 import org.eclipse.swt.graphics.ImageLoader;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.e4.ui.model.application.ui.basic.MPart;
@@ -440,7 +441,6 @@ public final class ScreenshotTools {
 				}
 				area = shell.getBounds();
 				requested = new Rectangle(area.x, area.y, area.width, area.height);
-				exclusion = DECORATIONS_EXCLUDED;
 				printable = shell;
 				WindowCut cut = WindowCut.of(area, shell);
 				area = cut.area();
@@ -525,6 +525,11 @@ public final class ScreenshotTools {
 					// window decorations cannot be printed, see requestedArea and its note
 					clientArea = shell.getClientArea();
 					pieces = paintablesOf(shell);
+					exclusion = DECORATIONS_EXCLUDED;
+					// highlights are placed in the shell's bounds, the composition starts at its client area
+					Point inset = WidgetTools.clientInset(shell);
+					overlays = Overlays.translate(overlays, -inset.x, -inset.y,
+							new Rectangle(0, 0, clientArea.width, clientArea.height));
 				}
 				if (useWidgetPrint && printable != null) {
 					final Control painted = printable;

@@ -46,6 +46,32 @@ public final class Overlays {
 			int lineWidth, String labelPosition, String error) {
 	}
 
+	/**
+	 * Moves every resolved highlight by the offset, for an image that starts elsewhere than the target, and keeps
+	 * a highlight of the whole target on the canvas.
+	 */
+	public static List<Highlight> translate(List<Highlight> highlights, int dx, int dy, Rectangle canvas) {
+		if (dx == 0 && dy == 0) {
+			return highlights;
+		}
+		List<Highlight> moved = new ArrayList<>(highlights.size());
+		for (Highlight h : highlights) {
+			Rectangle points = h.points() == null ? null
+					: new Rectangle(h.points().x + dx, h.points().y + dy, h.points().width, h.points().height);
+			if (points != null && isWholeTarget(h)) {
+				// the target's decorations are not on this canvas, so its outline is the canvas edge
+				points = points.intersection(canvas);
+			}
+			moved.add(new Highlight(h.path(), h.bounds(), points, h.color(), h.label(), h.fill(), h.lineWidth(),
+					h.labelPosition(), h.error()));
+		}
+		return moved;
+	}
+
+	private static boolean isWholeTarget(Highlight h) {
+		return h.bounds() == null && h.path() != null && (h.path().isBlank() || "/".equals(h.path().strip())); //$NON-NLS-1$
+	}
+
 	/** Grows a rectangle by the padding, which is where the air around a widget comes from. */
 	public static Rectangle pad(Rectangle rectangle, int[] padding) {
 		return new Rectangle(rectangle.x - padding[3], rectangle.y - padding[0],
