@@ -233,7 +233,7 @@ public final class ScreenshotTools {
 
 		@Override
 		public String getDescription() {
-			return "Captures the IDE as a PNG and writes it to a file, returning the path. Targets are a workbench part by id, a shell by title, or the whole display; passing part or shellTitle selects the target on its own. Omitting both shellTitle and part captures the active workbench window's shell, which is also what a target of shell without a title does; the display target must be asked for explicitly. The answer reports which method worked: rootCapture reads the real screen pixels, widgetPrint paints the widget hierarchy instead, which is the fallback on a compositing window manager where reading the X11 root yields nothing, and also what is used inside an atomic eclipse_run_script, where no paint has happened yet and the screen would show what was there before. ROOT CAPTURE READS WHATEVER IS IN FRONT: on a desktop this IDE shares with a person, a window over the shell is photographed instead of the shell, and it is not a failure any other field can show, since a window sitting still is settled, converged and the right size. So a part or shell capture falls back to widgetPrint when this IDE is not the foreground application, and every answer carries 'foreground'; a display capture cannot fall back and says so in foregroundNote. Assert on 'foreground' rather than on eclipse_set_ide_visibility having been called, because that asks the window system for focus and the window system can refuse. A capture taken inside such a batch reports sameTurnCapture. A shell capture is sized to the shell's client area and composes every visible child of the shell into one image, so the trim bars are in it; the window decorations, meaning the title bar and the frame, are drawn by the window manager and are present only when rootCapture succeeded. requestedArea names the bounds of what was asked for, and when the capture covers less than that, requestedAreaNote says what was excluded and why. For method widgetPrint the areas between parts that no print paints are replaced with the widget background colour before the image is written, and the answer counts them in unpaintedPixels, so a whole shell capture does not arrive outlined in filler colour. coverage says in words how much of the requested area the print actually covered, and says outright when a capture holds too much filler to be evidence about the UI, rather than leaving that judgement to be computed from the fraction. On a HiDPI or scaled display both methods capture the pixels the screen really holds rather than the points a widget is measured in, so a 200% display yields an image twice the widget's size in each direction; zoom is that ratio, read off the pixels that came back, deviceZoom is what the display paints at, and belowDeviceZoom says so when the two differ, which is the one thing a softer-than-expected picture cannot tell you by itself. Use it for UI work such as layout, theming and dialog rendering; for anything textual the other tools answer better and shorter. A part that is not visible is refused rather than captured blank, unless activate is set. capturedArea is the pixels returned, areaInPoints is the widget's own size, and zoom is the percentage between them. Set includeToolbar to capture a part together with its surrounding stack, but note that the stack's topRight children, the view toolbar among them, are not painted by any widget print rooted inside the window; capture the shell and crop to the bounds from eclipse_get_widget_tree for those."; //$NON-NLS-1$
+			return "Captures the IDE as a PNG and writes it to a file, returning the path. Targets are a workbench part by id, a shell by title, or the whole display; passing part or shellTitle selects the target on its own. Omitting both shellTitle and part captures the active workbench window's shell, which is also what a target of shell without a title does; the display target must be asked for explicitly. The answer reports which method worked: rootCapture reads the real screen pixels, and rootReader says whether through GDK's pixbuf read or the copyArea fallback, also when that read came back blank and widgetPrint took over, with pixbufFailure saying why the pixbuf read was not used, widgetPrint paints the widget hierarchy instead, which is the fallback on a compositing window manager where reading the X11 root yields nothing, and also what is used inside an atomic eclipse_run_script, where no paint has happened yet and the screen would show what was there before. ROOT CAPTURE READS WHATEVER IS IN FRONT: on a desktop this IDE shares with a person, a window over the shell is photographed instead of the shell, and it is not a failure any other field can show, since a window sitting still is settled, converged and the right size. So a part or shell capture falls back to widgetPrint when this IDE is not the foreground application, and every answer carries 'foreground'; a display capture cannot fall back and says so in foregroundNote. Assert on 'foreground' rather than on eclipse_set_ide_visibility having been called, because that asks the window system for focus and the window system can refuse. A capture taken inside such a batch reports sameTurnCapture. A shell capture is sized to the shell's client area and composes every visible child of the shell into one image, so the trim bars are in it; the window decorations, meaning the title bar and the frame, are drawn by the window manager and are present only when rootCapture succeeded. requestedArea names the bounds of what was asked for, and when the capture covers less than that, requestedAreaNote says what was excluded and why. For method widgetPrint the areas between parts that no print paints are replaced with the widget background colour before the image is written, and the answer counts them in unpaintedPixels, so a whole shell capture does not arrive outlined in filler colour. coverage says in words how much of the requested area the print actually covered, and says outright when a capture holds too much filler to be evidence about the UI, rather than leaving that judgement to be computed from the fraction. On a HiDPI or scaled display both methods capture the pixels the screen really holds rather than the points a widget is measured in, so a 200% display yields an image twice the widget's size in each direction; zoom is that ratio, read off the pixels that came back, deviceZoom is what the display paints at, and belowDeviceZoom says so when the two differ, which is the one thing a softer-than-expected picture cannot tell you by itself. Use it for UI work such as layout, theming and dialog rendering; for anything textual the other tools answer better and shorter. A part that is not visible is refused rather than captured blank, unless activate is set. capturedArea is the pixels returned, areaInPoints is the widget's own size, and zoom is the percentage between them. Set includeToolbar to capture a part together with its surrounding stack, but note that the stack's topRight children, the view toolbar among them, are not painted by any widget print rooted inside the window; capture the shell and crop to the bounds from eclipse_get_widget_tree for those."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -419,6 +419,9 @@ public final class ScreenshotTools {
 			Rectangle requested;
 			// what is outside the capture although the caller named it, if anything
 			String exclusion = null;
+			String windowSize = null;
+			// set when the area was cut at the native window, which only a screen read is bound by
+			String windowEdge = null;
 			Rectangle clientArea = null;
 			List<Paintable> pieces = null;
 			// what the pieces report about themselves, which the scan of the finished
@@ -439,6 +442,10 @@ public final class ScreenshotTools {
 				requested = new Rectangle(area.x, area.y, area.width, area.height);
 				exclusion = DECORATIONS_EXCLUDED;
 				printable = shell;
+				WindowCut cut = WindowCut.of(area, shell);
+				area = cut.area();
+				windowSize = cut.window();
+				windowEdge = cut.edge();
 			} else {
 				Control control = findPart(partId, activate);
 				if (control == null) {
@@ -454,6 +461,14 @@ public final class ScreenshotTools {
 				area = display.map(control.getParent(), null, control.getBounds());
 				requested = new Rectangle(area.x, area.y, area.width, area.height);
 				printable = control;
+				WindowCut cut = WindowCut.of(area, control.getShell());
+				area = cut.area();
+				windowSize = cut.window();
+				windowEdge = cut.edge();
+			}
+			if (windowEdge != null && (area.width <= 0 || area.height <= 0)) {
+				return Encoding.done(failure("Nothing of the target lies inside its native window, which the display holds at %s: the layout places it past the window edge, where the screen shows whatever is behind the window." //$NON-NLS-1$
+						.formatted(windowSize)));
 			}
 			if (area.width <= 0 || area.height <= 0) {
 				// zero bounds have two quite different causes and the caller can only
@@ -478,18 +493,30 @@ public final class ScreenshotTools {
 			// the screen holds device pixels, and a destination sized in points takes
 			// them downsampled with nothing in the answer to say so
 			int zoom = DeviceScale.screenZoom();
-			Image image = DeviceScale.screenTarget(display, area.width, area.height, zoom);
+			// only the copyArea fallback reads into an image; the pixbuf read and a widget print bring their own
+			Image image = null;
 			String method = "rootCapture"; //$NON-NLS-1$
+			String rootReader = null;
+			String pixbufFailure = null;
 			try {
-				ImageData rootData = screenUnreliable ? null : ScreenPixels.read(area.x, area.y, area.width, area.height, zoom);
-				if (rootData == null) {
-					GC gc = new GC(display);
-					try {
-						gc.copyArea(image, area.x, area.y);
-					} finally {
-						gc.dispose();
+				ImageData rootData = null;
+				if (!screenUnreliable) {
+					ScreenPixels.Read read = ScreenPixels.read(area.x, area.y, area.width, area.height, zoom);
+					rootData = read.data();
+					pixbufFailure = read.failure();
+					if (rootData != null) {
+						rootReader = "pixbuf"; //$NON-NLS-1$
+					} else {
+						image = DeviceScale.screenTarget(display, area.width, area.height, zoom);
+						GC gc = new GC(display);
+						try {
+							gc.copyArea(image, area.x, area.y);
+						} finally {
+							gc.dispose();
+						}
+						rootData = DeviceScale.screenData(image, zoom);
+						rootReader = "copyArea"; //$NON-NLS-1$
 					}
-					rootData = screenUnreliable ? null : DeviceScale.screenData(image, zoom);
 				}
 				boolean useWidgetPrint = screenUnreliable || isBlank(rootData);
 				if (useWidgetPrint && printable instanceof Shell shell
@@ -503,7 +530,9 @@ public final class ScreenshotTools {
 					final Control painted = printable;
 					final List<Paintable> composed = pieces;
 					// a compositing window manager hides window contents from the X11 root drawable; painting the hierarchy has known GTK gaps, hence only a fallback
-					image.dispose();
+					if (image != null) {
+						image.dispose();
+					}
 					Rectangle own = clientArea != null ? clientArea : painted.getBounds();
 					Size canvas = compositionSize(own.width, own.height);
 					// print lands in points on any surface, so the canvas is in device pixels and the GC carries the scale
@@ -528,6 +557,8 @@ public final class ScreenshotTools {
 					});
 					area = new Rectangle(area.x, area.y, canvas.width(), canvas.height());
 					method = "widgetPrint"; //$NON-NLS-1$
+					// a print is not bound by the native window, so the cut at its edge no longer applies
+					windowEdge = null;
 				}
 				ImageData data = "rootCapture".equals(method) ? rootData //$NON-NLS-1$
 						: DeviceScale.paintedData(image, zoom);
@@ -555,6 +586,20 @@ public final class ScreenshotTools {
 						.put("deviceZoom", Integer.valueOf(zoom)) //$NON-NLS-1$
 						.put("foreground", Boolean.valueOf(foreground)) //$NON-NLS-1$
 						.put("requestedArea", Overlays.describe(requested)); //$NON-NLS-1$
+				// also after a fallback to widgetPrint, where it says which read came back blank
+				if (rootReader != null) {
+					written.put("rootReader", rootReader); //$NON-NLS-1$
+				}
+				if (pixbufFailure != null && DeviceScale.GTK) {
+					written.put("pixbufFailure", pixbufFailure); //$NON-NLS-1$
+					if ("rootCapture".equals(method) && "copyArea".equals(rootReader) && zoom > 100) { //$NON-NLS-1$ //$NON-NLS-2$
+						written.put("staleReadWarning", //$NON-NLS-1$
+								"This capture was read through copyArea, which at a display scale above 100% returns the first read of an area again for every later read, so it may show a dialog that has since closed or miss one that has opened. Treat it as unreliable evidence of the current UI."); //$NON-NLS-1$
+					}
+				}
+				if (windowSize != null) {
+					written.put("windowInPoints", windowSize); //$NON-NLS-1$
+				}
 				if (captured < zoom) {
 					written.put("belowDeviceZoom", //$NON-NLS-1$
 							"This display paints at %d%% and the capture came back at %d%%, so the image holds fewer pixels than the screen does and its text is softer than what is on it. Use eclipse_get_display_info to see the scaling in force." //$NON-NLS-1$
@@ -571,6 +616,9 @@ public final class ScreenshotTools {
 					written.put("sameTurnNote", screenUnreliable //$NON-NLS-1$
 							? "This capture ran inside one turn of the UI thread, which is what eclipse_run_script with atomic does. No paint has been dispatched since this batch started, so the screen does not show what the widgets hold and reading it would have photographed whatever was underneath. The widget was painted directly instead, so the image is of the right thing; expect the GTK gaps of widgetPrint rather than the fidelity of a screen read."
 							: "This capture ran inside one turn of the UI thread, which is what eclipse_run_script with atomic does, and the target is the whole display, which cannot be painted widget by widget. No paint has been dispatched since this batch started, so ANYTHING THIS BATCH CHANGED IS PROBABLY NOT IN THE IMAGE. Capture a shell or a part instead, or take the screenshot outside the atomic batch."); //$NON-NLS-1$
+				}
+				if (windowEdge != null) {
+					exclusion = exclusion == null ? windowEdge.strip() : exclusion + windowEdge;
 				}
 				if (!requested.equals(area)) {
 					written.put("requestedAreaNote", exclusion != null ? exclusion //$NON-NLS-1$
@@ -605,7 +653,9 @@ public final class ScreenshotTools {
 				}
 				return encoding;
 			} finally {
-				image.dispose();
+				if (image != null) {
+					image.dispose();
+				}
 			}
 			} finally {
 				restoreCarets(carets);
@@ -664,6 +714,30 @@ public final class ScreenshotTools {
 		}
 
 		/** What a shell capture leaves out, and why nothing can paint it. */
+		private static final String WINDOW_EDGE = " The window the display holds is %s, smaller than the layout reports, so the capture stops at the window edge; past it is whatever is behind the window."; //$NON-NLS-1$
+
+		/** A capture area cut at the native window of its shell, with the window's bounds and, when it was cut, the note saying so. */
+		private record WindowCut(Rectangle area, String window, String edge) {
+
+			static WindowCut of(Rectangle area, Shell shell) {
+				Rectangle window = ScreenPixels.windowBounds(shell);
+				if (window == null) {
+					return new WindowCut(area, null, null);
+				}
+				String bounds = Overlays.describe(window);
+				Rectangle inside = insideWindow(area, window);
+				return inside.equals(area) ? new WindowCut(area, bounds, null)
+						: new WindowCut(inside, bounds, WINDOW_EDGE.formatted(bounds));
+			}
+		}
+
+		/** The part of {@code area} that lies inside the native window, cut at its right and bottom edges. */
+		public static Rectangle insideWindow(Rectangle area, Rectangle window) {
+			int right = Math.min(area.x + area.width, window.x + window.width);
+			int bottom = Math.min(area.y + area.height, window.y + window.height);
+			return new Rectangle(area.x, area.y, Math.max(0, right - area.x), Math.max(0, bottom - area.y));
+		}
+
 		private static final String DECORATIONS_EXCLUDED = "The window decorations, meaning the title bar and the frame around the shell, are drawn by the window manager and are not part of the client area this capture paints, so they are not in the image."; //$NON-NLS-1$
 
 		/** The size of a composed shell capture's canvas, as plain values. */
@@ -836,7 +910,7 @@ public final class ScreenshotTools {
 					.put("capturedArea", data.width + "x" + data.height) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("areaInPoints", area.width + "x" + area.height) //$NON-NLS-1$ //$NON-NLS-2$
 					// every number the scaling depends on, so a disagreement between them shows without inferring it from the picture
-					.put("imageBounds", image.getBounds().width + "x" + image.getBounds().height) //$NON-NLS-1$ //$NON-NLS-2$
+					.put("imageBounds", image == null ? null : image.getBounds().width + "x" + image.getBounds().height) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("scaleFactor", Math.round(width * 1000.0 / data.width) / 1000.0) //$NON-NLS-1$
 					.put("maxWidthSnappedTo", snapped == maxWidth ? null : Integer.valueOf(snapped)) //$NON-NLS-1$
 					.put("bytes", null); //$NON-NLS-1$

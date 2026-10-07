@@ -30,7 +30,7 @@ about x=460, which cannot happen on screen. So the folder paints itself without
 its `topRight` rather than merely skipping a child.
 
 Observed on GTK at zoom 200 through `eclipse_screenshot` with `includeToolbar`.
-Filed as https://github.com/eclipse-platform/eclipse.platform.swt/issues/3685. The consequence for this project is that `includeToolbar`
+Nothing filed yet. The consequence for this project is that `includeToolbar`
 cannot show a view toolbar; capture the shell and crop to bounds from
 `eclipse_get_widget_tree` instead.
 
