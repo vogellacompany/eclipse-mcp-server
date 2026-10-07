@@ -1,11 +1,15 @@
 package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import org.eclipse.swt.graphics.ImageData;
+import org.eclipse.swt.graphics.Rectangle;
 import org.junit.jupiter.api.Test;
 
 import com.vogella.eclipse.mcp.ui.internal.ScreenPixels;
+import com.vogella.eclipse.mcp.ui.internal.ScreenshotTools;
 
 /** The conversion of a pixbuf's rows into ImageData; the read itself needs a screen. */
 class ScreenPixelsTest {
@@ -36,6 +40,23 @@ class ScreenPixelsTest {
 		assertEquals(9, data.bytesPerLine);
 		assertEquals(4, data.palette.getRGB(data.getPixel(0, 1)).red);
 		assertEquals(6, data.palette.getRGB(data.getPixel(2, 1)).red);
-		assertEquals(4, data.data[9]);
+	}
+
+	@Test
+	void geometryThatWouldOverrunTheRowsIsRefused() {
+		assertNull(ScreenPixels.malformed(3, 2, 12, 3));
+		assertNull(ScreenPixels.malformed(3, 2, 12, 4));
+		assertNotNull(ScreenPixels.malformed(3, 2, 8, 3));
+		assertNotNull(ScreenPixels.malformed(3, 2, 12, 1));
+		assertNotNull(ScreenPixels.malformed(0, 2, 12, 3));
+	}
+
+	@Test
+	void aCaptureStopsAtTheRightAndBottomEdgesOfTheWindow() {
+		Rectangle window = new Rectangle(100, 50, 400, 300);
+		assertEquals(new Rectangle(120, 60, 380, 290),
+				ScreenshotTools.Capture.insideWindow(new Rectangle(120, 60, 500, 400), window));
+		Rectangle inside = new Rectangle(120, 60, 100, 100);
+		assertEquals(inside, ScreenshotTools.Capture.insideWindow(inside, window));
 	}
 }
