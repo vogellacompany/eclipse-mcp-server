@@ -191,6 +191,9 @@ class UiToolsTest {
 	void clickingRefusesWithoutAWorkbench() throws Exception {
 		assertRefused(TestFixture.call("eclipse_click", Map.of("path", "0", "button", "right")),
 				"no running workbench");
+		// none is a known button, so it gets as far as the workbench
+		assertRefused(TestFixture.call("eclipse_click", Map.of("path", "0", "button", "none")),
+				"no running workbench");
 	}
 
 	@Test

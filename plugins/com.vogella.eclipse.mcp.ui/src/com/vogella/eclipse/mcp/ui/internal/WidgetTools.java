@@ -750,7 +750,7 @@ public final class WidgetTools {
 
 		@Override
 		public String getDescription() {
-			return "Clicks a widget with a real mouse button: moves the pointer onto it and sends a press and a release through the X server's XTest extension on GTK, or Display.post elsewhere, so the event goes through the window system and SWT's own dispatch exactly like a person's click, including a right click opening a context menu through Control.showMenu. CHANGES WHAT THE IDE DOES, which is whatever that click does, and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path, including item paths such as a CTabItem (0/i2) and row paths (0/r3); the click lands on its centre, or at x and y inside it. displayX and displayY click an absolute screen point instead. Before pressing, the pointer is read back: when it did not arrive, or the control under it is not the addressed widget, nothing is pressed and the answer names what is there, so a covering window or popup is never clicked by mistake. The press is dispatched after this call returns, so verify the effect with eclipse_screenshot or eclipse_list_ui_targets. It works on an X11 display without a compositor, such as Xvfb. It refuses on native Wayland, which ignores pointer warps, and under XWayland on a compositing desktop such as GNOME, where the pointer moves but the compositor keeps the IDE window from being under it. A native menu is no SWT control, so a point over an open menu is refused; pick menu entries with eclipse_select_menu_item instead. No modifier keys and no double click; eclipse_double_click_text double-clicks inside a text editor, and eclipse_press_widget presses a Button or ToolItem without the pointer."; //$NON-NLS-1$
+			return "Clicks a widget with a real mouse button: moves the pointer onto it and sends a press and a release through the X server's XTest extension on GTK, or Display.post elsewhere, so the event goes through the window system and SWT's own dispatch exactly like a person's click, including a right click opening a context menu through Control.showMenu. CHANGES WHAT THE IDE DOES, which is whatever that click does, and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path, including item paths such as a CTabItem (0/i2) and row paths (0/r3); the click lands on its centre, or at x and y inside it. displayX and displayY click an absolute screen point instead. Before pressing, the pointer is read back: when it did not arrive, or the control under it is not the addressed widget, nothing is pressed and the answer names what is there, so a covering window or popup is never clicked by mistake. The press is dispatched after this call returns, so verify the effect with eclipse_screenshot or eclipse_list_ui_targets. It works on an X11 display without a compositor, such as Xvfb. It refuses on native Wayland, which ignores pointer warps, and under XWayland on a compositing desktop such as GNOME, where the pointer moves but the compositor keeps the IDE window from being under it. A native menu is no SWT control, so a point over an open menu is refused; pick menu entries with eclipse_select_menu_item instead. button none only moves the pointer and presses nothing, which is how a tooltip or a hover highlight is moved off a capture; it is allowed over an open menu or another window, and the answer reports moved rather than clicked, and for a widget onTarget, whether the pointer is over it. No modifier keys and no double click; eclipse_double_click_text double-clicks inside a text editor, and eclipse_press_widget presses a Button or ToolItem without the pointer."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -768,7 +768,7 @@ public final class WidgetTools {
 					    "y":              {"type":"integer","minimum":0,"description":"Vertical offset inside the widget. Defaults to its centre."},
 					    "displayX":       {"type":"integer","description":"Absolute screen x, as boundsInDisplay reports it. Use with displayY instead of a widget."},
 					    "displayY":       {"type":"integer","description":"Absolute screen y. Use with displayX instead of a widget."},
-					    "button":         {"type":"string","enum":["left","middle","right"],"default":"left"}
+					    "button":         {"type":"string","enum":["left","middle","right","none"],"default":"left","description":"none moves the pointer without pressing."}
 					  },
 					  "additionalProperties": false
 					}"""; //$NON-NLS-1$
@@ -781,10 +781,11 @@ public final class WidgetTools {
 			case "left" -> 1; //$NON-NLS-1$
 			case "middle" -> 2; //$NON-NLS-1$
 			case "right" -> 3; //$NON-NLS-1$
-			default -> 0;
+			case "none" -> 0; //$NON-NLS-1$
+			default -> -1;
 			};
-			if (button == 0) {
-				return McpToolResult.error("Unknown button '%s'; use left, middle or right.".formatted(args.getString("button"))); //$NON-NLS-1$ //$NON-NLS-2$
+			if (button < 0) {
+				return McpToolResult.error("Unknown button '%s'; use left, middle, right or none.".formatted(args.getString("button"))); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 			String partId = args.getString("part"); //$NON-NLS-1$
 			String shellSpec = Shells.spec(args);
@@ -851,7 +852,7 @@ public final class WidgetTools {
 				move.x = point.x;
 				move.y = point.y;
 				if (!display.post(move)) {
-					return result.put("clicked", Boolean.FALSE) //$NON-NLS-1$
+					return result.put("clicked", Boolean.FALSE).put("moved", Boolean.FALSE) //$NON-NLS-1$ //$NON-NLS-2$
 							.put("reason", "Display.post refused to move the pointer, which is what GTK4 does with every posted event."); //$NON-NLS-1$ //$NON-NLS-2$
 				}
 				// the read back is a round trip to the window server, so it sees the warp
@@ -861,7 +862,20 @@ public final class WidgetTools {
 						.put("controlUnderPointer", under == null ? null : under.getClass().getSimpleName()); //$NON-NLS-1$
 				if (Math.abs(arrived.x - point.x) > 1 || Math.abs(arrived.y - point.y) > 1) {
 					return result.put("clicked", Boolean.FALSE) //$NON-NLS-1$
+							.put("moved", Boolean.FALSE) //$NON-NLS-1$
 							.put("reason", "The pointer did not arrive, so nothing was pressed. Native Wayland ignores pointer warps; clicking needs the IDE on an X11 display without a compositor, such as Xvfb."); //$NON-NLS-1$ //$NON-NLS-2$
+				}
+				result.put("moved", Boolean.TRUE); //$NON-NLS-1$
+				if (button == 0) {
+					result.put("clicked", Boolean.FALSE); //$NON-NLS-1$
+					if (owner != null) {
+						boolean onTarget = under != null && isInside(under, owner);
+						result.put("onTarget", Boolean.valueOf(onTarget)); //$NON-NLS-1$
+						if (!onTarget) {
+							result.put("note", "The pointer is over something other than the addressed widget, such as a menu, a popup or another window, so whatever opens at the pointer opens there."); //$NON-NLS-1$ //$NON-NLS-2$
+						}
+					}
+					return result;
 				}
 				if (under == null) {
 					return result.put("clicked", Boolean.FALSE) //$NON-NLS-1$
@@ -909,7 +923,7 @@ public final class WidgetTools {
 		}
 
 		private static JsonObject refusal(String reason) {
-			return new JsonObject().put("clicked", Boolean.FALSE).put("reason", reason); //$NON-NLS-1$ //$NON-NLS-2$
+			return new JsonObject().put("clicked", Boolean.FALSE).put("moved", Boolean.FALSE).put("reason", reason); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		}
 	}
 
