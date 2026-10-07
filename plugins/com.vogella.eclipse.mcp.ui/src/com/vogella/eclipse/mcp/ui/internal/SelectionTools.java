@@ -12,7 +12,6 @@ import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.ISelectionProvider;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.StructuredSelection;
-import org.eclipse.swt.widgets.Widget;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.IWorkbenchPartReference;
@@ -188,6 +187,8 @@ public final class SelectionTools {
 	/** Sets the selection of a part. */
 	public static final class SetSelection implements IMcpTool {
 
+		private static final java.util.regex.Pattern ROW_PATH = java.util.regex.Pattern.compile("[0-9]+(/[ir]?[0-9]+)*"); //$NON-NLS-1$
+
 		@Override
 		public String getName() {
 			return "eclipse_set_selection"; //$NON-NLS-1$
@@ -195,7 +196,7 @@ public final class SelectionTools {
 
 		@Override
 		public String getDescription() {
-			return "Sets the selection of a view or editor through its own selection provider, the way clicking rows would, so a command's enablement can then be asked for that selection with eclipse_run_workbench_command. CHANGES WHAT IS SELECTED IN THE IDE, which is visible to whoever is at it, and the previous selection is reported so it can be put back. This is the way to build a selection that no key can reach here: a view may register no Select All handler, and eclipse_press_key cannot deliver Ctrl+A on a backgrounded Wayland session. Elements are addressed as workspace paths ('/org.eclipse.compare'), project names ('g'), or widget tree row paths ('0/0/0/r7') from eclipse_get_widget_tree with includeRows, which is what reaches an element that is not a resource. A closed project resolves like any other, since whether the selection may contain one is exactly what an enablement test is about. THE ANSWER REPORTS WHAT THE SELECTION SERVICE HOLDS AFTERWARDS rather than what was requested, because a viewer silently drops an element it does not have, and a selection that did not take would otherwise be visible only as a wrong enablement answer later."; //$NON-NLS-1$
+			return "Sets the selection of a view or editor through its own selection provider, the way clicking rows would, so a command's enablement can then be asked for that selection with eclipse_run_workbench_command. CHANGES WHAT IS SELECTED IN THE IDE, which is visible to whoever is at it, and the previous selection is reported so it can be put back. A part whose provider only relays its viewer, the e4 model editor among them, gets its row paths selected on the Tree or Table, and an empty array cleared on its Tree, the way a click does, so the highlight and the details follow, and selectedThroughWidget says so; mixing row paths with workspace paths there falls back to the provider. This is the way to build a selection that no key can reach here: a view may register no Select All handler, and eclipse_press_key cannot deliver Ctrl+A on a backgrounded Wayland session. Elements are addressed as workspace paths ('/org.eclipse.compare'), project names ('g'), or widget tree row paths ('0/0/0/r7') from eclipse_get_widget_tree with includeRows, which is what reaches an element that is not a resource. A closed project resolves like any other, since whether the selection may contain one is exactly what an enablement test is about. THE ANSWER REPORTS WHAT THE SELECTION SERVICE HOLDS AFTERWARDS rather than what was requested, because a viewer silently drops an element it does not have, and a selection that did not take would otherwise be visible only as a wrong enablement answer later."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -242,12 +243,17 @@ public final class SelectionTools {
 				JsonObject before = describeSelection("beforeSetting", provider.getSelection()); //$NON-NLS-1$
 				JsonArray unresolved = new JsonArray();
 				List<Object> elements = new ArrayList<>();
+				List<org.eclipse.swt.widgets.Item> rows = new ArrayList<>();
 				for (String spec : specs) {
-					Object resolved = resolve(spec, part);
+					org.eclipse.swt.widgets.Item item = itemAt(spec, part);
+					Object resolved = item != null ? item.getData() : resolve(spec, part);
 					if (resolved == null) {
 						unresolved.add(spec);
 					} else {
 						elements.add(resolved);
+						if (item instanceof org.eclipse.swt.widgets.TreeItem || item instanceof org.eclipse.swt.widgets.TableItem) {
+							rows.add(item);
+						}
 					}
 				}
 				if (activate) {
@@ -261,14 +267,26 @@ public final class SelectionTools {
 				// only a Viewer can be told to reveal; a plain provider takes the
 				// selection alone, and reporting reveal as done would be a small lie
 				boolean revealed = false;
+				boolean throughWidget = false;
 				if (provider instanceof org.eclipse.jface.viewers.Viewer viewer) {
 					viewer.setSelection(selection, reveal);
 					revealed = reveal;
+				} else if (!rows.isEmpty() && rows.size() == elements.size() && selectRows(rows, reveal)) {
+					// a provider that only relays its viewer, as the e4 model editor's does, moves neither highlight nor details
+					throughWidget = true;
+					revealed = reveal;
+				} else if (specs.isEmpty() && clearRows(part)) {
+					throughWidget = true;
 				} else {
+					provider.setSelection(selection);
+				}
+				// the rows may belong to a tree that does not feed this provider, which then still has to be told
+				if (throughWidget && !holds(provider.getSelection(), asShown)) {
 					provider.setSelection(selection);
 				}
 				JsonObject result = new JsonObject().put("part", part.getSite().getId()) //$NON-NLS-1$
 						.put("revealed", Boolean.valueOf(revealed)) //$NON-NLS-1$
+						.put("selectedThroughWidget", Boolean.valueOf(throughWidget)) //$NON-NLS-1$
 						.put("requested", Integer.valueOf(specs.size())) //$NON-NLS-1$
 						.put("resolved", Integer.valueOf(elements.size())) //$NON-NLS-1$
 						.put("matchedToViewerElements", Integer.valueOf(asShown.size())) //$NON-NLS-1$
@@ -361,9 +379,9 @@ public final class SelectionTools {
 			if (value.startsWith("/")) { //$NON-NLS-1$
 				return ResourcesPlugin.getWorkspace().getRoot().findMember(value);
 			}
-			if (value.matches("[0-9]+(/[ir]?[0-9]+)*")) { //$NON-NLS-1$
-				// a row path that names no row is unresolved; getProject below would throw on it
-				return rowData(value, part);
+			if (ROW_PATH.matcher(value).matches()) {
+				// a row path that names no item is unresolved; getProject below would throw on it
+				return null;
 			}
 			if (value.indexOf('/') >= 0) {
 				// a relative path is neither a workspace path nor a project name, and getProject throws on it
@@ -373,14 +391,76 @@ public final class SelectionTools {
 			return project.exists() ? project : null;
 		}
 
-		/** The model object behind a tree or table row, which is what the viewer selects. */
-		private static Object rowData(String path, IWorkbenchPart part) {
+		/** The item a widget path names, whose data is the model object the viewer selects; {@code null} for anything else. */
+		private static org.eclipse.swt.widgets.Item itemAt(String spec, IWorkbenchPart part) {
+			String value = spec.strip();
+			if (!ROW_PATH.matcher(value).matches()) {
+				return null;
+			}
 			org.eclipse.swt.widgets.Control control = ScreenshotTools.Capture.controlOf(part);
 			if (control == null) {
 				return null;
 			}
-			Widget widget = WidgetTools.resolve(control, path);
-			return widget instanceof org.eclipse.swt.widgets.Item item ? item.getData() : null;
+			return WidgetTools.resolve(control, value) instanceof org.eclipse.swt.widgets.Item item ? item : null;
+		}
+
+		/** Whether the selection holds exactly these elements, in any order. */
+		private static boolean holds(ISelection selection, List<Object> elements) {
+			if (!(selection instanceof IStructuredSelection structured)) {
+				return elements.isEmpty() && (selection == null || selection.isEmpty());
+			}
+			return structured.size() == elements.size() && new java.util.HashSet<>(structured.toList()).equals(new java.util.HashSet<>(elements));
+		}
+
+		/** Clears the part's tree and tells its viewer as a click on empty space does; {@code false} without a tree. */
+		private static boolean clearRows(IWorkbenchPart part) {
+			org.eclipse.swt.widgets.Tree tree = treeOf(part);
+			if (tree == null) {
+				return false;
+			}
+			tree.deselectAll();
+			tree.notifyListeners(org.eclipse.swt.SWT.Selection, new org.eclipse.swt.widgets.Event());
+			return true;
+		}
+
+		/**
+		 * Selects rows of one Tree or Table and sends the Selection event a click
+		 * sends; {@code false} when they do not share an owner.
+		 */
+		private static boolean selectRows(List<org.eclipse.swt.widgets.Item> rows, boolean reveal) {
+			org.eclipse.swt.widgets.Item first = rows.get(0);
+			org.eclipse.swt.widgets.Control owner = first instanceof org.eclipse.swt.widgets.TreeItem item ? item.getParent()
+					: ((org.eclipse.swt.widgets.TableItem) first).getParent();
+			if (owner instanceof org.eclipse.swt.widgets.Tree tree) {
+				List<org.eclipse.swt.widgets.TreeItem> items = new ArrayList<>();
+				for (org.eclipse.swt.widgets.Item row : rows) {
+					if (!(row instanceof org.eclipse.swt.widgets.TreeItem item) || item.getParent() != tree) {
+						return false;
+					}
+					items.add(item);
+				}
+				if (reveal) {
+					tree.showItem(items.get(0));
+				}
+				tree.setSelection(items.toArray(org.eclipse.swt.widgets.TreeItem[]::new));
+			} else {
+				org.eclipse.swt.widgets.Table table = (org.eclipse.swt.widgets.Table) owner;
+				List<org.eclipse.swt.widgets.TableItem> items = new ArrayList<>();
+				for (org.eclipse.swt.widgets.Item row : rows) {
+					if (!(row instanceof org.eclipse.swt.widgets.TableItem item) || item.getParent() != table) {
+						return false;
+					}
+					items.add(item);
+				}
+				if (reveal) {
+					table.showItem(items.get(0));
+				}
+				table.setSelection(items.toArray(org.eclipse.swt.widgets.TableItem[]::new));
+			}
+			org.eclipse.swt.widgets.Event event = new org.eclipse.swt.widgets.Event();
+			event.item = first;
+			owner.notifyListeners(org.eclipse.swt.SWT.Selection, event);
+			return true;
 		}
 	}
 }
