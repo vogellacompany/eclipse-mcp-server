@@ -200,7 +200,7 @@ public final class WidgetTools {
 		return new Point(client.x - bounds.x, client.y - bounds.y);
 	}
 
-	private static Rectangle rectangleOf(Widget widget) {
+	static Rectangle rectangleOf(Widget widget) {
 		return switch (widget) {
 		case Control control -> control.getBounds();
 		case org.eclipse.swt.widgets.ToolItem item -> item.getBounds();
@@ -230,7 +230,7 @@ public final class WidgetTools {
 	}
 
 	/** The control a widget hangs under, which for an item is the widget that owns it. */
-	private static Control parentOf(Widget widget) {
+	static Control parentOf(Widget widget) {
 		return switch (widget) {
 		case Control control -> control.getParent();
 		case org.eclipse.swt.widgets.ToolItem item -> item.getParent();
@@ -857,28 +857,11 @@ public final class WidgetTools {
 					result.put("target", target.getClass().getSimpleName()) //$NON-NLS-1$
 							.put("boundsInDisplay", Overlays.describe(onScreen)); //$NON-NLS-1$
 				}
-				org.eclipse.swt.graphics.Point previous = display.getCursorLocation();
-				result.put("point", point.x + "," + point.y) //$NON-NLS-1$ //$NON-NLS-2$
-						.put("previousPointer", previous.x + "," + previous.y); //$NON-NLS-1$ //$NON-NLS-2$
-				Event move = new Event();
-				move.type = SWT.MouseMove;
-				move.x = point.x;
-				move.y = point.y;
-				if (!display.post(move)) {
-					return result.put("clicked", Boolean.FALSE).put("moved", Boolean.FALSE) //$NON-NLS-1$ //$NON-NLS-2$
-							.put("reason", "Display.post refused to move the pointer, which is what GTK4 does with every posted event."); //$NON-NLS-1$ //$NON-NLS-2$
+				Warp warp = warp(display, point, result, "nothing was pressed", "clicking"); //$NON-NLS-1$ //$NON-NLS-2$
+				if (warp.failure() != null) {
+					return result.put("clicked", Boolean.FALSE).put("reason", warp.failure()); //$NON-NLS-1$ //$NON-NLS-2$
 				}
-				// the read back is a round trip to the window server, so it sees the warp
-				org.eclipse.swt.graphics.Point arrived = display.getCursorLocation();
-				Control under = display.getCursorControl();
-				result.put("pointer", arrived.x + "," + arrived.y) //$NON-NLS-1$ //$NON-NLS-2$
-						.put("controlUnderPointer", under == null ? null : under.getClass().getSimpleName()); //$NON-NLS-1$
-				if (Math.abs(arrived.x - point.x) > 1 || Math.abs(arrived.y - point.y) > 1) {
-					return result.put("clicked", Boolean.FALSE) //$NON-NLS-1$
-							.put("moved", Boolean.FALSE) //$NON-NLS-1$
-							.put("reason", "The pointer did not arrive, so nothing was pressed. Native Wayland ignores pointer warps; clicking needs the IDE on an X11 display without a compositor, such as Xvfb."); //$NON-NLS-1$ //$NON-NLS-2$
-				}
-				result.put("moved", Boolean.TRUE); //$NON-NLS-1$
+				Control under = warp.under();
 				if (button == 0) {
 					result.put("clicked", Boolean.FALSE); //$NON-NLS-1$
 					if (owner != null) {
@@ -919,6 +902,41 @@ public final class WidgetTools {
 			});
 		}
 
+		/** Where the pointer landed: the control under it, or why it did not arrive. */
+		record Warp(Control under, String failure) {
+		}
+
+		/**
+		 * Moves the pointer to a display point and reads it back, reporting point,
+		 * previousPointer, pointer, controlUnderPointer and moved.
+		 */
+		static Warp warp(Display display, org.eclipse.swt.graphics.Point point, JsonObject result, String nothing,
+				String action) {
+			org.eclipse.swt.graphics.Point previous = display.getCursorLocation();
+			result.put("point", point.x + "," + point.y) //$NON-NLS-1$ //$NON-NLS-2$
+					.put("previousPointer", previous.x + "," + previous.y); //$NON-NLS-1$ //$NON-NLS-2$
+			Event move = new Event();
+			move.type = SWT.MouseMove;
+			move.x = point.x;
+			move.y = point.y;
+			if (!display.post(move)) {
+				result.put("moved", Boolean.FALSE); //$NON-NLS-1$
+				return new Warp(null, "Display.post refused to move the pointer, which is what GTK4 does with every posted event."); //$NON-NLS-1$
+			}
+			// the read back is a round trip to the window server, so it sees the warp
+			org.eclipse.swt.graphics.Point arrived = display.getCursorLocation();
+			Control under = display.getCursorControl();
+			result.put("pointer", arrived.x + "," + arrived.y) //$NON-NLS-1$ //$NON-NLS-2$
+					.put("controlUnderPointer", under == null ? null : under.getClass().getSimpleName()); //$NON-NLS-1$
+			if (Math.abs(arrived.x - point.x) > 1 || Math.abs(arrived.y - point.y) > 1) {
+				result.put("moved", Boolean.FALSE); //$NON-NLS-1$
+				return new Warp(under, "The pointer did not arrive, so %s. Native Wayland ignores pointer warps; %s needs the IDE on an X11 display without a compositor, such as Xvfb." //$NON-NLS-1$
+						.formatted(nothing, action));
+			}
+			result.put("moved", Boolean.TRUE); //$NON-NLS-1$
+			return new Warp(under, null);
+		}
+
 		private static boolean post(Display display, int type, int button) {
 			Event event = new Event();
 			event.type = type;
@@ -926,7 +944,7 @@ public final class WidgetTools {
 			return display.post(event);
 		}
 
-		private static boolean isInside(Control control, Control ancestor) {
+		static boolean isInside(Control control, Control ancestor) {
 			for (Control current = control; current != null; current = current.getParent()) {
 				if (current == ancestor) {
 					return true;
