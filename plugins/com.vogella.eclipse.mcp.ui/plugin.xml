@@ -40,6 +40,7 @@
       <tool class="com.vogella.eclipse.mcp.ui.internal.ExitTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.DisplayInfoTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.DismissDialogTool"/>
+      <tool class="com.vogella.eclipse.mcp.ui.internal.ResetDialogSettingsTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ViewTools$Show"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ViewTools$Hide"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.PerspectiveTools$ListPerspectives"/>

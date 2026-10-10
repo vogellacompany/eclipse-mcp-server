@@ -367,3 +367,9 @@ Under Xvfb the same program got focus and both agreed.
 `Shell.bringToTop` (GTK) ends with `display.activeShell = this; display.activePending = true;` after `gdk_window_focus`, before any focus-in event, so the active shell reads back the request rather than the result.
 `NativeForeground.isForeground` therefore trusts the active shell only once `activePending` is false, and otherwise asks `gtk_window_is_active` for each shell, both reached by name.
 Nothing filed upstream yet.
+
+## No public way to list the loaded dialog settings
+
+Found 2026-10-10: `PlatformUI.getDialogSettingsProvider(bundle)` creates a provider on demand and nothing enumerates the ones that exist, so `eclipse_reset_dialog_settings` cannot tell which bundles hold settings in memory only.
+`ResetDialogSettingsTool.loadedBundles` reads the private static `fTrackedBundles` of `org.eclipse.e4.ui.internal.workbench.swt.DialogSettingsProviderService` by name; when the field is renamed it falls back to the `dialog_settings.xml` files on disk and says so under `note`.
+Nothing filed upstream yet.
