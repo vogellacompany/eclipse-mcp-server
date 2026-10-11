@@ -197,6 +197,14 @@ class UiToolsTest {
 	}
 
 	@Test
+	void scrollingChecksItsArgumentsAndAnnouncesItsEffect() throws Exception {
+		assertRefused(TestFixture.call("eclipse_scroll", Map.of("notches", Integer.valueOf(0))), "must not be 0");
+		assertRefused(TestFixture.call("eclipse_scroll", Map.of("notches", Integer.valueOf(3), "path", "0")),
+				"no running workbench");
+		assertTrue(TestFixture.tool("eclipse_scroll").getDescription().contains("CHANGES THE SCROLL POSITION"));
+	}
+
+	@Test
 	void settingWidgetTextChecksItsArgumentsBeforeTheUiThread() throws Exception {
 		assertRefused(TestFixture.call("eclipse_set_widget_text", Map.of("text", "x")), "'path' is required");
 		assertRefused(TestFixture.call("eclipse_set_widget_text", Map.of("path", "0")), "'text' is required");
