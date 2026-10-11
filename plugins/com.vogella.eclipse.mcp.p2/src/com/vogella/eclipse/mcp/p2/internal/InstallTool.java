@@ -9,6 +9,7 @@ import java.util.Map;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.equinox.p2.core.IProvisioningAgent;
+import org.eclipse.equinox.p2.engine.ProvisioningContext;
 import org.eclipse.equinox.p2.metadata.IInstallableUnit;
 import org.eclipse.equinox.p2.operations.InstallOperation;
 import org.eclipse.equinox.p2.operations.ProvisioningJob;
@@ -37,7 +38,7 @@ public final class InstallTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Installs an installable unit into this IDE. MODIFIES THE INSTALLATION BY FETCHING AND RUNNING CODE FROM THE NETWORK, which is a larger step than any other tool here takes. Only repositories the IDE is already configured with may be used; an unknown URL is refused rather than added, because adding it is a decision for the person at the IDE. Runs as a job and returns an operationId to poll through eclipse_get_provisioning_status. The installed code is not active until the IDE restarts. A BUNDLE THAT AN INSTALLED FEATURE PINS CANNOT BE REPLACED THIS WAY: a feature requires each of its bundles at one exact version, so p2 refuses a differently versioned build of it with 'Only one of the following can be installed at once', and in an SDK almost every bundle is pinned by a feature that another feature pins in turn. This path works for a unit nothing pins, and for a whole feature built and installed together; for running one changed workspace bundle instead of an installed one, eclipse_substitute_bundle is the tool, at the price of leaving p2's picture of the installation untrue."; //$NON-NLS-1$
+		return "Installs an installable unit into this IDE. MODIFIES THE INSTALLATION BY FETCHING AND RUNNING CODE FROM THE NETWORK, which is a larger step than any other tool here takes. Only repositories the IDE is already configured with may be used; an unknown URL is refused rather than added, because adding it is a decision for the person at the IDE. Runs as a job and returns an operationId to poll through eclipse_get_provisioning_status. The installed code is not active until the IDE restarts. The install resolves against the one repository the unit was found in plus what is already installed, so it cannot swap an installed dependency for another version some other site offers; pass contactAllSites when the unit really needs software from another configured site. The answer lists under plan every installed unit the install would replace, remove or install a second version beside, and unless allowChangingInstalled is set the install is refused when it would change an installed unit, or, for an upgrade of something installed, remove one or install a second version beside one; dryRun shows that list without installing. A BUNDLE THAT AN INSTALLED FEATURE PINS CANNOT BE REPLACED THIS WAY: a feature requires each of its bundles at one exact version, so p2 refuses a differently versioned build of it with 'Only one of the following can be installed at once', and in an SDK almost every bundle is pinned by a feature that another feature pins in turn. This path works for a unit nothing pins, and for a whole feature built and installed together; for running one changed workspace bundle instead of an installed one, eclipse_substitute_bundle is the tool, at the price of leaving p2's picture of the installation untrue."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -50,6 +51,9 @@ public final class InstallTool implements IMcpTool {
 				    "unit":           {"type":"string","description":"Installable unit id, usually a feature id ending in .feature.group."},
 				    "repository":     {"type":"string","description":"Repository URL to install from. Must already be configured in this IDE. Omit to search every configured repository."},
 				    "version":        {"type":"string","description":"Exact version. Omit for the newest available."},
+				    "contactAllSites": {"type":"boolean","default":false,"description":"Resolve dependencies against every configured repository instead of only the one the unit was found in. Off by default, because the planner then also re-plans installed units and can replace them with versions from other sites."},
+				    "allowChangingInstalled": {"type":"boolean","default":false,"description":"Install even though the plan changes units that are already installed: for a new unit any replaced, removed or second version, for an upgrade a removed unit or a second version. Check plan in a dry run first."},
+				    "dryRun":         {"type":"boolean","default":false,"description":"Resolve and report the plan without installing anything."},
 				    "trustUnsigned":  {"type":"boolean","default":true,"description":"Accept unsigned content, or content signed by a certificate this IDE does not trust. On by default, because an install performed by this server is unattended and there is nobody to answer the dialog p2 would otherwise raise. This is NOT bounded by which sites are configured, because eclipse_add_repository can configure a new one: whoever can call these tools decides what gets installed. Nothing is added to the IDE's permanent trust store, and whatever was accepted is reported. Set false to refuse unsigned content instead."},
 				    "wait":           {"type":"boolean","default":false,"description":"Wait for the install instead of returning an operationId to poll."},
 				    "timeoutSeconds": {"type":"integer","default":25,"minimum":1,"maximum":3600,"description":"How long to wait when wait is true. Bounded in practice by the server's own call timeout."}
@@ -100,7 +104,8 @@ public final class InstallTool implements IMcpTool {
 		}
 
 		String version = args.getString("version"); //$NON-NLS-1$
-		List<IInstallableUnit> found = new ArrayList<>();
+		List<IInstallableUnit> found = List.of();
+		URI source = null;
 		for (URI uri : search) {
 			try {
 				IMetadataRepository metadata = manager.loadRepository(uri, monitor);
@@ -109,12 +114,15 @@ public final class InstallTool implements IMcpTool {
 								: QueryUtil.createIUQuery(unitId,
 										org.eclipse.equinox.p2.metadata.Version.create(version)),
 								monitor);
-				result.forEach(found::add);
+				List<IInstallableUnit> here = new ArrayList<>();
+				result.forEach(here::add);
+				// the newest version across all searched sites wins, the first site on a tie
+				if (!here.isEmpty() && (found.isEmpty() || here.get(0).getVersion().compareTo(found.get(0).getVersion()) > 0)) {
+					found = here;
+					source = uri;
+				}
 			} catch (org.eclipse.equinox.p2.core.ProvisionException e) {
 				// an unreachable repository is not a reason to fail the whole search
-			}
-			if (!found.isEmpty()) {
-				break;
 			}
 		}
 		if (found.isEmpty()) {
@@ -122,15 +130,49 @@ public final class InstallTool implements IMcpTool {
 					version == null ? "" : " at version " + version)); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 
+		boolean contactAllSites = args.getBoolean("contactAllSites", false); //$NON-NLS-1$
 		InstallOperation operation = new InstallOperation(new ProvisioningSession(agent), found);
+		ProvisioningContext context = new ProvisioningContext(agent);
+		if (!contactAllSites) {
+			// the default context lets the planner swap installed units for versions other sites offer
+			context.setMetadataRepositories(source);
+		}
+		operation.setProvisioningContext(context);
 		IStatus resolution = operation.resolveModal(monitor);
 		if (resolution.getSeverity() == IStatus.ERROR) {
-			return McpToolResult.error(ResolutionStatuses.failure("The install could not be resolved", resolution)); //$NON-NLS-1$
+			String failure = ResolutionStatuses.failure("The install could not be resolved", resolution); //$NON-NLS-1$
+			return McpToolResult.error(contactAllSites ? failure
+					: failure + " Only %s and the installed software were considered; pass contactAllSites true if the unit needs software from another configured site." //$NON-NLS-1$
+							.formatted(source));
 		}
 		JsonArray changes = new JsonArray();
+		List<String> roots = new ArrayList<>();
 		for (IInstallableUnit unit : found) {
+			roots.add(unit.getId());
 			changes.add(new JsonObject().put("unit", unit.getId()) //$NON-NLS-1$
 					.put("toVersion", unit.getVersion().toString())); //$NON-NLS-1$
+		}
+		PlanEffects effects = PlanEffects.of(operation.getProvisioningPlan(), roots);
+		JsonObject plan = effects.json() == null ? new JsonObject() : effects.json();
+		plan.put("repositories", contactAllSites ? "all configured" : source.toString()); //$NON-NLS-1$ //$NON-NLS-2$
+		boolean upgrade = !Provisioning.installedUnits(agent, roots).isEmpty();
+		// an upgrade replaces the unit's own bundles, but never explains a removed unit or a second version
+		boolean refused = upgrade ? effects.removesOrDuplicates() : effects.changesInstalled();
+		boolean dryRun = args.getBoolean("dryRun", false); //$NON-NLS-1$
+		boolean refusedHere = refused && !args.getBoolean("allowChangingInstalled", false); //$NON-NLS-1$
+		if (refusedHere && !dryRun) {
+			return McpToolResult.error(
+					"Refused: installing %s would also change software that is already installed, which can leave the IDE unable to start. Nothing was changed. Plan: %s. Pass allowChangingInstalled true to accept it." //$NON-NLS-1$
+							.formatted(roots, plan));
+		}
+		if (dryRun) {
+			Provisioning.Operation dry = Provisioning.record("install", "dryRun", //$NON-NLS-1$ //$NON-NLS-2$
+					refusedHere
+							? "Nothing was changed. The install would be refused because it changes installed software; pass allowChangingInstalled true with dryRun false to accept the plan." //$NON-NLS-1$
+							: "Nothing was changed. This is what would be installed; pass dryRun false to install it.", //$NON-NLS-1$
+					changes);
+			Provisioning.setPlan(dry, plan);
+			return McpToolResult.of(dry.toJson().toString());
 		}
 		boolean trustUnsigned = args.getBoolean("trustUnsigned", true); //$NON-NLS-1$
 		HeadlessTrust trust = new HeadlessTrust(trustUnsigned);
@@ -142,6 +184,7 @@ public final class InstallTool implements IMcpTool {
 		}
 		Provisioning.Operation handle = Provisioning.start("install", tracked -> { //$NON-NLS-1$
 			Provisioning.setChanges(tracked, changes);
+			Provisioning.setPlan(tracked, plan);
 			return job;
 		});
 		Provisioning.onFinished(handle, () -> {

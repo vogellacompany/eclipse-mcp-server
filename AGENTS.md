@@ -124,7 +124,7 @@ The build, test run, sampling and provisioning registries are per IDE, so those 
 ## Tests and CI
 
 - `com.vogella.eclipse.mcp.core.tests` requires the ui bundle and runs headless: nothing there may call a ui tool that needs a workbench, and never `eclipse_restart` or `eclipse_exit` (the latter ends the test JVM). `ShutdownGuardsTest` checks them by declaration.
-- No test may run `eclipse_update` or `eclipse_install`. `ProvisioningGuardsTest` asserts their registration, that `eclipse_update` defaults to a dry run and has `acknowledgeSelfUpdate`, and that the descriptions announce what they do. `eclipse_install` has no dry run.
+- No test may run `eclipse_update` or `eclipse_install`. `ProvisioningGuardsTest` asserts their registration, that `eclipse_update` defaults to a dry run and has `acknowledgeSelfUpdate`, and that the descriptions announce what they do. `eclipse_install` has a dry run but does not default to it.
 - `callsEveryRegisteredTool` in the server tests only sees basic, server and jdt tools; a green run is not protocol coverage of the other bundles.
 - Tests never write the real token: the surefire `argLine` sets `-Dcom.vogella.eclipse.mcp.tokenDirectory` to `target/`, and a test fails if that redirect is lost.
 - JUnit comes from the Eclipse SDK (bundle `junit-jupiter-api` 6.x); do not add a Maven location for it.
@@ -237,6 +237,7 @@ Do not undo these without understanding why they are there.
 - A check scoped to `getInstallableUnitSources` looks where the installed version lives, which never holds a newer one, so `widenToAllRepositories` retries against every enabled repository and says so.
 - A self update replaces the bundles running it and has left an IDE without a server: `UpdateTool.selfUpdates` requires `acknowledgeSelfUpdate`, and `EndpointFile.markStopped` leaves a record. The real fix, driving it from outside the feature, is not written.
 - `HeadlessTrust` answers p2's trust prompts instead of a modal dialog. `trustUnsigned` defaults to true because locally built repositories are unsigned and `eclipse_add_repository` already lets a client pick sources. Keep `persistTrust` false, never return `trustAlways`, and record every prompt; the list is capped at `MAX_PROMPTS` with `trustPrompts`, `trustPromptsTotal`, `trustPromptsTruncated` and the verdict in `trustedUnsigned`.
+- `eclipse_install` resolves against only the repository the unit was found in unless `contactAllSites` is set, because the default `ProvisioningContext` lets the planner swap installed dependencies for versions from other sites, which has left an IDE unable to start. `Provisioning.planEffects` lists the installed units a plan replaces, removes or adds a second version beside; without `allowChangingInstalled` an install of a new unit refuses on any of them and an upgrade on a removed unit or a second version, since an upgrade replaces its own bundles, and `eclipse_update` reports them under `plan`.
 - `eclipse_install` refuses repositories the IDE is not configured with. That is friction, not a security boundary; do not replace it with a preference or build guards on top of it.
 - `eclipse_restart` lives in the ui bundle without a p2 dependency so a half applied update stays recoverable, and every provisioning result carries the previous configuration timestamp for Installation History.
 

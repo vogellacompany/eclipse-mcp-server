@@ -49,6 +49,18 @@ class ProvisioningGuardsTest {
 	}
 
 	@Test
+	void installStaysOnItsRepositoryAndGuardsInstalledUnits() throws Exception {
+		Map<String, Object> properties = properties(
+				TestFixture.parse(TestFixture.tool("eclipse_install").getInputSchema()));
+
+		assertTrue(defaultsToFalse(properties, "contactAllSites"),
+				"resolving against every site lets the planner swap installed dependencies");
+		assertTrue(defaultsToFalse(properties, "dryRun"), "an install goes ahead unless a dry run is asked for");
+		assertTrue(defaultsToFalse(properties, "allowChangingInstalled"),
+				"changing installed units under a new install must stay behind an explicit opt-in");
+	}
+
+	@Test
 	void everyProvisioningToolSaysItModifiesTheInstallation() {
 		for (String name : List.of("eclipse_update", "eclipse_install", "eclipse_uninstall")) {
 			assertTrue(TestFixture.tool(name).getDescription().contains("MODIFIES THE INSTALLATION")
@@ -60,6 +72,12 @@ class ProvisioningGuardsTest {
 	@SuppressWarnings("unchecked")
 	private static Map<String, Object> properties(Map<String, Object> schema) {
 		return (Map<String, Object>) schema.get("properties");
+	}
+
+	@SuppressWarnings("unchecked")
+	private static boolean defaultsToFalse(Map<String, Object> properties, String name) {
+		Object property = properties.get(name);
+		return property instanceof Map<?, ?> map && Boolean.FALSE.equals(((Map<String, Object>) map).get("default"));
 	}
 
 	@SuppressWarnings("unchecked")

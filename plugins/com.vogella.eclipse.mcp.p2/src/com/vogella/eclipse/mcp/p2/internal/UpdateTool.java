@@ -122,6 +122,12 @@ public final class UpdateTool implements IMcpTool {
 					"Refused: the resolution wants to update %s, which you did not ask for. Only %s was named. Nothing was changed." //$NON-NLS-1$
 							.formatted(unexpected, unitIds));
 		}
+		List<String> roots = new ArrayList<>();
+		for (Update update : possible) {
+			roots.add(update.toUpdate.getId());
+		}
+		JsonObject planned = PlanEffects.of(operation.getProvisioningPlan(), roots).json();
+		JsonObject plan = planned == null ? new JsonObject() : planned;
 		List<String> self = selfUpdates(possible);
 		if (!self.isEmpty() && !args.getBoolean("acknowledgeSelfUpdate", false)) { //$NON-NLS-1$
 			return McpToolResult.error(
@@ -129,11 +135,11 @@ public final class UpdateTool implements IMcpTool {
 							.formatted(self));
 		}
 		if (args.getBoolean("dryRun", true)) { //$NON-NLS-1$
-			return McpToolResult.of(Provisioning
-					.record("update", "dryRun", //$NON-NLS-1$ //$NON-NLS-2$
-							"Nothing was changed. This is what would be updated; pass dryRun false to apply it.", //$NON-NLS-1$
-							changes)
-					.toJson().toString());
+			Provisioning.Operation dry = Provisioning.record("update", "dryRun", //$NON-NLS-1$ //$NON-NLS-2$
+					"Nothing was changed. This is what would be updated; pass dryRun false to apply it. plan lists the other installed units it would replace, remove or add a second version beside.", //$NON-NLS-1$
+					changes);
+			Provisioning.setPlan(dry, plan);
+			return McpToolResult.of(dry.toJson().toString());
 		}
 		// installed after the dry run returns, so a dry run never swaps the IDE's dialogs
 		boolean trustUnsigned = args.getBoolean("trustUnsigned", true); //$NON-NLS-1$
@@ -146,6 +152,7 @@ public final class UpdateTool implements IMcpTool {
 		}
 		Provisioning.Operation handle = Provisioning.start("update", tracked -> { //$NON-NLS-1$
 			Provisioning.setChanges(tracked, changes);
+			Provisioning.setPlan(tracked, plan);
 			return job;
 		});
 		Provisioning.onFinished(handle, () -> {

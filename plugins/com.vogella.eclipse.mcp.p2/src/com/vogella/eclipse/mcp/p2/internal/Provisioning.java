@@ -78,6 +78,7 @@ final class Provisioning {
 		/** How many p2 asked about, which is more than the list keeps. */
 		private volatile int trustPromptCount;
 		private volatile boolean trustedUnsigned;
+		private volatile JsonObject plan;
 		private volatile Job job;
 
 		Operation(String id, String kind) {
@@ -103,6 +104,9 @@ final class Provisioning {
 					.put("trustPrompts", trustPrompts) //$NON-NLS-1$
 					.put("trustPromptsTotal", Integer.valueOf(trustPromptCount)) //$NON-NLS-1$
 					.put("trustPromptsTruncated", Boolean.valueOf(trustPromptCount > trustPrompts.size())); //$NON-NLS-1$
+			if (plan != null) {
+				json.put("plan", plan); //$NON-NLS-1$
+			}
 			if (changesTotal >= 0) {
 				json.put("total", Integer.valueOf(changesTotal)).put("truncated", Boolean.valueOf(changesTruncated)); //$NON-NLS-1$ //$NON-NLS-2$
 			}
@@ -234,6 +238,10 @@ final class Provisioning {
 		operation.changes = changes;
 		operation.changesTotal = total;
 		operation.changesTruncated = truncated;
+	}
+
+	static void setPlan(Operation operation, JsonObject plan) {
+		operation.plan = plan;
 	}
 
 	/** Records what p2 asked about, so the answer is visible instead of looking like a slow download. */
