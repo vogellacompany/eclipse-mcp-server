@@ -86,6 +86,7 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 		defaults.putBoolean(McpPreferences.KEY_ENABLED, McpPreferences.DEFAULT_ENABLED);
 		defaults.putInt(McpPreferences.KEY_PORT, McpPreferences.DEFAULT_PORT);
 		defaults.putInt(McpPreferences.KEY_CALL_TIMEOUT_SECONDS, McpPreferences.DEFAULT_CALL_TIMEOUT_SECONDS);
+		defaults.putInt(McpPreferences.KEY_UI_WAIT_SECONDS, McpPreferences.DEFAULT_UI_WAIT_SECONDS);
 		serverPreferences = new ScopedPreferenceStore(InstanceScope.INSTANCE, McpPreferences.QUALIFIER);
 		return serverPreferences;
 	}
@@ -100,6 +101,12 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 				"&Tool call timeout (seconds):", getFieldEditorParent());
 		timeout.setValidRange(McpPreferences.MIN_CALL_TIMEOUT_SECONDS, McpPreferences.MAX_CALL_TIMEOUT_SECONDS);
 		addField(timeout);
+		IntegerFieldEditor uiWait = new IntegerFieldEditor(McpPreferences.KEY_UI_WAIT_SECONDS,
+				"UI thread &wait (seconds):", getFieldEditorParent());
+		uiWait.setValidRange(McpPreferences.MIN_UI_WAIT_SECONDS, McpPreferences.MAX_CALL_TIMEOUT_SECONDS);
+		uiWait.getLabelControl(getFieldEditorParent()).setToolTipText(
+				"How long a tool waits for a busy UI thread before it withdraws the request. Capped by the tool call timeout.");
+		addField(uiWait);
 	}
 
 	@Override

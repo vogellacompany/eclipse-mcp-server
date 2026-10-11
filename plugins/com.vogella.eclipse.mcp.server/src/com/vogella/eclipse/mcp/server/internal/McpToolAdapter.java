@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.NullProgressMonitor;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.server.McpPreferences;
@@ -60,9 +61,11 @@ public final class McpToolAdapter {
 			if (!running.state.compareAndSet(Running.QUEUED, Running.RUNNING)) {
 				return null;
 			}
+			CallBudget.enter(timeout.toSeconds());
 			try {
 				return tool.call(arguments == null ? Map.of() : arguments, monitor);
 			} finally {
+				CallBudget.leave();
 				running.state.set(Running.DONE);
 			}
 		});

@@ -4,6 +4,8 @@ import java.time.Duration;
 
 import org.eclipse.core.runtime.Platform;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
+
 /**
  * The preferences that control the embedded MCP server.
  */
@@ -18,6 +20,9 @@ public final class McpPreferences {
 
 	public static final String KEY_CALL_TIMEOUT_SECONDS = "callTimeoutSeconds"; //$NON-NLS-1$
 
+	/** How long a tool waits for a busy UI thread before withdrawing its request; read by {@code CallBudget.uiWaitSeconds}. */
+	public static final String KEY_UI_WAIT_SECONDS = CallBudget.UI_WAIT_KEY;
+
 	/** A process that listens on a socket and answers questions about the user's code must be opt-in. */
 	public static final boolean DEFAULT_ENABLED = false;
 
@@ -29,6 +34,10 @@ public final class McpPreferences {
 	public static final int MIN_CALL_TIMEOUT_SECONDS = 5;
 
 	public static final int MAX_CALL_TIMEOUT_SECONDS = 3600;
+
+	public static final int DEFAULT_UI_WAIT_SECONDS = CallBudget.DEFAULT_UI_WAIT_SECONDS;
+
+	public static final int MIN_UI_WAIT_SECONDS = 1;
 
 	private McpPreferences() {
 	}

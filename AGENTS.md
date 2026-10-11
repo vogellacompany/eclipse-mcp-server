@@ -81,7 +81,9 @@ No tool opens a dialog.
 **Threading.**
 Tool calls arrive on Jetty worker threads; never call `Display.syncExec` from one.
 Queue UI work through `UiThread.exec`, which runs inline when already on the UI thread; `eclipse_run_script` with `atomic` runs a batch inside one Display runnable and would deadlock otherwise.
-A UI request whose wait gave up is withdrawn (`completeFrom` skips cancelled futures), except `UiThread.timed`, which `eclipse_run_workbench_command` uses to keep running and log the outcome.
+A UI request waits `CallBudget.uiWaitSeconds`: the longer of the tool's own wait and the `uiWaitSeconds` preference, capped by what is left of the call, which `McpToolAdapter` records through `CallBudget.enter` so a tool with several UI hops still answers in time.
+It is then withdrawn (`completeFrom` skips cancelled futures), and `Outcome.errorResult` answers a JSON error carrying `withdrawn` so a client can retry.
+`UiThread.timed`, which `eclipse_run_workbench_command` uses to keep running and log the outcome, keeps its caller's timeout.
 A preference write fires its listeners on the writing thread, and editors touch widgets in them, so the basic preference tool goes through `UiDispatch` for writes that UI listeners react to.
 Marker reads and JDT searches are safe off the UI thread and need no workspace lock.
 
@@ -203,6 +205,7 @@ Do not undo these without understanding why they are there.
 
 - `eclipse_import_project` uses the `x-internal` `SmartImportJob` deliberately, which is why it lives in the ide bundle rather than basic. It always sets the directories to import (avoiding a modal question), uses `getImportProposals` as the dry run, and restores the auto-build state the job can leave off.
 - `Reconcilers` reads the reconciler by field name the way JDT's `EditorTestHelper.joinReconciler` does (including the upstream typo `fIninitalProcessDone`); an unreadable one counts as busy, never idle. Lookups are cached per class, a probe stops after `BUDGET_MILLIS`, `UiSettle` sleeps at least as long as the last probe, and the wait is capped by `CallBudget.maxWaitSeconds()` and reports `clamped`.
+- `eclipse_wait_for` probes with `getPart(false)`, since a wait must not create the part it waits for, and `find` skips virtual rows that are not populated, since reading one fires `SetData`. A timeout is a normal answer with each condition's last observation; a UI-busy probe marks only the widget conditions. It refuses on the UI thread, where it would block what it waits for.
 - `eclipse_wait_until_settled` is a heuristic whose description names what it cannot see, and a test asserts that wording. `converged false` means the screen never stopped; `converged true` with a differing image means it stopped at a different layout.
 - `suppressCaret` defaults to on and the answer reports `caretsSuppressed`.
 - Root capture can return uniform pixels without error (GTK4, compositing), so the uniform check triggers the `Control.print` fallback. Do not add an environment check to `unsupportedReason`; the environment cannot tell the cases apart.

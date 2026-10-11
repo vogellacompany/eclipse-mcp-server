@@ -15,6 +15,7 @@
       <tool class="com.vogella.eclipse.mcp.ui.internal.PressWidgetTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ScrollTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.WaitUntilSettledTool"/>
+      <tool class="com.vogella.eclipse.mcp.ui.internal.WaitForTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.PauseTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ApplyCssTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ThemeTools$ListThemes"/>

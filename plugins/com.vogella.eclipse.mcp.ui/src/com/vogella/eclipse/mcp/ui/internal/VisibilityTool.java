@@ -73,7 +73,7 @@ public final class VisibilityTool implements IMcpTool {
 		List<JsonObject> unconfirmed = new ArrayList<>();
 		UiThread.Outcome outcome = UiThread.run(UI_TIMEOUT_SECONDS, () -> apply(visible, mode, unconfirmed));
 		if (outcome.error() != null) {
-			return McpToolResult.error(outcome.error());
+			return outcome.errorResult();
 		}
 		if (!unconfirmed.isEmpty() && !UiThread.onUiThread() && awaitActivation(monitor)) {
 			for (JsonObject entry : unconfirmed) {

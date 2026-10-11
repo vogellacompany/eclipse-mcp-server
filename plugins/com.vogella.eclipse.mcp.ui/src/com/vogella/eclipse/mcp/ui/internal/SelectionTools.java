@@ -92,7 +92,7 @@ public final class SelectionTools {
 	 * one two-element selection into a half-megabyte answer. The resource name, or
 	 * what the workbench itself would show, is what a caller reads anyway.
 	 */
-	private static String label(Object element, IResource resource) {
+	static String label(Object element, IResource resource) {
 		if (element == null) {
 			return null;
 		}

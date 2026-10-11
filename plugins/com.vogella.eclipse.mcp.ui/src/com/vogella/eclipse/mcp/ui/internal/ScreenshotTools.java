@@ -39,6 +39,7 @@ import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.views.IViewDescriptor;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -78,6 +79,7 @@ public final class ScreenshotTools {
 			return McpToolResult.error("There is no running workbench."); //$NON-NLS-1$
 		}
 		CompletableFuture<T> pending = new CompletableFuture<>();
+		int wait = CallBudget.uiWaitSeconds(UI_TIMEOUT_SECONDS);
 		// asyncExec, never syncExec: a busy UI must not block the HTTP worker
 		UiThread.exec(() -> {
 			if (pending.isDone()) {
@@ -85,15 +87,15 @@ public final class ScreenshotTools {
 			}
 			try {
 				pending.complete(work.get());
-			} catch (RuntimeException e) {
+			} catch (Throwable e) {
 				pending.completeExceptionally(e);
 			}
 		});
 		try {
-			return McpToolResult.of(render.apply(pending.get(UI_TIMEOUT_SECONDS, TimeUnit.SECONDS)));
+			return McpToolResult.of(render.apply(pending.get(wait, TimeUnit.SECONDS)));
 		} catch (TimeoutException e) {
 			pending.cancel(false);
-			return McpToolResult.error("The Eclipse UI is busy, try again."); //$NON-NLS-1$
+			return McpToolResult.error(UiThread.withdrawn(wait));
 		} catch (InterruptedException e) {
 			pending.cancel(false);
 			Thread.currentThread().interrupt();
@@ -327,9 +329,11 @@ public final class ScreenshotTools {
 			boolean converged = false;
 			for (int i = 0; i < attempts && !converged; i++) {
 				// one UI hop per capture on purpose, so whatever is painting can get on with it in between
-				Encoding encoding = onUiValue(once);
+				int wait = CallBudget.uiWaitSeconds(UI_TIMEOUT_SECONDS);
+				Encoding encoding = onUiValue(once, wait);
 				if (encoding == null) {
-					return McpToolResult.error("The Eclipse UI is busy, try again."); //$NON-NLS-1$
+					return McpToolResult.error(Thread.currentThread().isInterrupted() ? "The request was interrupted." //$NON-NLS-1$
+							: UiThread.withdrawn(wait));
 				}
 				answer = encoding.finish();
 				lastPng = encoding.png().get();
@@ -383,7 +387,7 @@ public final class ScreenshotTools {
 		}
 
 		/** One capture on the UI thread, as the object rather than as a result. */
-		private static Encoding onUiValue(Supplier<Encoding> work) {
+		private static Encoding onUiValue(Supplier<Encoding> work, int waitSeconds) {
 			CompletableFuture<Encoding> pending = new CompletableFuture<>();
 			UiThread.exec(() -> {
 				if (pending.isDone()) {
@@ -391,12 +395,12 @@ public final class ScreenshotTools {
 				}
 				try {
 					pending.complete(work.get());
-				} catch (RuntimeException e) {
+				} catch (Throwable e) {
 					pending.completeExceptionally(e);
 				}
 			});
 			try {
-				return pending.get(UI_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+				return pending.get(waitSeconds, TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				pending.cancel(false);
 				Thread.currentThread().interrupt();

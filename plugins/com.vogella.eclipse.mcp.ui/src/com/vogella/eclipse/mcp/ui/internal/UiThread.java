@@ -9,6 +9,7 @@ import java.util.function.Supplier;
 
 import org.eclipse.swt.widgets.Display;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.UiDispatch;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
@@ -26,9 +27,16 @@ public final class UiThread {
 	static final String NO_WORKBENCH = "There is no running workbench."; //$NON-NLS-1$
 
 	/** The answer for a wait that gave up, which also says the work will not run later. */
-	public static final String TIMED_OUT = "The Eclipse UI did not process the request within %d seconds. The request was withdrawn and will not run later, so retry it once the UI is responsive; eclipse_start_sampling with threads ui shows what it is doing."; //$NON-NLS-1$
+	public static final String TIMED_OUT = "The Eclipse UI did not process the request within %d seconds. The request was withdrawn and will not run later, so retry it once the UI is responsive; eclipse_start_sampling with threads ui shows what it is doing. The wait is 'UI thread wait' (uiWaitSeconds) in Preferences > General > MCP Server, capped by the tool call timeout."; //$NON-NLS-1$
 
 	private UiThread() {
+	}
+
+	/** The error text for a withdrawn request, a JSON object so a client can tell a safe retry apart without parsing prose. */
+	public static String withdrawn(long waitedSeconds) {
+		return new JsonObject().put("withdrawn", Boolean.TRUE) //$NON-NLS-1$
+				.put("waitedSeconds", Long.valueOf(waitedSeconds)) //$NON-NLS-1$
+				.put("message", TIMED_OUT.formatted(Long.valueOf(waitedSeconds))).toString(); //$NON-NLS-1$
 	}
 
 	/**
@@ -64,14 +72,22 @@ public final class UiThread {
 	/** Runs the work here and now, turning a failure into the same shape a wait produces. */
 	private static Outcome inline(Supplier<JsonObject> work) {
 		try {
-			return new Outcome(work.get(), null);
+			return new Outcome(work.get(), null, null);
 		} catch (Throwable e) {
-			return new Outcome(null, Workbenches.describe(e));
+			return new Outcome(null, Workbenches.describe(e), null);
 		}
 	}
 
-	/** What the UI thread answered, or why it did not. Exactly one of the two is set. */
-	record Outcome(JsonObject value, String error) {
+	/**
+	 * What the UI thread answered, or why it did not. Exactly one of value and error is set;
+	 * {@code withdrawnAfter} is the wait in seconds when the error is a request given up before it ran.
+	 */
+	public record Outcome(JsonObject value, String error, Integer withdrawnAfter) {
+
+		/** The error as a tool result, a JSON object carrying {@code withdrawn} when the request never ran. */
+		public McpToolResult errorResult() {
+			return McpToolResult.error(withdrawnAfter != null ? withdrawn(withdrawnAfter.intValue()) : error);
+		}
 	}
 
 	/**
@@ -175,7 +191,7 @@ public final class UiThread {
 				}
 			});
 			try {
-				return pending.get(timeoutSeconds, TimeUnit.SECONDS);
+				return pending.get(CallBudget.uiWaitSeconds(timeoutSeconds), TimeUnit.SECONDS);
 			} catch (TimeoutException | InterruptedException e) {
 				pending.cancel(false);
 				throw e;
@@ -187,8 +203,7 @@ public final class UiThread {
 
 	public static McpToolResult call(long timeoutSeconds, Supplier<JsonObject> work) {
 		Outcome outcome = run(timeoutSeconds, work);
-		return outcome.error() == null ? McpToolResult.of(outcome.value().toString())
-				: McpToolResult.error(outcome.error());
+		return outcome.error() == null ? McpToolResult.of(outcome.value().toString()) : outcome.errorResult();
 	}
 
 	/**
@@ -201,17 +216,18 @@ public final class UiThread {
 		}
 		CompletableFuture<JsonObject> pending = submit(work);
 		if (pending == null) {
-			return new Outcome(null, NO_WORKBENCH);
+			return new Outcome(null, NO_WORKBENCH, null);
 		}
+		int wait = CallBudget.uiWaitSeconds(timeoutSeconds);
 		try {
-			return new Outcome(pending.get(timeoutSeconds, TimeUnit.SECONDS), null);
+			return new Outcome(pending.get(wait, TimeUnit.SECONDS), null, null);
 		} catch (TimeoutException e) {
 			// cancelling is what makes the queued runnable skip the work, see completeFrom
 			pending.cancel(false);
-			return new Outcome(null, TIMED_OUT.formatted(Long.valueOf(timeoutSeconds)));
+			return new Outcome(null, TIMED_OUT.formatted(Integer.valueOf(wait)), Integer.valueOf(wait));
 		} catch (InterruptedException | ExecutionException e) {
 			pending.cancel(false);
-			return new Outcome(null, failure(e));
+			return new Outcome(null, failure(e), null);
 		}
 	}
 }

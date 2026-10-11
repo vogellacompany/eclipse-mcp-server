@@ -22,6 +22,7 @@ class CallBudgetTest {
 	@AfterEach
 	void restoreTimeout() {
 		InstanceScope.INSTANCE.getNode(QUALIFIER).remove(KEY);
+		InstanceScope.INSTANCE.getNode(QUALIFIER).remove(CallBudget.UI_WAIT_KEY);
 	}
 
 	private static void timeout(int seconds) {
@@ -68,5 +69,28 @@ class CallBudgetTest {
 		assertTrue(note.contains("Waited 7 of the 60 seconds"), note);
 		assertTrue(note.contains("10 second"), note);
 		assertTrue(note.contains("eclipse_get_build_status"), note);
+	}
+
+	@Test
+	void theUiWaitIsTheLongerOfToolAndPreference() {
+		assertEquals(CallBudget.DEFAULT_UI_WAIT_SECONDS, CallBudget.uiWaitSeconds(10));
+		InstanceScope.INSTANCE.getNode(QUALIFIER).putInt(CallBudget.UI_WAIT_KEY, 5);
+		assertEquals(15, CallBudget.uiWaitSeconds(15));
+		InstanceScope.INSTANCE.getNode(QUALIFIER).putInt(CallBudget.UI_WAIT_KEY, 600);
+		assertEquals(27, CallBudget.uiWaitSeconds(10), "capped by the call timeout");
+	}
+
+	@Test
+	void insideACallEveryWaitIsCappedByWhatIsLeftOfIt() {
+		CallBudget.enter(10);
+		try {
+			int ui = CallBudget.uiWaitSeconds(5);
+			int bounded = CallBudget.boundedWaitSeconds(60);
+			assertTrue(ui >= 6 && ui <= 7, "got " + ui);
+			assertTrue(bounded >= 6 && bounded <= 7, "got " + bounded);
+		} finally {
+			CallBudget.leave();
+		}
+		assertEquals(27, CallBudget.boundedWaitSeconds(60), "outside a call the whole timeout applies again");
 	}
 }

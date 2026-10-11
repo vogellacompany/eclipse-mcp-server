@@ -144,7 +144,7 @@ public final class WidgetTools {
 	 * them as its own stylable element. Enumerating them is what lets the inspector
 	 * address one, pseudo classes included.
 	 */
-	private static Widget[] itemsOf(Widget widget) {
+	static Widget[] itemsOf(Widget widget) {
 		return switch (widget) {
 		case org.eclipse.swt.widgets.ToolBar bar -> bar.getItems();
 		case org.eclipse.swt.custom.CTabFolder folder -> folder.getItems();

@@ -166,7 +166,7 @@ public final class ScrollTool implements IMcpTool {
 			return result;
 		});
 		if (posted.error() != null) {
-			return McpToolResult.error(posted.error());
+			return posted.errorResult();
 		}
 		JsonObject result = posted.value();
 		if (scrolled.get() == null) {

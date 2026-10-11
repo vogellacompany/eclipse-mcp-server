@@ -44,6 +44,7 @@ Every push to `main` publishes to the update site; pushing a `v<version>` tag ad
 * **Enable MCP server**, off by default
 * **Port**, `8642` by default
 * **Tool call timeout**, `30` seconds by default
+* **UI thread wait**, `25` seconds by default: how long a tool waits for a busy UI thread before it withdraws the request, capped by the tool call timeout
 
 Changes apply immediately.
 The page also shows the URL, the bearer token and the discovery file, and can regenerate the token.
@@ -215,6 +216,7 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_list_themes`, `eclipse_list_theme_definitions`, ✎ `eclipse_set_theme`, `eclipse_register_theme`, `eclipse_apply_css` | Themes and live CSS |
 | `eclipse_get_display_info`, `eclipse_screenshot`, `eclipse_start_screencast`, `eclipse_stop_screencast` | Display scaling, PNG captures and GIF recordings |
 | `eclipse_wait_until_settled` | Wait until the UI has stopped changing |
+| `eclipse_wait_for` | Wait until a shell, widget, selection, editor or job condition holds |
 | ✎ `eclipse_run_script` | Run several tools in sequence with expectations, optionally in one UI turn |
 
 **Installation**
