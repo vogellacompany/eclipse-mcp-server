@@ -140,6 +140,7 @@ Do not undo these without understanding why they are there.
 
 ### Build and packaging
 
+- The root pom sets `project.build.outputTimestamp` to the build time: Tycho takes the qualifier from it, and the super POM of Maven 3.10 and later pins it to 1980, which gives every build the same version and p2 never sees an update.
 - `.mvn/maven.config` sets `tycho.pomless.aggregator.names`, otherwise `update-site/` is not an aggregator and the build fails.
 - The feature includes Jetty ee11, the MCP SDK, Jackson 3, networknt and reactor, and leaves out `slf4j.api` and `jakarta.servlet-api`, which the host IDE ships.
 - Jetty imports are pinned to `[12.1.12,13)`, the floor `jetty-ee11-servlet` needs.
