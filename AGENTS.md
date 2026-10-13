@@ -220,6 +220,7 @@ Do not undo these without understanding why they are there.
 - `McpUiComponent.deactivate` calls `VisibilityTool.restoreIfHidden`, so disabling the server cannot leave the IDE hidden.
 - `eclipse_restart` uses `restart(true)`, which keeps `-data`. `IWorkbench.restart` is a cancellable close, so `force` closes every window's dirty parts itself, a `false` return is reported as `previousRestartFailed` on the next call, and `--launcher.oldUserArgsStart` in `eclipse.commands` marks a real relaunch. It refuses while a modal dialog is open.
 - On Windows, `NativeForeground` attaches to the foreground input queue for a raise, detaches in a `finally`, skips windows `IsHungAppWindow` reports, and reports `foregroundMethod`. Read foreground back through `NativeForeground.isForeground`, never `Display.getActiveShell`, which on GTK reports the request before the compositor has answered; `eclipse_press_key` gates on it. Unverified on Windows.
+- `eclipse_drag` moves the pointer through XTest, wiggles it on each point, and resolves the first leg before the press: SWT's X11 drag detection holds the UI thread for up to 500 ms after the press, so a UI call there delays the first move past it, and GTK starts its drag partway along the line, so a drop target only reacts to motion after that.
 - Screencasts default to the target's own width; both capture tools report a non-integer scale, and `crispWidth` snaps to a whole divisor.
 
 ### Profiling

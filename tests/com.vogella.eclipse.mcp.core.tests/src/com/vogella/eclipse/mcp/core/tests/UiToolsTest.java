@@ -19,6 +19,7 @@ import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.SWTError;
 import org.eclipse.swt.custom.CCombo;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.ide.internal.CompareTool;
+import com.vogella.eclipse.mcp.ui.internal.DragTool;
 import com.vogella.eclipse.mcp.ui.internal.SetWidgetTextTool;
 
 /**
@@ -194,6 +196,39 @@ class UiToolsTest {
 		// none is a known button, so it gets as far as the workbench
 		assertRefused(TestFixture.call("eclipse_click", Map.of("path", "0", "button", "none")),
 				"no running workbench");
+	}
+
+	@Test
+	void draggingChecksItsArgumentsBeforeTheUiThread() throws Exception {
+		Map<String, Object> row = Map.of("path", "0/r0");
+		assertRefused(TestFixture.call("eclipse_drag", Map.of("to", row)), "'from' must be an object");
+		assertRefused(TestFixture.call("eclipse_drag", Map.of("from", row, "to", row, "button", "none")),
+				"Unknown button");
+		assertRefused(TestFixture.call("eclipse_drag", Map.of("from", Map.of("displayX", Integer.valueOf(10)), "to", row)),
+				"both 'displayX' and 'displayY' in 'from'");
+		assertRefused(TestFixture.call("eclipse_drag", Map.of("from", row, "to", row, "via", row)), "must be an array");
+		assertRefused(TestFixture.call("eclipse_drag", Map.of("from", row, "to", row, "via",
+				List.of(Map.of("displayX", Integer.valueOf(1), "displayY", Integer.valueOf(1), "path", "0")))), "not both");
+		assertRefused(TestFixture.call("eclipse_drag", Map.of("from", row, "to",
+				Map.of("path", "0/r1", "dwellMillis", Integer.valueOf(10_000)), "via",
+				List.of(Map.of("path", "0", "dwellMillis", Integer.valueOf(10_000)),
+						Map.of("path", "0", "dwellMillis", Integer.valueOf(10_000))))), "shorten dwellMillis");
+	}
+
+	@Test
+	void draggingRefusesWithoutAWorkbenchAndAnnouncesItsEffect() throws Exception {
+		assertRefused(TestFixture.call("eclipse_drag", Map.of("from", Map.of("path", "0/r0"), "to", Map.of("path", "0/r1"))),
+				"no running workbench");
+		assertTrue(TestFixture.tool("eclipse_drag").getDescription().contains("MOVES THE MOUSE POINTER"));
+	}
+
+	@Test
+	void dragStepsStartSmallAndEndOnTheTarget() {
+		List<Point> steps = DragTool.interpolate(new Point(0, 0), new Point(40, 0), 8, true);
+		assertEquals(List.of(new Point(1, 0), new Point(3, 0), new Point(6, 0), new Point(14, 0), new Point(22, 0),
+				new Point(30, 0), new Point(38, 0), new Point(40, 0)), steps);
+		assertEquals(List.of(new Point(4, 4)), DragTool.interpolate(new Point(4, 4), new Point(4, 4), 8, true));
+		assertEquals(List.of(new Point(8, 0), new Point(10, 0)), DragTool.interpolate(new Point(0, 0), new Point(10, 0), 8, false));
 	}
 
 	@Test
