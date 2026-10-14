@@ -2,12 +2,15 @@ package com.vogella.eclipse.mcp.p2.internal;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.equinox.p2.core.IProvisioningAgent;
+import org.eclipse.equinox.p2.metadata.IInstallableUnit;
 import org.eclipse.equinox.p2.operations.ProvisioningJob;
 import org.eclipse.equinox.p2.operations.ProvisioningSession;
 import org.eclipse.equinox.p2.operations.Update;
@@ -89,12 +92,7 @@ public final class UpdateTool implements IMcpTool {
 			// Constructing the operation with the units restricts what is examined but
 			// not what is selected: without setSelectedUpdates p2 applies every update
 			// it found, which once updated a whole SDK when one feature was named.
-			List<Update> wanted = new ArrayList<>();
-			for (Update update : possible) {
-				if (unitIds.contains(update.toUpdate.getId())) {
-					wanted.add(update);
-				}
-			}
+			List<Update> wanted = newestPerUnit(possible, unitIds);
 			if (wanted.isEmpty()) {
 				return McpToolResult.of(Provisioning.record("update", "done", //$NON-NLS-1$ //$NON-NLS-2$
 						"No update is available for %s.".formatted(unitIds), new JsonArray()).toJson().toString()); //$NON-NLS-1$
@@ -174,6 +172,24 @@ public final class UpdateTool implements IMcpTool {
 			answer.put("waitNote", waitNote); //$NON-NLS-1$
 		}
 		return McpToolResult.of(answer.toString());
+	}
+
+	/**
+	 * The newest update for each installed unit named in {@code unitIds}.
+	 * <p>
+	 * p2 lists every newer version as a possible update, and selecting more than one
+	 * for the same unit fails to resolve because only one version can be installed.
+	 */
+	public static List<Update> newestPerUnit(Update[] possible, List<String> unitIds) {
+		Set<String> named = Set.copyOf(unitIds);
+		Map<IInstallableUnit, Update> newest = new LinkedHashMap<>();
+		for (Update update : possible) {
+			if (named.contains(update.toUpdate.getId())) {
+				newest.merge(update.toUpdate, update, (kept, other) -> other.replacement.getVersion()
+						.compareTo(kept.replacement.getVersion()) > 0 ? other : kept);
+			}
+		}
+		return new ArrayList<>(newest.values());
 	}
 
 	/**
