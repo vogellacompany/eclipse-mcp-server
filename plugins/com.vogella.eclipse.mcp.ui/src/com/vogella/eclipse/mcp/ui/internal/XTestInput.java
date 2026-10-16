@@ -10,8 +10,11 @@ import java.lang.foreign.Linker;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.swt.SWT;
+
+import com.vogella.eclipse.mcp.core.json.JsonObject;
 
 /**
  * Every call into libXtst, which is how a mouse button reaches a GTK3 widget.
@@ -125,7 +128,7 @@ final class XTestInput {
 	}
 
 	/** The libX11 and libXtst entry points this class uses. */
-	private record X(MethodHandle open, MethodHandle close, MethodHandle sync, MethodHandle fakeButton,
+	private record X(MethodHandle open, MethodHandle sync, MethodHandle fakeButton,
 			MethodHandle fakeMotion, MethodHandle rootWindow, MethodHandle queryPointer) {
 	}
 
@@ -144,8 +147,6 @@ final class XTestInput {
 			SymbolLookup xtst = SymbolLookup.libraryLookup("libXtst.so.6", Arena.global()); //$NON-NLS-1$
 			x = new X(linker.downcallHandle(x11.findOrThrow("XOpenDisplay"), //$NON-NLS-1$
 					FunctionDescriptor.of(ADDRESS, ADDRESS)),
-					linker.downcallHandle(x11.findOrThrow("XCloseDisplay"), //$NON-NLS-1$
-							FunctionDescriptor.of(JAVA_INT, ADDRESS)),
 					linker.downcallHandle(x11.findOrThrow("XSync"), //$NON-NLS-1$
 							FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT)),
 					linker.downcallHandle(xtst.findOrThrow("XTestFakeButtonEvent"), //$NON-NLS-1$
@@ -162,21 +163,57 @@ final class XTestInput {
 		return x;
 	}
 
-	/** Runs {@code call} on a fresh connection to the X server; a String answer is a failure. */
+	/** Serializes the calls on the connection. */
+	private static final Object LOCK = new Object();
+
+	/** Guards opening the connection, apart from LOCK so the UI thread never waits on another thread's X round trip. */
+	private static final Object OPEN = new Object();
+
+	/** The one connection to the X server, kept for the life of the process. */
+	private static volatile MemorySegment connection;
+
+	/** Runs {@code call} on the connection to the X server; a String answer is a failure. */
 	private static Object withConnection(XCall call) {
 		try {
 			X x = handles();
-			MemorySegment connection = (MemorySegment) x.open().invokeExact(MemorySegment.NULL);
-			if (connection.equals(MemorySegment.NULL)) {
-				return "XOpenDisplay could not connect to " + System.getenv("DISPLAY"); //$NON-NLS-1$ //$NON-NLS-2$
+			if (connection == null) {
+				String failure = open(x);
+				if (failure != null) {
+					return failure;
+				}
 			}
-			try {
+			synchronized (LOCK) {
 				return call.run(x, connection);
-			} finally {
-				int ignored = (int) x.close().invokeExact(connection);
 			}
 		} catch (Throwable e) {
 			return "libXtst is not usable: " + e; //$NON-NLS-1$
 		}
+	}
+
+	/**
+	 * Opens the connection on the UI thread, which cannot be inside a GDK server grab then. Xlib holds its
+	 * process-wide lock while XOpenDisplay waits for the server, GDK takes that lock while it holds a server
+	 * grab, and the grabbed server never answers the new connection, so opening it elsewhere can hang both.
+	 */
+	private static String open(X x) {
+		AtomicReference<String> failure = new AtomicReference<>();
+		UiThread.Outcome outcome = UiThread.run(10, () -> {
+			synchronized (OPEN) {
+				if (connection == null) {
+					try {
+						MemorySegment opened = (MemorySegment) x.open().invokeExact(MemorySegment.NULL);
+						if (opened.equals(MemorySegment.NULL)) {
+							failure.set("XOpenDisplay could not connect to " + System.getenv("DISPLAY")); //$NON-NLS-1$ //$NON-NLS-2$
+						} else {
+							connection = opened;
+						}
+					} catch (Throwable e) {
+						failure.set("libX11 is not usable: " + e); //$NON-NLS-1$
+					}
+				}
+			}
+			return new JsonObject();
+		});
+		return outcome.error() != null ? outcome.error() : failure.get();
 	}
 }
