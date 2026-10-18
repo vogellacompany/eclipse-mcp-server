@@ -109,7 +109,7 @@ A tool that needs editors, views, perspectives or commands refuses with `Workben
 
 **Optional dependencies live in one class each.**
 `CssStyling` (e4 CSS engine), `GitContent` (jgit, in the ide bundle) and `FlightRecording` (`jdk.jfr`) are imported optionally and callers catch `LinkageError`; never let one of their types into a signature a tool touches.
-`DisplayScaling` and `NativeForeground` reach SWT internals (`DPIUtil`, `gtk.GTK`, `win32.OS`) by name, so the bundle stays cross platform.
+`DisplayScaling`, `NativeForeground` and `NativeWindowState` reach SWT internals (`DPIUtil`, `gtk.GTK`, `win32.OS`) by name, so the bundle stays cross platform.
 
 **Answers.**
 Every list-returning tool honours `maxResults` and reports `total` and `truncated`.

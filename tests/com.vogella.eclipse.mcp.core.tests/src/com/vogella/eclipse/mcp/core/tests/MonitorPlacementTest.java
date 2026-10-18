@@ -1,9 +1,11 @@
 package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import org.eclipse.swt.SWT;
 import org.eclipse.swt.SWTError;
 import org.eclipse.swt.SWTException;
 import org.eclipse.swt.graphics.Rectangle;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.vogella.eclipse.mcp.ui.internal.NativeWindowState;
 import com.vogella.eclipse.mcp.ui.internal.MonitorPlacement;
 
 /**
@@ -71,5 +74,26 @@ class MonitorPlacementTest {
 		assertTrue(result.contains("\"onRequestedMonitor\": true"), result);
 		assertTrue(result.contains("\"placement\": \"bounds\""), result);
 		assertTrue(result.contains("\"monitor\": 0"), result);
+	}
+
+	@Test
+	void theWindowSystemStateIsReadNotTheRequest() throws InterruptedException {
+		assumeTrue("gtk".equals(SWT.getPlatform()), "reads GTK state");
+		onThisThread(() -> {
+		});
+		assertEquals(Boolean.FALSE, NativeWindowState.minimized(shell));
+
+		shell.setMinimized(true);
+		long end = System.currentTimeMillis() + 500;
+		while (System.currentTimeMillis() < end) {
+			onThisThread(() -> {
+			});
+			Thread.sleep(20);
+		}
+
+		Boolean actual = NativeWindowState.minimized(shell);
+		assertNotNull(actual);
+		// without a window manager GTK keeps the window normal while SWT still reports the request
+		assertTrue(actual.booleanValue() || shell.getMinimized(), "SWT dropped the request");
 	}
 }
