@@ -21,7 +21,7 @@ import com.vogella.eclipse.mcp.core.ToolArguments;
  * resolves the {@code shell} argument against the order {@code eclipse_list_ui_targets}
  * prints, so an index or the bounds it shows addresses one exactly.
  */
-final class Shells {
+public final class Shells {
 
 	private static final Pattern INDEX = Pattern.compile("#?(\\d+)"); //$NON-NLS-1$
 	private static final Pattern BOUNDS = Pattern.compile("(-?\\d+),(-?\\d+)\\s+(\\d+)x(\\d+)"); //$NON-NLS-1$
@@ -44,10 +44,11 @@ final class Shells {
 	 * The shell a {@code shell} argument names, or {@code null}. Accepts an index
 	 * into the list ({@code "1"} or {@code "#1"}), the bounds as printed
 	 * ({@code "151,334 402x255"}), the keyword {@code "popup"} for the topmost
-	 * visible non-workbench shell, or a title substring. {@code null} or blank
-	 * falls back to the modal dialog, then the active window.
+	 * visible non-workbench shell, or a title substring, preferring a visible
+	 * shell. {@code null} or blank falls back to the modal dialog, then the
+	 * active window.
 	 */
-	static Shell select(Display display, String spec) {
+	public static Shell select(Display display, String spec) {
 		if (spec == null || spec.isBlank()) {
 			return active(display);
 		}
@@ -75,12 +76,18 @@ final class Shells {
 			}
 			return null;
 		}
+		Shell hidden = null;
 		for (Shell shell : ordered(display)) {
 			if (shell.getText() != null && shell.getText().contains(value)) {
-				return shell;
+				if (shell.isVisible()) {
+					return shell;
+				}
+				if (hidden == null) {
+					hidden = shell;
+				}
 			}
 		}
-		return null;
+		return hidden;
 	}
 
 	/** The blocking modal dialog, else the active shell, else the workbench window. */

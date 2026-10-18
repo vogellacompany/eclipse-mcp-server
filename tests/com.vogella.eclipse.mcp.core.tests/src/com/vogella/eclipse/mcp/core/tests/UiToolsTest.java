@@ -35,6 +35,7 @@ import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.ide.internal.CompareTool;
 import com.vogella.eclipse.mcp.ui.internal.DragTool;
 import com.vogella.eclipse.mcp.ui.internal.SetWidgetTextTool;
+import com.vogella.eclipse.mcp.ui.internal.Shells;
 
 /**
  * The UI tools, as far as they can be reached without a workbench.
@@ -296,6 +297,29 @@ class UiToolsTest {
 				SetWidgetTextTool.typeText(control, "", true);
 				assertEquals(List.of(Integer.valueOf('7'), Integer.valueOf('\b')), keys, control.getClass().getSimpleName());
 			}
+		} finally {
+			display.dispose();
+		}
+	}
+
+	@Test
+	void aShellTitlePrefersTheVisibleShell() throws Exception {
+		Display display;
+		try {
+			display = new Display();
+		} catch (SWTError | UnsatisfiedLinkError e) {
+			assumeTrue(false, "no display: " + e.getMessage());
+			return;
+		}
+		try {
+			Shell hidden = new Shell(display);
+			hidden.setText("CSS Probe");
+			Shell visible = new Shell(display);
+			visible.setText("CSS Probe");
+			visible.open();
+			assertEquals(visible, Shells.select(display, "CSS Probe"));
+			visible.setVisible(false);
+			assertEquals(hidden, Shells.select(display, "CSS Probe"));
 		} finally {
 			display.dispose();
 		}
