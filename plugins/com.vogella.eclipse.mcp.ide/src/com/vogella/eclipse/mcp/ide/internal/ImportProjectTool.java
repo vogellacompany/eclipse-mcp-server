@@ -1,7 +1,10 @@
 package com.vogella.eclipse.mcp.ide.internal;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -221,6 +224,45 @@ public final class ImportProjectTool implements IMcpTool {
 		}
 	}
 
+	/** The name a directory is imported under: the imported project's, else the one in its .project, else null. */
+	public static String nameOf(File directory, IProject imported) {
+		return imported != null ? imported.getName() : descriptionName(directory);
+	}
+
+	/** The project among {@code projects} whose location is {@code directory}, or null. */
+	public static IProject projectAt(Collection<IProject> projects, File directory) {
+		Path wanted = real(directory);
+		for (IProject project : projects) {
+			IPath location = project.getLocation();
+			if (location != null && real(location.toFile()).equals(wanted)) {
+				return project;
+			}
+		}
+		return null;
+	}
+
+	/** Resolves symbolic links, since the same directory is reached as /var and /private/var on macOS. */
+	private static Path real(File file) {
+		try {
+			return file.toPath().toRealPath();
+		} catch (IOException e) {
+			return file.toPath().toAbsolutePath().normalize();
+		}
+	}
+
+	/** The name in the directory's .project, or null when it has none yet. */
+	private static String descriptionName(File directory) {
+		File file = new File(directory, IProjectDescription.DESCRIPTION_FILE_NAME);
+		if (!file.isFile()) {
+			return null;
+		}
+		try {
+			return ResourcesPlugin.getWorkspace().loadProjectDescription(IPath.fromFile(file)).getName();
+		} catch (CoreException e) {
+			return null;
+		}
+	}
+
 	private static JsonObject describe(Map<File, List<ProjectConfigurator>> proposals, int maxResults, boolean dryRun,
 			SmartImportJob job) {
 		Map<IProject, List<ProjectConfigurator>> configured = job == null ? Map.of() : job.getConfiguredProjects();
@@ -234,7 +276,10 @@ public final class ImportProjectTool implements IMcpTool {
 			if (projects.size() >= maxResults) {
 				break;
 			}
-			projects.add(new JsonObject().put("location", candidate.getAbsolutePath()) //$NON-NLS-1$
+			IProject imported = projectAt(configured.keySet(), candidate);
+			projects.add(new JsonObject().put("name", nameOf(candidate, imported)) //$NON-NLS-1$
+					.put("location", candidate.getAbsolutePath()) //$NON-NLS-1$
+					.put("imported", Boolean.valueOf(imported != null)) //$NON-NLS-1$
 					.put("configurators", names(proposals.get(candidate)))); //$NON-NLS-1$
 		}
 
