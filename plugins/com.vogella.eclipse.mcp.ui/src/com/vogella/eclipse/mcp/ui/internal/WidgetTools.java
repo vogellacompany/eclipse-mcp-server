@@ -308,6 +308,7 @@ public final class WidgetTools {
 				    "includeToolbar": {"type":"boolean","default":false,"description":"Start from the surrounding part stack rather than the part. A view's toolbar is built in the stack's CTabFolder, not in the part, so it is in no plain part tree at all; this is how to reach it."},
 					    "includeItems": {"type":"boolean","default":false,"description":"Also enumerate Items, which are not Controls and are therefore in no plain walk: ToolItems, CTabItems, TabItems, CoolItems, ExpandItems and the columns of a Table or Tree. Their paths carry an i prefix, as in 2/i0, and that is the only way eclipse_inspect_widget can address one. Off by default to keep the tree short."},
 				    "includeRows": {"type":"boolean","default":false,"description":"Also enumerate the rows of a Table or Tree, with an r prefixed path (0/r2) that eclipse_inspect_widget, eclipse_set_selection and eclipse_expand_row accept and, beside the row bounds, boundsInShell so a row can be highlighted on a shell=popup screenshot, and boundsInDisplay for a click. selected marks the row the widget has selected. ONLY THE ROWS THE TREE HAS CREATED ARE ROWS: the children of a collapsed node do not exist yet and have no path, so a view that comes up collapsed reports two or three entries and looks complete. Each tree row therefore carries childCount and expanded, and a collapsed node with children says so; open it with eclipse_expand_row and ask again. The children of an expanded node ARE reported, nested under its own path. Off by default because a big Table has many rows."},
+				    "includeMetrics": {"type":"boolean","default":false,"description":"Also report per control what it computes for itself, for comparing two IDEs or two SWT implementations control by control: preferredSize (computeSize with SWT.DEFAULT), borderWidth, fontName and fontHeight, clientArea and trim (computeTrim(0,0,0,0)) for a Scrollable, itemHeight for a Table, Tree, List or Combo, and nativeHandle, false for a control without a window system peer (a lightweight control), null where that cannot be read."},
 				    "maxDepth":   {"type":"integer","default":6,"minimum":1,"maximum":30,"description":"How far down the widget hierarchy to walk. A whole workbench window is dozens of levels deep, so the default stops well short of it."},
 					    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000}
 					  },
@@ -326,11 +327,11 @@ public final class WidgetTools {
 			int maxResults = args.getInt("maxResults", 200, 1, 2000); //$NON-NLS-1$
 			return UiThread.call(15, () -> collect(partId, shellTitle, path, filter, maxDepth, maxResults,
 					args.getBoolean("includeToolbar", false), args.getBoolean("includeItems", false), //$NON-NLS-1$ //$NON-NLS-2$
-					args.getBoolean("includeRows", false))); //$NON-NLS-1$
+					args.getBoolean("includeRows", false), args.getBoolean("includeMetrics", false))); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 
 		private static JsonObject collect(String partId, String shellTitle, String path, String filter, int maxDepth,
-				int maxResults, boolean includeToolbar, boolean includeItems, boolean includeRows) {
+				int maxResults, boolean includeToolbar, boolean includeItems, boolean includeRows, boolean includeMetrics) {
 			Control root = rootOf(partId, shellTitle, includeToolbar);
 			if (root == null) {
 				return new JsonObject().put("found", Boolean.FALSE) //$NON-NLS-1$
@@ -346,7 +347,7 @@ public final class WidgetTools {
 			JsonArray widgets = new JsonArray();
 			int[] total = { 0 };
 			walk(start, path == null ? "" : path.strip(), 0, maxDepth, needle, maxResults, includeItems, includeRows, //$NON-NLS-1$
-					widgets, total);
+					includeMetrics, widgets, total);
 			return new JsonObject().put("found", Boolean.TRUE) //$NON-NLS-1$
 					.put("root", start.getClass().getName()) //$NON-NLS-1$
 					.put("total", Integer.valueOf(total[0])) //$NON-NLS-1$
@@ -357,7 +358,7 @@ public final class WidgetTools {
 		private static final int MAX_TEXT = 200;
 
 		private static void walk(Widget widget, String path, int depth, int maxDepth, String needle, int maxResults,
-				boolean includeItems, boolean includeRows, JsonArray into, int[] total) {
+				boolean includeItems, boolean includeRows, boolean includeMetrics, JsonArray into, int[] total) {
 			boolean wanted = needle == null
 					|| widget.getClass().getSimpleName().toLowerCase(Locale.ROOT).contains(needle);
 			if (wanted) {
@@ -372,6 +373,9 @@ public final class WidgetTools {
 							.put("visible", widget instanceof Control control ? Boolean.valueOf(control.isVisible()) //$NON-NLS-1$
 									: null);
 					addPlacement(node, widget);
+					if (includeMetrics && widget instanceof Control control) {
+						node.put("metrics", ControlMetrics.of(control)); //$NON-NLS-1$
+					}
 					into.add(node);
 				}
 			}
@@ -382,7 +386,7 @@ public final class WidgetTools {
 				Widget[] items = itemsOf(widget);
 				for (int i = 0; i < items.length; i++) {
 					walk(items[i], path.isEmpty() ? "i" + i : path + "/i" + i, depth + 1, maxDepth, needle, //$NON-NLS-1$ //$NON-NLS-2$
-							maxResults, includeItems, includeRows, into, total);
+							maxResults, includeItems, includeRows, includeMetrics, into, total);
 				}
 			}
 			if (includeRows) {
@@ -394,7 +398,7 @@ public final class WidgetTools {
 			Control[] children = composite.getChildren();
 			for (int i = 0; i < children.length; i++) {
 				walk(children[i], path.isEmpty() ? String.valueOf(i) : path + "/" + i, depth + 1, maxDepth, needle, //$NON-NLS-1$
-						maxResults, includeItems, includeRows, into, total);
+						maxResults, includeItems, includeRows, includeMetrics, into, total);
 			}
 		}
 

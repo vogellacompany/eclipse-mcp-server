@@ -204,7 +204,7 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_get_selection`, ✎ `eclipse_set_selection` | Read and set the selection |
 | ✎ `eclipse_type_text`, `eclipse_press_key`, `eclipse_set_widget_text`, `eclipse_press_widget`, `eclipse_set_sash`, `eclipse_click`, `eclipse_drag`, `eclipse_double_click_text`, `eclipse_expand_row`, `eclipse_select_tab` | Drive editors and widgets |
 | `eclipse_get_text_bounds`, `eclipse_list_annotations`, `eclipse_get_context_menu` | Text geometry, editor annotations, context menu contents |
-| `eclipse_list_ui_targets`, `eclipse_get_widget_tree`, `eclipse_inspect_widget` | Shells, parts and widgets, with bounds and CSS styling |
+| `eclipse_list_ui_targets`, `eclipse_get_widget_tree`, `eclipse_inspect_widget`, `eclipse_get_focus` | Shells, parts and widgets, with bounds, computed sizes, CSS styling and keyboard focus |
 | ✎ `eclipse_dismiss_dialog` | Answer an open dialog |
 | ✎ `eclipse_reset_dialog_settings` | Forget the answers wizards and dialogs remembered |
 | `eclipse_list_commands`, ✎ `eclipse_run_workbench_command` | List and run workbench commands |

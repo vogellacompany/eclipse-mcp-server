@@ -79,6 +79,13 @@ class ShutdownGuardsTest {
 		assertTrue(result.text().toLowerCase().contains("no running workbench"), result.text());
 	}
 
+	@Test
+	void focusIsRegisteredAndRefusesHeadless() throws Exception {
+		McpToolResult result = TestFixture.call("eclipse_get_focus", Map.of());
+		assertTrue(result.isError(), "expected a refusal, got " + result.text());
+		assertTrue(result.text().toLowerCase().contains("no running workbench"), result.text());
+	}
+
 	@SuppressWarnings("unchecked")
 	private static Map<String, Object> properties(Map<String, Object> schema) {
 		return (Map<String, Object>) schema.get("properties");
