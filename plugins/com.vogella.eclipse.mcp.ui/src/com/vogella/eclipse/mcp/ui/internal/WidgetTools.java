@@ -767,7 +767,7 @@ public final class WidgetTools {
 
 		@Override
 		public String getDescription() {
-			return "Clicks a widget with a real mouse button: moves the pointer onto it and sends a press and a release through the X server's XTest extension on GTK, or Display.post elsewhere, so the event goes through the window system and SWT's own dispatch exactly like a person's click, including a right click opening a context menu through Control.showMenu. CHANGES WHAT THE IDE DOES, which is whatever that click does, and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path, including item paths such as a CTabItem (0/i2) and row paths (0/r3); the click lands on its centre, or at x and y inside it. displayX and displayY click an absolute screen point instead. Before pressing, the pointer is read back: when it did not arrive, or the control under it is not the addressed widget, nothing is pressed and the answer names what is there, so a covering window or popup is never clicked by mistake. The press is dispatched after this call returns, so verify the effect with eclipse_screenshot or eclipse_list_ui_targets. It works on an X11 display without a compositor, such as Xvfb. It refuses on native Wayland, which ignores pointer warps, and under XWayland on a compositing desktop such as GNOME, where the pointer moves but the compositor keeps the IDE window from being under it. A native menu is no SWT control, so a point over an open menu is refused; pick menu entries with eclipse_select_menu_item instead. button none only moves the pointer and presses nothing, which is how a tooltip or a hover highlight is moved off a capture; it is allowed over an open menu or another window, and the answer reports moved rather than clicked, and for a widget onTarget, whether the pointer is over it. No modifier keys and no double click; eclipse_double_click_text double-clicks inside a text editor, and eclipse_press_widget presses a Button or ToolItem without the pointer."; //$NON-NLS-1$
+			return "Clicks a widget with a real mouse button: moves the pointer onto it and sends a press and a release through the X server's XTest extension on GTK, or Display.post elsewhere, so the event goes through the window system and SWT's own dispatch exactly like a person's click, including a right click opening a context menu through Control.showMenu. CHANGES WHAT THE IDE DOES, which is whatever that click does, and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path, including item paths such as a CTabItem (0/i2) and row paths (0/r3); the click lands on its centre, or at x and y inside it. displayX and displayY click an absolute screen point instead. Before pressing, the pointer is read back: when it did not arrive, or the control under it is not the addressed widget, nothing is pressed and the answer names what is there, so a covering window or popup is never clicked by mistake. The press is dispatched after this call returns, so verify the effect with eclipse_screenshot or eclipse_list_ui_targets. It works on an X11 display without a compositor, such as Xvfb. It refuses on native Wayland, which ignores pointer warps, and under XWayland on a compositing desktop such as GNOME, where the pointer moves but the compositor keeps the IDE window from being under it. A native menu is no SWT control, so a point over an open menu is refused; pick menu entries with eclipse_select_menu_item instead. button none only moves the pointer and presses nothing, which is how a tooltip or a hover highlight is moved off a capture; it is allowed over an open menu or another window, and the answer reports moved rather than clicked, and for a widget onTarget, whether the pointer is over it. No modifier keys and no double click; eclipse_double_click_text double-clicks inside a text editor, and eclipse_press_widget presses a Button or ToolItem without the pointer. delivery synthetic, or auto when the window system refuses, sends focus, MouseMove, MouseDown, MouseUp and for a right click MenuDetect to the widget through notifyListeners instead, which works while the IDE is inactive or the screen is locked; the answer says synthetic true, and only listeners see such a click."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -785,10 +785,11 @@ public final class WidgetTools {
 					    "y":              {"type":"integer","minimum":0,"description":"Vertical offset inside the widget. Defaults to its centre."},
 					    "displayX":       {"type":"integer","description":"Absolute screen x, as boundsInDisplay reports it. Use with displayY instead of a widget."},
 					    "displayY":       {"type":"integer","description":"Absolute screen y. Use with displayX instead of a widget."},
-					    "button":         {"type":"string","enum":["left","middle","right","none"],"default":"left","description":"none moves the pointer without pressing."}
+					    "button":         {"type":"string","enum":["left","middle","right","none"],"default":"left","description":"none moves the pointer without pressing."},
+					    %s
 					  },
 					  "additionalProperties": false
-					}"""; //$NON-NLS-1$
+					}""".formatted(SyntheticInput.SCHEMA); //$NON-NLS-1$
 		}
 
 		@Override
@@ -804,10 +805,19 @@ public final class WidgetTools {
 			if (button < 0) {
 				return McpToolResult.error("Unknown button '%s'; use left, middle, right or none.".formatted(args.getString("button"))); //$NON-NLS-1$ //$NON-NLS-2$
 			}
+			SyntheticInput.Delivery delivery;
+			try {
+				delivery = SyntheticInput.Delivery.of(args.getString("delivery")); //$NON-NLS-1$
+			} catch (IllegalArgumentException e) {
+				return McpToolResult.error(e.getMessage());
+			}
 			String partId = args.getString("part"); //$NON-NLS-1$
 			String shellSpec = Shells.spec(args);
 			String path = args.getString("path"); //$NON-NLS-1$
 			boolean absolute = args.has("displayX") || args.has("displayY"); //$NON-NLS-1$ //$NON-NLS-2$
+			if (absolute && delivery == SyntheticInput.Delivery.SYNTHETIC) {
+				return McpToolResult.error("Synthetic delivery needs a widget to deliver to; give part or shell and path instead of displayX and displayY."); //$NON-NLS-1$
+			}
 			if (absolute) {
 				if (!args.has("displayX") || !args.has("displayY")) { //$NON-NLS-1$ //$NON-NLS-2$
 					return McpToolResult.error("Give both 'displayX' and 'displayY'."); //$NON-NLS-1$
@@ -825,6 +835,7 @@ public final class WidgetTools {
 			return UiThread.call(10, () -> {
 				Display display = Workbenches.display();
 				Control owner = null;
+				org.eclipse.swt.graphics.Point local = null;
 				JsonObject result = new JsonObject();
 				org.eclipse.swt.graphics.Point point;
 				if (absolute) {
@@ -858,12 +869,18 @@ public final class WidgetTools {
 										Integer.valueOf(own.height)));
 					}
 					point = new org.eclipse.swt.graphics.Point(onScreen.x + dx, onScreen.y + dy);
+					local = new org.eclipse.swt.graphics.Point(own.x + dx, own.y + dy);
 					result.put("target", target.getClass().getSimpleName()) //$NON-NLS-1$
 							.put("boundsInDisplay", Overlays.describe(onScreen)); //$NON-NLS-1$
+					if (delivery == SyntheticInput.Delivery.SYNTHETIC) {
+						return synthetic(owner, local, button, result, null);
+					}
 				}
+				boolean fallback = delivery == SyntheticInput.Delivery.AUTO && owner != null;
 				Warp warp = warp(display, point, result, "nothing was pressed", "clicking"); //$NON-NLS-1$ //$NON-NLS-2$
 				if (warp.failure() != null) {
-					return result.put("clicked", Boolean.FALSE).put("reason", warp.failure()); //$NON-NLS-1$ //$NON-NLS-2$
+					return fallback ? synthetic(owner, local, button, result, warp.failure())
+							: result.put("clicked", Boolean.FALSE).put("reason", warp.failure()); //$NON-NLS-1$ //$NON-NLS-2$
 				}
 				Control under = warp.under();
 				if (button == 0) {
@@ -876,6 +893,9 @@ public final class WidgetTools {
 						}
 					}
 					return result;
+				}
+				if (under == null && fallback) {
+					return synthetic(owner, local, button, result, "The point is not over an SWT control of this IDE."); //$NON-NLS-1$
 				}
 				if (under == null) {
 					return result.put("clicked", Boolean.FALSE) //$NON-NLS-1$
@@ -895,6 +915,10 @@ public final class WidgetTools {
 					failure = post(display, SWT.MouseDown, button) && post(display, SWT.MouseUp, button) ? null
 							: "Display.post refused the button event."; //$NON-NLS-1$
 				}
+				if (failure != null && fallback) {
+					return synthetic(owner, local, button, result, failure);
+				}
+				result.put("delivery", "os").put("synthetic", Boolean.FALSE); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				result.put("clicked", Boolean.valueOf(failure == null)) //$NON-NLS-1$
 						.put("button", button == 1 ? "left" : button == 2 ? "middle" : "right"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 				if (failure != null) {
@@ -904,6 +928,17 @@ public final class WidgetTools {
 				}
 				return result;
 			});
+		}
+
+		/** Delivers the click at SWT level and reports it as such. */
+		private static JsonObject synthetic(Control owner, org.eclipse.swt.graphics.Point local, int button,
+				JsonObject result, String osFailure) {
+			SyntheticInput.click(owner, local, button, result);
+			return result.put("clicked", Boolean.valueOf(button != 0 && !owner.isDisposed())) //$NON-NLS-1$
+					.put("delivery", "synthetic") //$NON-NLS-1$ //$NON-NLS-2$
+					.put("synthetic", Boolean.TRUE) //$NON-NLS-1$
+					.put("osFailure", osFailure) //$NON-NLS-1$
+					.put("note", SyntheticInput.NOTE); //$NON-NLS-1$
 		}
 
 		/** Where the pointer landed: the control under it, or why it did not arrive. */
@@ -934,7 +969,9 @@ public final class WidgetTools {
 					.put("controlUnderPointer", under == null ? null : under.getClass().getSimpleName()); //$NON-NLS-1$
 			if (Math.abs(arrived.x - point.x) > 1 || Math.abs(arrived.y - point.y) > 1) {
 				result.put("moved", Boolean.FALSE); //$NON-NLS-1$
-				return new Warp(under, "The pointer did not arrive, so %s. Native Wayland ignores pointer warps; %s needs the IDE on an X11 display without a compositor, such as Xvfb." //$NON-NLS-1$
+				return new Warp(under, ("cocoa".equals(SWT.getPlatform()) //$NON-NLS-1$
+						? "The pointer did not arrive, so %s. macOS drops posted pointer events unless the IDE's process has the Accessibility permission (System Settings, Privacy & Security, Accessibility); grant it, drive the pointer from outside the IDE, or pass delivery synthetic." //$NON-NLS-1$
+						: "The pointer did not arrive, so %s. Native Wayland ignores pointer warps; %s needs the IDE on an X11 display without a compositor, such as Xvfb.") //$NON-NLS-1$
 						.formatted(nothing, action));
 			}
 			result.put("moved", Boolean.TRUE); //$NON-NLS-1$

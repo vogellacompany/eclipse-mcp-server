@@ -180,7 +180,7 @@ public final class KeyboardTools {
 
 		@Override
 		public String getDescription() {
-			return "Posts real key events through Display.post to whatever control has focus, for the cases the document API cannot reach: Ctrl+Space to open content assist, Escape to close a popup, Enter to accept a proposal, arrow keys to move the selection in a proposal table, Tab, Backspace. CHANGES WHAT THE IDE DOES, which is whatever that key does with the current focus. Take a key like 'Ctrl+Space', 'Escape', 'Down', 'Enter', 'Tab', 'BackSpace', or a single character. There is no Menu key: Shift+F10 opens the focused control's context menu instead, and on GTK it opens at the pointer rather than at the selected row, so put the pointer there first with eclipse_click and button none. Display.post goes to the window that has OS focus, so this refuses when the IDE is not the active window rather than sending the key somewhere else. On Wayland Display.post is often ignored by the compositor; the answer reports whether the post was accepted and whether focus was inside the IDE, and for entering plain characters eclipse_type_text is the reliable path. count repeats the key."; //$NON-NLS-1$
+			return "Posts real key events through Display.post to whatever control has focus, for the cases the document API cannot reach: Ctrl+Space to open content assist, Escape to close a popup, Enter to accept a proposal, arrow keys to move the selection in a proposal table, Tab, Backspace. CHANGES WHAT THE IDE DOES, which is whatever that key does with the current focus. Take a key like 'Ctrl+Space', 'Escape', 'Down', 'Enter', 'Tab', 'BackSpace', or a single character. There is no Menu key: Shift+F10 opens the focused control's context menu instead, and on GTK it opens at the pointer rather than at the selected row, so put the pointer there first with eclipse_click and button none. Display.post goes to the window that has OS focus, so this refuses when the IDE is not the active window rather than sending the key somewhere else. On Wayland Display.post is often ignored by the compositor; the answer reports whether the post was accepted and whether focus was inside the IDE, and for entering plain characters eclipse_type_text is the reliable path. count repeats the key. delivery synthetic, or auto when the post is refused or the IDE is inactive, sends the key at SWT level instead: Tab, Shift+Tab, Escape, Enter and Ctrl+PageUp/PageDown traverse as SWT would, other keys reach the KeyDown and KeyUp listeners of the focus control or of path; the answer says synthetic true."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -190,11 +190,16 @@ public final class KeyboardTools {
 					  "type": "object",
 					  "properties": {
 					    "key":       {"type":"string","description":"A key name like 'Ctrl+Space', 'Escape', 'Down', 'Up', 'Left', 'Right', 'Enter', 'Tab', 'BackSpace', 'Delete', 'Home', 'End', 'PageDown', 'F3', or a single character."},
-					    "count":     {"type":"integer","default":1,"minimum":1,"maximum":100,"description":"How many times to send the key."}
+					    "count":     {"type":"integer","default":1,"minimum":1,"maximum":100,"description":"How many times to send the key."},
+					    "part":      {"type":"string","description":"Synthetic delivery only: the part the path is rooted in."},
+					    "shellTitle": {"type":"string","description":"Synthetic delivery only: the shell the path is rooted in, by title substring."},
+					    "shell":     {"type":"string","description":"Synthetic delivery only: the shell independent of title, as eclipse_get_widget_tree takes it."},
+					    "path":      {"type":"string","description":"Synthetic delivery only: the control to send the key to. Defaults to the focus control, and while the IDE is inactive to the control the shell gives focus back to."},
+					    %s
 					  },
 					  "required": ["key"],
 					  "additionalProperties": false
-					}"""; //$NON-NLS-1$
+					}""".formatted(SyntheticInput.SCHEMA); //$NON-NLS-1$
 		}
 
 		@Override
@@ -211,32 +216,85 @@ public final class KeyboardTools {
 			} catch (IllegalArgumentException e) {
 				return McpToolResult.error(e.getMessage());
 			}
+			SyntheticInput.Delivery delivery;
+			try {
+				delivery = SyntheticInput.Delivery.of(args.getString("delivery")); //$NON-NLS-1$
+			} catch (IllegalArgumentException e) {
+				return McpToolResult.error(e.getMessage());
+			}
+			String partId = args.getString("part"); //$NON-NLS-1$
+			String shellSpec = Shells.spec(args);
+			String path = args.getString("path"); //$NON-NLS-1$
 			return UiThread.call(UI_TIMEOUT_SECONDS, () -> {
 				Display display = Workbenches.display();
-				if (!NativeForeground.isForeground(display)) {
-					throw new IllegalStateException(
-							"The IDE is not the active window, so a posted key would go to another application. Bring the IDE to the front, or use eclipse_type_text for plain text."); //$NON-NLS-1$
+				String osFailure = null;
+				if (delivery != SyntheticInput.Delivery.SYNTHETIC) {
+					if (!NativeForeground.isForeground(display)) {
+						osFailure = "The IDE is not the active window, so a posted key would go to another application. Bring the IDE to the front, or use eclipse_type_text for plain text."; //$NON-NLS-1$
+						if (delivery == SyntheticInput.Delivery.OS) {
+							throw new IllegalStateException(osFailure);
+						}
+					} else {
+						JsonObject posted = postKey(display, key, stroke, count);
+						Object accepted = posted.remove("posted"); //$NON-NLS-1$
+						posted.put("posted", accepted); //$NON-NLS-1$
+						if (delivery == SyntheticInput.Delivery.OS || Boolean.TRUE.equals(accepted)) {
+							return posted;
+						}
+						osFailure = "Display.post returned false."; //$NON-NLS-1$
+					}
 				}
-				Control focus = display.getFocusControl();
-				boolean posted = true;
-				for (int i = 0; i < count && posted; i++) {
-					posted = post(display, stroke);
+				Control target;
+				if (partId != null || shellSpec != null || path != null) {
+					Control root = WidgetTools.rootOf(partId, shellSpec, false);
+					Object resolved = root == null ? null : WidgetTools.resolve(root, path);
+					if (!(resolved instanceof Control control)) {
+						throw new IllegalStateException("No control at path '%s' under that part or shell.".formatted(path)); //$NON-NLS-1$
+					}
+					target = control;
+				} else {
+					target = SyntheticInput.keyTarget(display, null);
 				}
-				JsonObject result = new JsonObject().put("key", key) //$NON-NLS-1$
-						.put("count", Integer.valueOf(count)) //$NON-NLS-1$
-						.put("posted", Boolean.valueOf(posted)) //$NON-NLS-1$
-						.put("focusControl", focus == null ? null : focus.getClass().getSimpleName()) //$NON-NLS-1$
-						.put("focusInsideIde", Boolean.valueOf(focus != null)); //$NON-NLS-1$
-				String wayland = System.getenv("WAYLAND_DISPLAY"); //$NON-NLS-1$
-				if (!posted) {
-					result.put("note", //$NON-NLS-1$
-							"Display.post returned false, so the key was not delivered. On Wayland posting synthetic events is commonly blocked; use eclipse_type_text for characters and eclipse_run_workbench_command for a command bound to a key."); //$NON-NLS-1$
-				} else if (wayland != null && !wayland.isBlank()) {
-					result.put("waylandWarning", //$NON-NLS-1$
-							"The session is Wayland, where a posted event may be silently ignored by the compositor even though the post was accepted. Verify the effect with a screenshot; if nothing happened, use eclipse_type_text or a command."); //$NON-NLS-1$
+				if (target == null) {
+					throw new IllegalStateException("There is no focus control and no shell to send the key to; pass a path."); //$NON-NLS-1$
 				}
-				return result;
+				JsonObject result = new JsonObject().put("key", key).put("count", Integer.valueOf(count)); //$NON-NLS-1$ //$NON-NLS-2$
+				for (int i = 0; i < count && !target.isDisposed(); i++) {
+					SyntheticInput.key(target, stroke.modifiers(), stroke.keyCode(), stroke.character(), result);
+				}
+				return result.put("delivery", "synthetic") //$NON-NLS-1$ //$NON-NLS-2$
+						.put("synthetic", Boolean.TRUE) //$NON-NLS-1$
+						.put("target", target.isDisposed() ? null : target.getClass().getSimpleName()) //$NON-NLS-1$
+						.put("targetPath", target.isDisposed() ? null : WidgetTools.pathOf(target.getShell(), target)) //$NON-NLS-1$
+						.put("targetDisposed", Boolean.valueOf(target.isDisposed())) //$NON-NLS-1$
+						.put("osFailure", osFailure) //$NON-NLS-1$
+						.put("note", SyntheticInput.NOTE); //$NON-NLS-1$
 			});
+		}
+
+		/** Posts the key through the window system; the answer keeps "posted" so the caller can decide on a fallback. */
+		private static JsonObject postKey(Display display, String key, Stroke stroke, int count) {
+			Control focus = display.getFocusControl();
+			boolean posted = true;
+			for (int i = 0; i < count && posted; i++) {
+				posted = post(display, stroke);
+			}
+			JsonObject result = new JsonObject().put("key", key) //$NON-NLS-1$
+					.put("count", Integer.valueOf(count)) //$NON-NLS-1$
+					.put("posted", Boolean.valueOf(posted)) //$NON-NLS-1$
+					.put("focusControl", focus == null ? null : focus.getClass().getSimpleName()) //$NON-NLS-1$
+					.put("focusInsideIde", Boolean.valueOf(focus != null)) //$NON-NLS-1$
+					.put("delivery", "os") //$NON-NLS-1$ //$NON-NLS-2$
+					.put("synthetic", Boolean.FALSE); //$NON-NLS-1$
+			String wayland = System.getenv("WAYLAND_DISPLAY"); //$NON-NLS-1$
+			if (!posted) {
+				result.put("note", //$NON-NLS-1$
+						"Display.post returned false, so the key was not delivered. On Wayland posting synthetic events is commonly blocked; use eclipse_type_text for characters and eclipse_run_workbench_command for a command bound to a key."); //$NON-NLS-1$
+			} else if (wayland != null && !wayland.isBlank()) {
+				result.put("waylandWarning", //$NON-NLS-1$
+						"The session is Wayland, where a posted event may be silently ignored by the compositor even though the post was accepted. Verify the effect with a screenshot; if nothing happened, use eclipse_type_text or a command."); //$NON-NLS-1$
+			}
+			return result;
 		}
 
 		private static boolean post(Display display, Stroke stroke) {
