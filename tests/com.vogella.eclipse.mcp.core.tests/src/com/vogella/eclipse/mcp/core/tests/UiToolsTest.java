@@ -376,4 +376,13 @@ class UiToolsTest {
 				new NullProgressMonitor());
 		return file;
 	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void aScreenshotCanBeTakenWithoutReadingTheScreen() {
+		Map<String, Object> schema = (Map<String, Object>) com.vogella.eclipse.mcp.core.json.Json
+				.parse(TestFixture.tool("eclipse_screenshot").getInputSchema());
+		Map<String, Object> method = (Map<String, Object>) ((Map<String, Object>) schema.get("properties")).get("method");
+		assertEquals(List.of("auto", "print", "window"), method.get("enum"));
+	}
 }
