@@ -37,16 +37,29 @@ public final class ScreenPixels {
 			return Read.failed("not GTK"); //$NON-NLS-1$
 		}
 		try {
-			ClassLoader loader = Display.class.getClassLoader();
-			Class<?> gdk = Class.forName(GDK, true, loader);
-			Class<?> os = Class.forName("org.eclipse.swt.internal.gtk.OS", true, loader); //$NON-NLS-1$
-			Class<?> c = Class.forName("org.eclipse.swt.internal.C", true, loader); //$NON-NLS-1$
+			Class<?> gdk = Class.forName(GDK, true, Display.class.getClassLoader());
 			long root = ((Long) gdk.getMethod("gdk_get_default_root_window").invoke(null)).longValue(); //$NON-NLS-1$
 			if (root == 0) {
 				return Read.failed("GDK has no root window"); //$NON-NLS-1$
 			}
+			return read(root, x, y, width, height, zoom);
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			return Read.failed("the GDK call failed: " + e); //$NON-NLS-1$
+		}
+	}
+
+	/** The area of a GdkWindow, given in points relative to it, as device pixels. */
+	static Read read(long window, int x, int y, int width, int height, int zoom) {
+		if (!DeviceScale.GTK) {
+			return Read.failed("not GTK"); //$NON-NLS-1$
+		}
+		try {
+			ClassLoader loader = Display.class.getClassLoader();
+			Class<?> gdk = Class.forName(GDK, true, loader);
+			Class<?> os = Class.forName("org.eclipse.swt.internal.gtk.OS", true, loader); //$NON-NLS-1$
+			Class<?> c = Class.forName("org.eclipse.swt.internal.C", true, loader); //$NON-NLS-1$
 			long pixbuf = ((Long) gdk.getMethod("gdk_pixbuf_get_from_window", long.class, int.class, int.class, //$NON-NLS-1$
-					int.class, int.class).invoke(null, root, x, y, width, height)).longValue();
+					int.class, int.class).invoke(null, window, x, y, width, height)).longValue();
 			if (pixbuf == 0) {
 				return Read.failed("gdk_pixbuf_get_from_window returned no pixbuf"); //$NON-NLS-1$
 			}
