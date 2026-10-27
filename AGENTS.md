@@ -97,7 +97,7 @@ On timeout the adapter cancels the monitor first, and `abandon` records calls th
 Every long running operation a client drives has a dialog on it somewhere: p2's unsigned content prompt, the workspace chooser on restart, `org.eclipse.debug.ui`'s "Errors in Workspace" status handler, the compare "no differences" message.
 Do not let it be raised on a client path; answer it and report what was answered.
 Before adding a tool that runs project code or touches the installation, look for a prompting `IStatusHandler` on that path.
-`eclipse_run_workbench_command` cannot know whether a handler opens a modal dialog, so it caps its wait, answers `timedOut` with pointers to `eclipse_list_ui_targets` and `eclipse_dismiss_dialog`, and leaves the future running; its `IExecutionListener` is what makes `handlerFinished` trustworthy.
+`eclipse_run_workbench_command` probes the Display while it waits, which a modal dialog's nested event loop answers, and returns `dialogOpen` with the title once a new modal shell other than a `ProgressMonitorDialog` shows on two probes in a row; otherwise it caps its wait and answers `timedOut`. Either way the future keeps running and a late result goes to the Error Log; its `IExecutionListener` is what makes `handlerFinished` trustworthy.
 
 **IDE-only tools live in `com.vogella.eclipse.mcp.ide`.**
 `com.vogella.eclipse.mcp.ui` does not require `org.eclipse.ui.ide`, `org.eclipse.compare`, `org.eclipse.debug.ui` or `org.eclipse.jgit`, because an RCP product that adds it would otherwise pull them and the Debug perspective in.
@@ -172,6 +172,7 @@ Do not undo these without understanding why they are there.
 - `eclipse_set_project_state` defaults to `dryRun`, needs an explicit selection, and refuses without `force` when `getReferencingProjects()` has open dependents. `closingTogether` resolves a batch as a fixpoint, identically for dry and real runs.
 - `eclipse_list_projects` reads `.project` from disk for closed projects and reports `natureSource`; "no natures" for a closed project is a lie.
 - `FrameworkChanges` records hot installs and bundle substitutions, and `eclipse_restart` then defaults to `-clean` and says why under `cleanReason`; stale registry caches otherwise break restored editors. Do not make `-clean` unconditional.
+- `eclipse_substitute_bundle` packs the manifest whether or not `bin.includes` names it and expands patterns such as `*.so`, because SWT's fragments rely on both; a jar without either left an IDE that did not start. Entries that match nothing are reported as `unmatchedIncludes`.
 - `eclipse_substitute_bundle restore` acts on the whole installation, shared by every IDE started from it; pass `bundle` to restrict it. `build.properties` is read through `java.util.Properties` so CRLF continuations work, `pack` refuses roots outside the project, and unreadable directories land in `unreadable` (`SubstituteBundlePackTest`).
 
 ### JDT
@@ -207,6 +208,7 @@ Do not undo these without understanding why they are there.
 - `eclipse_import_project` uses the `x-internal` `SmartImportJob` deliberately, which is why it lives in the ide bundle rather than basic. It always sets the directories to import (avoiding a modal question), uses `getImportProposals` as the dry run, and restores the auto-build state the job can leave off.
 - `Reconcilers` reads the reconciler by field name the way JDT's `EditorTestHelper.joinReconciler` does (including the upstream typo `fIninitalProcessDone`); an unreadable one counts as busy, never idle. Lookups are cached per class, a probe stops after `BUDGET_MILLIS`, `UiSettle` sleeps at least as long as the last probe, and the wait is capped by `CallBudget.maxWaitSeconds()` and reports `clamped`.
 - `eclipse_wait_for` probes with `getPart(false)`, since a wait must not create the part it waits for, and `find` skips virtual rows that are not populated, since reading one fires `SetData`. A timeout is a normal answer with each condition's last observation; a UI-busy probe marks only the widget conditions. It refuses on the UI thread, where it would block what it waits for.
+- `eclipse_run_script` steps bypass the protocol's schema validation, so a step reports arguments its tool does not declare under `ignoredArguments` rather than failing.
 - `eclipse_wait_until_settled` is a heuristic whose description names what it cannot see, and a test asserts that wording. `converged false` means the screen never stopped; `converged true` with a differing image means it stopped at a different layout.
 - `eclipse_set_sash` sends the Sash the two Selection events of a person's drag instead of calling `setWeights`, one with `detail` `SWT.DRAG` and the release where that one stopped, so SashForm's minimum size and other sash listeners apply as for a person. A single release that SashForm clamps only writes the weights, and a `layout()` instead would move the other controls.
 - `suppressCaret` defaults to on and the answer reports `caretsSuppressed`.
@@ -236,6 +238,7 @@ Do not undo these without understanding why they are there.
 
 ### Git
 
+- The git bundle requires EGit and JGit optionally, and every tool checks `EGit.isAvailable()` first. A tool class must not mention a JGit type in any method the verifier checks when the class loads, or the registry cannot create it without EGit and the tool disappears with an error at every start; `RevertFilesTool` and `FetchPullRequestTool` keep their JGit code in a nested class for that reason.
 - The ide bundle requires `org.eclipse.jgit` with `resolution:=optional` and references it only from `GitContent`, so an IDE without EGit loses only `eclipse_open_compare`'s `revision` argument.
 
 ### p2

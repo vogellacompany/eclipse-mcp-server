@@ -122,6 +122,22 @@ releng/mcp-test-ide.sh --ide /path/to/eclipse --junit results.xml releng/scripts
 `mcp-script.py` prints each step, exits non-zero on a failed expectation and can write JUnit XML.
 `mcp-test-ide.sh` starts the IDE on a fresh workspace and configuration area, sharing the installation's plug-ins but not any bundle substituted into it, runs the scripts and shuts the IDE down again.
 
+## Testing Eclipse and SWT changes
+
+The UI tools address widgets by their place in the SWT hierarchy rather than by screen coordinates, so a check survives a resize, a theme and another machine:
+
+1. `eclipse_list_ui_targets` names the shells and parts; `eclipse_get_widget_tree` lists the widgets under one with a path for each, bounds in three coordinate systems, CSS id and class, and with `includeMetrics` what the control computes for itself: preferred size, trim, font and item height.
+2. `eclipse_press_widget`, `eclipse_set_widget_text`, `eclipse_select_tab`, `eclipse_expand_row`, `eclipse_click`, `eclipse_drag`, `eclipse_scroll`, `eclipse_press_key` and `eclipse_type_text` act on a path; key and click fall back to SWT events where the window system refuses synthetic input.
+3. `eclipse_wait_for` waits for a shell, widget, selection, editor or job condition, and `eclipse_wait_until_settled` for the display queue, the jobs and the reconcilers.
+4. `eclipse_screenshot` captures a part, a shell or the display; `settle` and `settlePixels` make a capture repeatable, and `method: print` paints the widgets instead of reading the screen.
+5. `eclipse_mark_log` and then `eclipse_get_log_entries` show what an action logged, UI freezes included.
+
+To run modified SWT or platform code, import the bundle's project into the IDE's workspace, build it, run `eclipse_substitute_bundle` with `action: substitute` and then `eclipse_restart`; `action: restore` and another restart put the installed bundle back.
+For SWT, import the fragment for your platform, such as `binaries/org.eclipse.swt.gtk.linux.x86_64`, from a checkout whose native libraries match the Java code: a checkout without Git LFS has pointer files in their place, which the substitution refuses.
+`eclipse_hot_code_replace` redefines changed classes without a restart where the change allows it.
+
+[eclipse-harness](https://github.com/vogellacompany/eclipse-harness) builds on this: it starts a throwaway IDE, runs `eclipse_run_script` scenarios and compares the captures pixel by pixel with baselines.
+
 ## Tools
 
 Tools marked ✎ change something; the rest are read-only.
@@ -202,7 +218,7 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_get_editor_context`, `eclipse_list_editors`, ✎ `eclipse_close_editor` | Active editor, cursor and selection, open editors |
 | ✎ `eclipse_open`, `eclipse_open_compare` | Open a file or element, open a compare editor |
 | `eclipse_get_selection`, ✎ `eclipse_set_selection` | Read and set the selection |
-| ✎ `eclipse_type_text`, `eclipse_press_key`, `eclipse_set_widget_text`, `eclipse_press_widget`, `eclipse_set_sash`, `eclipse_click`, `eclipse_drag`, `eclipse_double_click_text`, `eclipse_expand_row`, `eclipse_select_tab` | Drive editors and widgets |
+| ✎ `eclipse_type_text`, `eclipse_press_key`, `eclipse_set_widget_text`, `eclipse_press_widget`, `eclipse_set_sash`, `eclipse_click`, `eclipse_drag`, `eclipse_scroll`, `eclipse_double_click_text`, `eclipse_expand_row`, `eclipse_select_tab` | Drive editors and widgets |
 | `eclipse_get_text_bounds`, `eclipse_list_annotations`, `eclipse_get_context_menu` | Text geometry, editor annotations, context menu contents |
 | `eclipse_list_ui_targets`, `eclipse_get_widget_tree`, `eclipse_inspect_widget`, `eclipse_get_focus` | Shells, parts and widgets, with bounds, computed sizes, CSS styling and keyboard focus |
 | ✎ `eclipse_dismiss_dialog` | Answer an open dialog |
