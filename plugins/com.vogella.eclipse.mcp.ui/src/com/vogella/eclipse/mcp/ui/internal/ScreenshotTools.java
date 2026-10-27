@@ -302,21 +302,11 @@ public final class ScreenshotTools {
 			boolean suppressCaret = args.getBoolean("suppressCaret", true); //$NON-NLS-1$
 			boolean settlePixels = args.getBoolean("settlePixels", false) && !sameTurn; //$NON-NLS-1$
 			int attempts = args.getInt("settlePixelAttempts", 4, 2, 10); //$NON-NLS-1$
-			// a known path per attempt, because two captures are compared on the file they wrote
-			String path = outputPath;
-			if (settlePixels && path == null) {
-				try {
-					path = Files.createTempFile("mcp-capture", ".png").toString(); //$NON-NLS-1$ //$NON-NLS-2$
-				} catch (IOException e) {
-					return McpToolResult.error("Could not create a file for the capture: " + e.getMessage()); //$NON-NLS-1$
-				}
-			}
-			String target0 = path;
 			boolean osWindow = "window".equals(args.getString("method")); //$NON-NLS-1$ //$NON-NLS-2$
 			boolean printOnly = "print".equals(args.getString("method")); //$NON-NLS-1$ //$NON-NLS-2$
 			boolean prefetch = osWindow && !sameTurn && WindowCapture.COCOA;
 			AtomicReference<WindowCapture.Read> prefetched = new AtomicReference<>();
-			Supplier<Encoding> once = () -> capture(target, part, shellTitle, activate, maxWidth, target0,
+			Supplier<Encoding> once = () -> capture(target, part, shellTitle, activate, maxWidth, outputPath,
 					includeBase64, args.getBoolean("includeToolbar", false), highlights, sameTurn, suppressCaret, //$NON-NLS-1$
 					osWindow, printOnly, prefetched.get());
 			if (!settlePixels) {
@@ -331,9 +321,8 @@ public final class ScreenshotTools {
 				});
 				return withPng(result, inline, png.get());
 			}
-			JsonObject answer = null;
-			byte[] lastPng = null;
-			byte[] previous = null;
+			Encoding last = null;
+			ImageData previous = null;
 			int taken = 0;
 			boolean converged = false;
 			for (int i = 0; i < attempts && !converged; i++) {
@@ -347,18 +336,20 @@ public final class ScreenshotTools {
 					return McpToolResult.error(Thread.currentThread().isInterrupted() ? "The request was interrupted." //$NON-NLS-1$
 							: UiThread.withdrawn(wait));
 				}
-				answer = encoding.finish();
-				lastPng = encoding.png().get();
+				last = encoding;
 				taken++;
-				byte[] bytes = bytesOf(target0);
-				if (bytes != null && previous != null && Arrays.equals(bytes, previous)) {
+				// compared before encoding, so only the capture that is returned pays for the PNG
+				ImageData pixels = encoding.pixels();
+				if (pixels != null && previous != null && samePixels(pixels, previous)) {
 					converged = true;
 				}
-				previous = bytes;
+				previous = pixels;
 				if (!converged && i + 1 < attempts) {
 					pause();
 				}
 			}
+			JsonObject answer = last.finish();
+			byte[] lastPng = last.png().get();
 			JsonObject pixelSettle = new JsonObject().put("converged", Boolean.valueOf(converged)) //$NON-NLS-1$
 					.put("captures", Integer.valueOf(taken)); //$NON-NLS-1$
 			if (!converged) {
@@ -409,18 +400,20 @@ public final class ScreenshotTools {
 			}
 		}
 
-		/**
-		 * The written PNG, which is what two captures are compared on.
-		 * <p>
-		 * The file rather than the ImageData: the encoder is deterministic for
-		 * identical pixels, and the file is what the caller compares too.
-		 */
-		private static byte[] bytesOf(String path) {
-			try {
-				return Files.readAllBytes(Path.of(path));
-			} catch (IOException | RuntimeException e) {
-				return null;
+		/** Whether two captures hold the same pixels, which is what makes their PNG files identical. */
+		public static boolean samePixels(ImageData a, ImageData b) {
+			return a.width == b.width && a.height == b.height && a.depth == b.depth
+					&& a.bytesPerLine == b.bytesPerLine && a.alpha == b.alpha && a.transparentPixel == b.transparentPixel
+					&& samePalette(a.palette, b.palette) && Arrays.equals(a.data, b.data)
+					&& Arrays.equals(a.alphaData, b.alphaData) && Arrays.equals(a.maskData, b.maskData);
+		}
+
+		private static boolean samePalette(org.eclipse.swt.graphics.PaletteData a, org.eclipse.swt.graphics.PaletteData b) {
+			if (a == null || b == null) {
+				return a == b;
 			}
+			return a.isDirect == b.isDirect && a.redMask == b.redMask && a.greenMask == b.greenMask
+					&& a.blueMask == b.blueMask && Arrays.equals(a.colors, b.colors);
 		}
 
 		/** One capture on the UI thread, as the object rather than as a result. */
