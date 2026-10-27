@@ -59,7 +59,7 @@ public final class DebugLaunchTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Starts a debug session and returns its sessionId plus the state at the moment of answering. STARTS A PROCESS: this runs project code under the IDE's debugger, so anything main does, the debugged program does. Give either 'configuration', the name of an existing launch configuration, or 'project' plus 'mainType'; the latter builds a transient configuration that never appears in the user's saved launches. With 'stopInMain' the program suspends at the first line of main; otherwise set breakpoints first through eclipse_set_breakpoint and wait for them through eclipse_debug_status with waitForSuspendSeconds. Sessions started here are terminated again when this plug-in stops or after autoTerminateAfterSeconds, whichever comes first. To run tests under the debugger use eclipse_run_tests with debug true instead. Pass flightRecording to profile the launched JVM, which the IDE's own recording tools cannot reach because they record the IDE's own process."; //$NON-NLS-1$
+		return "Starts a debug session and returns its sessionId plus the state at the moment of answering. STARTS A PROCESS: this runs project code under the IDE's debugger, so anything main does, the debugged program does. Give either 'configuration', the name of an existing launch configuration, plus 'project' when several projects store a configuration of that name, or 'project' plus 'mainType'; the latter builds a transient configuration that never appears in the user's saved launches. With 'stopInMain' the program suspends at the first line of main; otherwise set breakpoints first through eclipse_set_breakpoint and wait for them through eclipse_debug_status with waitForSuspendSeconds. Sessions started here are terminated again when this plug-in stops or after autoTerminateAfterSeconds, whichever comes first. To run tests under the debugger use eclipse_run_tests with debug true instead. Pass flightRecording to profile the launched JVM, which the IDE's own recording tools cannot reach because they record the IDE's own process."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -69,7 +69,7 @@ public final class DebugLaunchTool implements IMcpTool {
 				  "type": "object",
 				  "properties": {
 				    "configuration":           {"type":"string","description":"Name of an existing launch configuration to start in debug mode."},
-				    "project":                 {"type":"string","description":"Project holding mainType, when not launching a saved configuration."},
+				    "project":                 {"type":"string","description":"Project holding mainType. With 'configuration', the project the configuration file is stored in, which is required when several projects share a configuration of that name."},
 				    "mainType":                {"type":"string","description":"Fully qualified class whose main(String[]) starts the program."},
 				    "arguments":               {"type":"string","description":"Program arguments."},
 				    "vmArguments":             {"type":"string","description":"VM arguments."},
@@ -238,20 +238,53 @@ public final class DebugLaunchTool implements IMcpTool {
 		return file;
 	}
 
+	/**
+	 * Two projects can each share a configuration of the same name, and the launch manager
+	 * lists them in no particular order, so taking the first one would start either.
+	 */
+	private static ILaunchConfiguration pick(String name, List<ILaunchConfiguration> matches, String projectName)
+			throws McpToolException {
+		if (matches.size() == 1) {
+			return matches.get(0);
+		}
+		if (projectName != null) {
+			List<ILaunchConfiguration> inProject = matches.stream().filter(candidate -> candidate.getFile() != null
+					&& candidate.getFile().getProject().getName().equals(projectName)).toList();
+			if (inProject.size() == 1) {
+				return inProject.get(0);
+			}
+			throw new McpToolException("None of the launch configurations named '%s' is stored in project '%s'. They are stored at: %s" //$NON-NLS-1$
+					.formatted(name, projectName, locations(matches)));
+		}
+		throw new McpToolException(
+				"%d launch configurations are named '%s', stored at: %s. Pass 'project' to say which one to start." //$NON-NLS-1$
+						.formatted(Integer.valueOf(matches.size()), name, locations(matches)));
+	}
+
+	private static String locations(List<ILaunchConfiguration> configurations) {
+		return String.join(", ", configurations.stream().map(configuration -> configuration.getFile() != null //$NON-NLS-1$
+				? configuration.getFile().getFullPath().toString()
+				: "(local to the workspace metadata)").toList()); //$NON-NLS-1$
+	}
+
 	private ILaunchConfigurationWorkingCopy configuration(ToolArguments args)
 			throws McpToolException, CoreException {
 		String name = args.getString("configuration"); //$NON-NLS-1$
 		ILaunchManager manager = DebugPlugin.getDefault().getLaunchManager();
 		if (name != null) {
 			List<String> names = new ArrayList<>();
+			List<ILaunchConfiguration> matches = new ArrayList<>();
 			for (ILaunchConfiguration candidate : manager.getLaunchConfigurations()) {
 				names.add(candidate.getName());
 				if (candidate.getName().equals(name)) {
-					return candidate.getWorkingCopy();
+					matches.add(candidate);
 				}
 			}
-			throw new McpToolException(
-					"No launch configuration named '%s'. Existing ones: %s".formatted(name, String.join(", ", names))); //$NON-NLS-1$ //$NON-NLS-2$
+			if (matches.isEmpty()) {
+				throw new McpToolException(
+						"No launch configuration named '%s'. Existing ones: %s".formatted(name, String.join(", ", names))); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+			return pick(name, matches, args.getString("project")).getWorkingCopy(); //$NON-NLS-1$
 		}
 		String projectName = args.getString("project"); //$NON-NLS-1$
 		String mainType = args.getString("mainType"); //$NON-NLS-1$

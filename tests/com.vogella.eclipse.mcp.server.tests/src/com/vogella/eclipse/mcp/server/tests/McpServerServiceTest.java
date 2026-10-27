@@ -206,7 +206,40 @@ class McpServerServiceTest {
 					blocker.getLocalPort());
 			assertThrows(McpServerException.class, service::start);
 			assertTrue(service.isLastErrorPortFailure());
+			// a client waiting for the discovery file learns why, instead of timing out
+			String content = Files.readString(McpServerService.getEndpointFile());
+			assertTrue(content.contains("\"failed\""), "expected a failed record, got " + content);
+			assertTrue(content.contains(String.valueOf(blocker.getLocalPort())), "and the port it wanted: " + content);
 		} finally {
+			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putInt(McpPreferences.KEY_PORT, testPort);
+			service.start();
+		}
+	}
+
+	@Test
+	void waitsForAPortThatComesFreeShortly() throws Exception {
+		McpServerService service = McpServerService.getInstance();
+		service.stop();
+		ServerSocket blocker = new ServerSocket(0, 0, InetAddress.getLoopbackAddress());
+		int port = blocker.getLocalPort();
+		// what a runtime IDE meets when the one before it is still closing its socket
+		Thread release = new Thread(() -> {
+			try {
+				Thread.sleep(2000);
+				blocker.close();
+			} catch (Exception e) {
+				// the start below fails then, which is the assertion
+			}
+		});
+		try {
+			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putInt(McpPreferences.KEY_PORT, port);
+			release.start();
+			service.start();
+			assertEquals(port, service.getPort());
+		} finally {
+			release.join();
+			blocker.close();
+			service.stop();
 			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putInt(McpPreferences.KEY_PORT, testPort);
 			service.start();
 		}

@@ -59,6 +59,23 @@ public final class EndpointFile {
 		}
 	}
 
+	/**
+	 * Records why the server could not start, so a client waiting for the file learns it
+	 * instead of timing out. The same message goes to the error log.
+	 */
+	public static void markFailed(String error) {
+		Path path = location();
+		String json = new JsonObject().put("state", "failed") //$NON-NLS-1$ //$NON-NLS-2$
+				.put("error", error) //$NON-NLS-1$
+				.put("workspace", workspace()) //$NON-NLS-1$
+				.put("failedAt", System.currentTimeMillis()).toString(); //$NON-NLS-1$
+		try {
+			PrivateFiles.write(path, json);
+		} catch (IOException e) {
+			ILog.get().warn("Could not write the MCP endpoint file " + path, e); //$NON-NLS-1$
+		}
+	}
+
 	/** The workspace this server serves, so a client can tell which one it reached. */
 	static String workspace() {
 		var location = Platform.getInstanceLocation();

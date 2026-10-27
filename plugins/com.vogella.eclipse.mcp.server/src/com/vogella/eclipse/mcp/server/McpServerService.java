@@ -62,6 +62,12 @@ public final class McpServerService {
 
 	private static final int PORT_SEARCH_RANGE = 20;
 
+	/**
+	 * How long a start waits for its port to come free. A runtime IDE launched right after
+	 * another one was killed can find the old process still closing its socket.
+	 */
+	private static final long PORT_WAIT_MILLIS = 10_000;
+
 	private static final McpServerService INSTANCE = new McpServerService();
 
 	private Server jetty;
@@ -143,6 +149,29 @@ public final class McpServerService {
 		return -1;
 	}
 
+	/** Waits until the port can be bound, and answers whether it could within {@value #PORT_WAIT_MILLIS} ms. */
+	private static boolean awaitPort(int port) {
+		long deadline = System.nanoTime() + PORT_WAIT_MILLIS * 1_000_000;
+		while (true) {
+			// the same reuse setting as the connector, so a socket in TIME_WAIT does not count as taken
+			try (ServerSocket probe = new ServerSocket()) {
+				probe.setReuseAddress(true);
+				probe.bind(new InetSocketAddress(LOOPBACK, port));
+				return true;
+			} catch (IOException e) {
+				if (System.nanoTime() > deadline) {
+					return false;
+				}
+			}
+			try {
+				Thread.sleep(500);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return false;
+			}
+		}
+	}
+
 	private static boolean isBindFailure(Throwable failure) {
 		for (Throwable t = failure; t != null; t = t.getCause()) {
 			if (t instanceof java.net.BindException) {
@@ -188,6 +217,10 @@ public final class McpServerService {
 				.build();
 		readyGate = new ReadyGate(READY_WAIT_MILLIS);
 
+		if (!awaitPort(port)) {
+			ILog.get().warn("Port %d on %s is still taken after %d seconds, trying to listen on it anyway" //$NON-NLS-1$
+					.formatted(Integer.valueOf(port), LOOPBACK, Long.valueOf(PORT_WAIT_MILLIS / 1000)));
+		}
 		try {
 			jetty = createJetty(port, token);
 			jetty.start();
@@ -196,6 +229,7 @@ public final class McpServerService {
 			lastErrorIsPort = isBindFailure(e);
 			lastError = "Could not listen on %s:%d. %s".formatted(LOOPBACK, port, //$NON-NLS-1$
 					e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+			EndpointFile.markFailed(lastError);
 			throw new McpServerException("Could not start the MCP server on %s:%d".formatted(LOOPBACK, port), e); //$NON-NLS-1$
 		}
 
@@ -220,6 +254,7 @@ public final class McpServerService {
 			lastErrorIsPort = false;
 			lastError = "Could not load the tools or publish the endpoint. %s".formatted( //$NON-NLS-1$
 					e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+			EndpointFile.markFailed(lastError);
 			throw new McpServerException("Could not load the MCP tools", e); //$NON-NLS-1$
 		}
 		lastError = null;
@@ -256,6 +291,9 @@ public final class McpServerService {
 		// binds to 127.0.0.1 only, so the socket is not reachable from another machine
 		connector.setHost(LOOPBACK);
 		connector.setPort(port);
+		// Jetty's default, stated because a restart right after a stop relies on it: the old
+		// connections may still be in TIME_WAIT, which must not keep the port from binding
+		connector.setReuseAddress(true);
 		server.addConnector(connector);
 
 		ServletContextHandler context = new ServletContextHandler("/"); //$NON-NLS-1$
