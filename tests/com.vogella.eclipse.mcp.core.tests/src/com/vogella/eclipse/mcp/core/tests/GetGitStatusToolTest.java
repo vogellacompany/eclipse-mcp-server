@@ -41,7 +41,7 @@ class GetGitStatusToolTest {
 			Files.writeString(directory.resolve("tracked.txt"), "first\n");
 			git.add().addFilepattern("tracked.txt").call();
 			git.commit().setMessage("first").setAuthor("Test", "test@example.com")
-					.setCommitter("Test", "test@example.com").call();
+					.setCommitter("Test", "test@example.com").setSign(Boolean.FALSE).call();
 		}
 	}
 
