@@ -4,6 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 
@@ -140,6 +143,11 @@ public final class RunScriptTool implements IMcpTool {
 			long started = System.currentTimeMillis();
 			JsonObject entry = new JsonObject().put("label", step.label()) //$NON-NLS-1$
 					.put("tool", step.tool().getName()).put("ran", Boolean.TRUE); //$NON-NLS-1$ //$NON-NLS-2$
+			JsonArray ignored = unknownArguments(step);
+			if (ignored.size() > 0) {
+				// a step bypasses the protocol's schema check, so a misspelt argument would otherwise go unnoticed
+				entry.put("ignoredArguments", ignored); //$NON-NLS-1$
+			}
 			String text;
 			boolean error;
 			try {
@@ -188,6 +196,26 @@ public final class RunScriptTool implements IMcpTool {
 				.put("note", atomic //$NON-NLS-1$
 						? "Every step ran in one turn of the UI thread, so nothing repainted or closed between them." //$NON-NLS-1$
 						: "The steps ran as ordinary calls, so the event loop ran between them and anything transient will have closed."); //$NON-NLS-1$
+	}
+
+	/** The argument names each tool declares, empty when its schema does not say. */
+	private static final Map<String, Optional<Set<String>>> DECLARED = new ConcurrentHashMap<>();
+
+	/** The arguments of a step that its tool's input schema does not declare. */
+	private static JsonArray unknownArguments(Step step) {
+		JsonArray unknown = new JsonArray();
+		if (step.arguments().isEmpty()) {
+			return unknown;
+		}
+		Optional<Set<String>> declared = DECLARED.computeIfAbsent(step.tool().getName(), name -> {
+			Object schema = parse(step.tool().getInputSchema());
+			return schema instanceof Map<?, ?> root && root.get("properties") instanceof Map<?, ?> properties //$NON-NLS-1$
+					? Optional.of(properties.keySet().stream().map(String::valueOf).collect(Collectors.toSet()))
+					: Optional.empty();
+		});
+		declared.ifPresent(names -> step.arguments().keySet().stream().filter(key -> !names.contains(key))
+				.forEach(unknown::add));
+		return unknown;
 	}
 
 	private static Object parse(String text) {
