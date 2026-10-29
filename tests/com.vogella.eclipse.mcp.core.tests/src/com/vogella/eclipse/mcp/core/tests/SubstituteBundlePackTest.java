@@ -50,6 +50,37 @@ class SubstituteBundlePackTest {
 	}
 
 	@Test
+	void aFragmentLikeSwtGetsItsManifestAndItsNativeLibraries() throws Exception {
+		// SWT's fragments list neither META-INF nor the libraries by name, and rely on the build adding the one and expanding the other
+		Path project = plugin("bin.includes = .,*.so,fragment.properties,missing/\n");
+		Files.writeString(project.resolve("libswt-gtk.so"), "elf");
+		Files.writeString(project.resolve("libswt-cairo-gtk.so"), "elf");
+		Files.writeString(project.resolve("fragment.properties"), "name=f");
+		Path jar = temp.resolve("packed.jar");
+
+		SubstituteBundleTool.Packed packed = SubstituteBundleTool.pack(project, jar);
+
+		assertEquals(Set.of("META-INF/MANIFEST.MF", "a/B.class", "fragment.properties", "libswt-cairo-gtk.so",
+				"libswt-gtk.so"), entries(jar));
+		assertEquals(List.of("missing/"), packed.unmatched());
+		try (JarFile file = new JarFile(jar.toFile())) {
+			assertEquals("p", file.getManifest().getMainAttributes().getValue("Bundle-SymbolicName"));
+		}
+	}
+
+	@Test
+	void aGitLfsPointerInPlaceOfANativeLibraryIsFound() throws Exception {
+		Path project = plugin("bin.includes = .,*.so\n");
+		Files.writeString(project.resolve("libswt-gtk.so"),
+				"version https://git-lfs.github.com/spec/v1\noid sha256:f268f3c3\nsize 610344\n");
+		Path jar = temp.resolve("packed.jar");
+
+		SubstituteBundleTool.pack(project, jar);
+
+		assertEquals(List.of("libswt-gtk.so"), SubstituteBundleTool.lfsPointers(jar));
+	}
+
+	@Test
 	void anEntryOutsideTheProjectIsRefusedByName() throws Exception {
 		Path project = plugin("bin.includes = META-INF/,../\n");
 		Path jar = temp.resolve("packed.jar");

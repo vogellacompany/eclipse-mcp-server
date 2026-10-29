@@ -5,10 +5,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.core.commands.Command;
 import org.eclipse.core.commands.IParameter;
@@ -20,6 +22,8 @@ import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.commands.ICommandService;
 import org.eclipse.ui.handlers.IHandlerService;
@@ -180,7 +184,7 @@ public final class CommandTools {
 
 		@Override
 		public String getDescription() {
-			return "Runs a workbench command through Eclipse's command and handler framework, exactly as its menu entry, toolbar button or keybinding would. DOES WHATEVER THAT COMMAND DOES: the effect belongs to the command's handler and is unknown to this server, which neither knows in advance nor limits what it can be, and it can change files, preferences, perspectives or anything else the IDE can touch. This is how most of what an IDE can do becomes reachable here, because much of it exists only as a command with no other API; resolve ids with eclipse_list_commands first. Every answer reports handlerFinished and the outcome verb success, failure or notHandled, heard from the framework's own execution listener, so whether the handler actually ran is never a guess. A command no handler currently answers comes back as handled false with advice rather than an error, which usually means the part or selection it belongs to is not active; activate it with eclipse_set_part_state and try again. MANY HANDLERS OPEN A MODAL DIALOG, which holds the UI thread until somebody answers it, so the wait is capped and running out reports timedOut with the tools to see and answer the dialog; there timedOut true with handlerFinished false reads as a dialog still holding the handler inside execute, while handlerFinished true reads as a slow handler whose verdict already came back, and whatever the command went on to do afterwards is written to the Error Log rather than lost. Refuses org.eclipse.ui.file.exit, which ends the IDE and this server with it, and org.eclipse.ui.file.restartWorkbench, which eclipse_restart does in an orderly way."; //$NON-NLS-1$
+			return "Runs a workbench command through Eclipse's command and handler framework, exactly as its menu entry, toolbar button or keybinding would. DOES WHATEVER THAT COMMAND DOES: the effect belongs to the command's handler and is unknown to this server, which neither knows in advance nor limits what it can be, and it can change files, preferences, perspectives or anything else the IDE can touch. This is how most of what an IDE can do becomes reachable here, because much of it exists only as a command with no other API; resolve ids with eclipse_list_commands first. Every answer reports handlerFinished and the outcome verb success, failure or notHandled, heard from the framework's own execution listener, so whether the handler actually ran is never a guess. A command no handler currently answers comes back as handled false with advice rather than an error, which usually means the part or selection it belongs to is not active; activate it with eclipse_set_part_state and try again. MANY HANDLERS OPEN A MODAL DIALOG, which holds the UI thread until somebody answers it, so the answer comes as soon as a new modal dialog is open, with dialogOpen and its title (returnOnDialog), and otherwise the wait is capped and running out reports timedOut with the tools to see and answer the dialog; there timedOut true with handlerFinished false reads as a dialog still holding the handler inside execute, while handlerFinished true reads as a slow handler whose verdict already came back, and whatever the command went on to do afterwards is written to the Error Log rather than lost. Refuses org.eclipse.ui.file.exit, which ends the IDE and this server with it, and org.eclipse.ui.file.restartWorkbench, which eclipse_restart does in an orderly way."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -194,7 +198,8 @@ public final class CommandTools {
 					    "parameters":     {"type":"object","additionalProperties":{"type":"string"},"description":"Parameter id to string value, for commands that take them."},
 					    "dryRun":         {"type":"boolean","default":false,"description":"Resolve the command and report handled, enabled and its parameters without executing anything."},
 				    "selection":      {"type":"array","items":{"type":"string"},"description":"Ask the enablement for THIS selection instead of the one the IDE currently has, as workspace paths ('/org.eclipse.compare') or project names ('g'). dryRun only. The command is evaluated against a context built from these elements and the IDE's selection is not touched, so an enablement can be tested for a selection no viewer here can even show, a closed project among open ones for instance. Reports enabledForSelection beside the ambient enabled."},
-					    "timeoutSeconds": {"type":"integer","default":10,"minimum":1,"maximum":25,"description":"How long to wait for the handler before reporting a probable dialog."}
+					    "timeoutSeconds": {"type":"integer","default":10,"minimum":1,"maximum":25,"description":"How long to wait for the handler before reporting a probable dialog."},
+					    "returnOnDialog": {"type":"boolean","default":true,"description":"Answer as soon as the handler has a new modal dialog open, with dialogOpen and its title, instead of waiting out timeoutSeconds. A progress dialog does not count."}
 					  },
 					  "additionalProperties": false
 					}"""; //$NON-NLS-1$
@@ -226,10 +231,13 @@ public final class CommandTools {
 				return McpToolResult.error(Workbenches.noIde());
 			}
 
+			boolean returnOnDialog = args.getBoolean("returnOnDialog", true) && !dryRun; //$NON-NLS-1$
 			ExecutionRecorder recorder = new ExecutionRecorder();
 			CompletableFuture<String> pending = new CompletableFuture<>();
+			AtomicReference<Set<Shell>> before = new AtomicReference<>();
 			UiThread.exec(() -> {
 				try {
+					before.set(Set.of(Workbenches.display().getShells()));
 					pending.complete(execute(wanted, parameters, dryRun, selection, recorder).toString());
 				} catch (Throwable e) {
 					// an Error must complete the future too, or the wait reports a dialog that is not there
@@ -237,6 +245,15 @@ public final class CommandTools {
 				}
 			});
 			try {
+				if (returnOnDialog && !UiThread.onUiThread()) {
+					long started = System.currentTimeMillis();
+					String dialog = awaitDialog(pending, before, started + timeoutSeconds * 1000L);
+					if (dialog != null) {
+						pending.whenComplete((text, error) -> logLateCompletion(wanted, text, error));
+						return McpToolResult.of(dialogOpen(wanted, dialog, System.currentTimeMillis() - started, recorder)
+								.toString());
+					}
+				}
 				return McpToolResult.of(pending.get(timeoutSeconds, TimeUnit.SECONDS));
 			} catch (TimeoutException e) {
 				// registered here so a completion between the timeout and this line is logged too
@@ -459,6 +476,78 @@ public final class CommandTools {
 			return required.isEmpty() ? "its required parameters" : String.join(", ", required); //$NON-NLS-1$
 		}
 
+		/** How often the wait looks for a dialog the handler opened. */
+		private static final long DIALOG_PROBE_MILLIS = 100;
+
+		/**
+		 * Waits for the handler until the deadline, and answers the title of a modal
+		 * dialog it opened as soon as one has been seen on two probes in a row, or
+		 * {@code null} when the handler finished or the deadline passed first.
+		 * <p>
+		 * A modal dialog runs a nested event loop, so a probe posted to the Display runs
+		 * while the handler is still inside {@code execute}; a handler that is merely busy
+		 * leaves the probe queued and is waited for as before.
+		 */
+		private static String awaitDialog(CompletableFuture<String> pending, AtomicReference<Set<Shell>> before,
+				long deadline) throws InterruptedException {
+			CompletableFuture<ModalShell> probe = null;
+			Shell candidate = null;
+			while (!pending.isDone()) {
+				long left = deadline - System.currentTimeMillis();
+				if (left <= 0) {
+					return null;
+				}
+				try {
+					pending.get(Math.min(left, DIALOG_PROBE_MILLIS), TimeUnit.MILLISECONDS);
+					return null;
+				} catch (ExecutionException e) {
+					return null;
+				} catch (TimeoutException e) {
+					// still running, look for a dialog
+				}
+				if (probe == null || probe.isDone()) {
+					ModalShell found = probe == null ? null : probe.getNow(null);
+					if (found != null && found.shell() == candidate) {
+						return found.title();
+					}
+					candidate = found == null ? null : found.shell();
+					CompletableFuture<ModalShell> next = new CompletableFuture<>();
+					Workbenches.display().asyncExec(() -> next.complete(newModalDialog(before.get())));
+					probe = next;
+				}
+			}
+			return null;
+		}
+
+		private record ModalShell(Shell shell, String title) {
+		}
+
+		/** A visible modal shell that was not open before the command, other than a progress dialog. */
+		private static ModalShell newModalDialog(Set<Shell> before) {
+			if (before == null) {
+				return null;
+			}
+			for (Shell shell : Workbenches.display().getShells()) {
+				if (!before.contains(shell) && !shell.isDisposed() && shell.isVisible()
+						&& (shell.getStyle() & (SWT.APPLICATION_MODAL | SWT.PRIMARY_MODAL | SWT.SYSTEM_MODAL)) != 0
+						&& !(shell.getData() instanceof org.eclipse.jface.dialogs.ProgressMonitorDialog)) {
+					return new ModalShell(shell, shell.getText());
+				}
+			}
+			return null;
+		}
+
+		private static JsonObject dialogOpen(String wanted, String title, long waitedMillis, ExecutionRecorder recorder) {
+			return recorder.reportInto(new JsonObject().put("executed", Boolean.FALSE).put("timedOut", Boolean.FALSE) //$NON-NLS-1$ //$NON-NLS-2$
+					.put("id", wanted) //$NON-NLS-1$
+					.put("dialogOpen", Boolean.TRUE) //$NON-NLS-1$
+					.put("dialog", title) //$NON-NLS-1$
+					.put("waitedMillis", Long.valueOf(waitedMillis)) //$NON-NLS-1$
+					.put("note", //$NON-NLS-1$
+							"The handler opened the modal dialog '%s' and is waiting inside it for an answer. Read it with eclipse_get_widget_tree and shellTitle, answer it with eclipse_dismiss_dialog or by pressing its buttons; what the command does after that is written to the Error Log." //$NON-NLS-1$
+									.formatted(title)));
+		}
+
 		private static JsonObject timedOut(String wanted, long timeoutSeconds, ExecutionRecorder recorder) {
 			return recorder.reportInto(new JsonObject().put("executed", Boolean.FALSE).put("timedOut", Boolean.TRUE) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("id", wanted) //$NON-NLS-1$
@@ -471,7 +560,7 @@ public final class CommandTools {
 			String outcome = error != null ? "it failed with: " + error //$NON-NLS-1$
 					: answer == null ? "no result" : "its answer was: " + cap(answer); //$NON-NLS-1$ //$NON-NLS-2$
 			ILog.get().log(new Status(IStatus.INFO, McpUiComponent.PLUGIN_ID,
-					"eclipse_run_workbench_command: '%s' finished after its call had already timed out; the caller never saw this answer. %s" //$NON-NLS-1$
+					"eclipse_run_workbench_command: '%s' finished after its call had already answered; the caller never saw this result. %s" //$NON-NLS-1$
 							.formatted(wanted, outcome)));
 		}
 	}

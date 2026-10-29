@@ -8,11 +8,13 @@ import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.PathMatcher;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,6 +26,7 @@ import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 
@@ -695,14 +698,24 @@ public final class SubstituteBundleTool implements IMcpTool {
 			return McpToolResult.error("Packing project '%s' from %s failed, and bundles.info was not changed: %s" //$NON-NLS-1$
 					.formatted(projectName, projectPath, e.getMessage()));
 		}
+		List<String> pointers = lfsPointers(jar);
+		if (!pointers.isEmpty()) {
+			Files.deleteIfExists(jar);
+			return McpToolResult.error(
+					"Not substituted, and bundles.info was not changed: %s in project '%s' are Git LFS pointer files, not the files themselves, and an IDE started on this jar would fail to load them. Run 'git lfs pull' in the repository, rebuild, and substitute again." //$NON-NLS-1$
+							.formatted(pointers, projectName));
+		}
 		lines.set(index, substituted);
 		Files.write(bundlesInfo, lines, StandardCharsets.UTF_8);
 		record(configuration, symbolicName, original, substituted);
 		JsonArray unreadable = new JsonArray();
 		packed.unreadable().forEach(unreadable::add);
+		JsonArray unmatched = new JsonArray();
+		packed.unmatched().forEach(unmatched::add);
 		return McpToolResult.of(result.put("dryRun", Boolean.FALSE) //$NON-NLS-1$
 				.put("entries", Integer.valueOf(packed.entries())) //$NON-NLS-1$
 				.put("unreadable", unreadable) //$NON-NLS-1$
+				.put("unmatchedIncludes", unmatched.size() == 0 ? null : unmatched) //$NON-NLS-1$
 				.put("restartRequired", Boolean.TRUE) //$NON-NLS-1$
 				.put("note", //$NON-NLS-1$
 						(packed.unreadable().isEmpty() ? "" //$NON-NLS-1$
@@ -789,22 +802,33 @@ public final class SubstituteBundleTool implements IMcpTool {
 				.toString());
 	}
 
-	/** What packing produced: the entries written and the directories it could not read. */
-	public record Packed(int entries, List<String> unreadable) {
+	/**
+	 * What packing produced: the entries written, the directories it could not read,
+	 * and the bin.includes entries that matched nothing on disk.
+	 */
+	public record Packed(int entries, List<String> unreadable, List<String> unmatched) {
 	}
 
 	/**
-	 * Packs the project the way PDE would: the compiled output, plus what
-	 * build.properties lists under bin.includes, which is where the manifest, the
-	 * plugin.xml and any css or icons live. Every root it walks has to lie inside
-	 * the project; an entry that resolves anywhere else is refused by name.
+	 * Packs the project the way PDE would: the manifest, the compiled output, plus
+	 * what build.properties lists under bin.includes, which is where the plugin.xml,
+	 * any css or icons and a fragment's native libraries live. An entry may be a
+	 * pattern such as {@code *.so}. Every root it walks has to lie inside the
+	 * project; an entry that resolves anywhere else is refused by name.
 	 */
 	public static Packed pack(Path projectPath, Path jar) throws IOException {
 		Path project = projectPath.toAbsolutePath().normalize();
 		List<String> includes = binIncludes(project);
 		List<String> unreadable = new ArrayList<>();
+		List<String> unmatched = new ArrayList<>();
 		int written = 0;
 		try (OutputStream stream = Files.newOutputStream(jar); JarOutputStream out = new JarOutputStream(stream)) {
+			// PDE and Tycho put the manifest in whether bin.includes names it or not, and SWT's
+			// fragments rely on that; without it the jar is no bundle and the IDE does not start
+			Path manifest = project.resolve("META-INF/MANIFEST.MF"); //$NON-NLS-1$
+			if (Files.isRegularFile(manifest)) {
+				written += copyOne(project, manifest, out, unreadable);
+			}
 			Path output = inside(project, outputFolder(project), "the output folder"); //$NON-NLS-1$
 			if (Files.isDirectory(output)) {
 				written += copyTree(output, output, out, unreadable);
@@ -813,15 +837,60 @@ public final class SubstituteBundleTool implements IMcpTool {
 				if (".".equals(include)) { //$NON-NLS-1$
 					continue;
 				}
-				Path source = inside(project, project.resolve(include), "bin.includes entry '" + include + "'"); //$NON-NLS-1$ //$NON-NLS-2$
-				if (Files.isDirectory(source)) {
-					written += copyTree(project, source, out, unreadable);
-				} else if (Files.isRegularFile(source)) {
-					written += copyOne(project, source, out, unreadable);
+				List<Path> sources = include.contains("*") || include.contains("?") //$NON-NLS-1$ //$NON-NLS-2$
+						? matching(project, include)
+						: List.of(inside(project, project.resolve(include), "bin.includes entry '" + include + "'")); //$NON-NLS-1$ //$NON-NLS-2$
+				boolean found = false;
+				for (Path source : sources) {
+					if (Files.isDirectory(source)) {
+						written += copyTree(project, source, out, unreadable);
+						found = true;
+					} else if (Files.isRegularFile(source)) {
+						written += copyOne(project, source, out, unreadable);
+						found = true;
+					}
+				}
+				if (!found) {
+					unmatched.add(include);
 				}
 			}
 		}
-		return new Packed(written, List.copyOf(unreadable));
+		return new Packed(written, List.copyOf(unreadable), List.copyOf(unmatched));
+	}
+
+	/**
+	 * The entries of a packed jar that are Git LFS pointers rather than content. A
+	 * checkout without LFS, which a shallow clone of SWT is, has a pointer of a
+	 * hundred bytes where each native library should be.
+	 */
+	public static List<String> lfsPointers(Path jar) throws IOException {
+		byte[] marker = "version https://git-lfs.github.com/spec/".getBytes(StandardCharsets.US_ASCII); //$NON-NLS-1$
+		List<String> pointers = new ArrayList<>();
+		try (JarFile file = new JarFile(jar.toFile())) {
+			for (var entries = file.entries(); entries.hasMoreElements();) {
+				ZipEntry entry = entries.nextElement();
+				if (entry.isDirectory() || entry.getSize() < marker.length || entry.getSize() > 1024) {
+					continue;
+				}
+				try (InputStream in = file.getInputStream(entry)) {
+					if (Arrays.equals(in.readNBytes(marker.length), marker)) {
+						pointers.add(entry.getName());
+					}
+				}
+			}
+		}
+		return pointers;
+	}
+
+	/** The files and directories a bin.includes pattern such as {@code *.so} or {@code lib/*.jar} names. */
+	private static List<Path> matching(Path project, String pattern) throws IOException {
+		String glob = pattern.endsWith("/") ? pattern.substring(0, pattern.length() - 1) : pattern; //$NON-NLS-1$
+		PathMatcher matcher = project.getFileSystem().getPathMatcher("glob:" + glob); //$NON-NLS-1$
+		int depth = glob.split("/").length; //$NON-NLS-1$
+		try (Stream<Path> walk = Files.walk(project, depth)) {
+			return walk.filter(path -> !path.equals(project) && matcher.matches(project.relativize(path))).sorted()
+					.toList();
+		}
 	}
 
 	/**
