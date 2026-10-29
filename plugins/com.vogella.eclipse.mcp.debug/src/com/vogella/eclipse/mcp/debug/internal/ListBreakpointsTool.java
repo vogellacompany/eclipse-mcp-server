@@ -36,7 +36,7 @@ public final class ListBreakpointsTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Lists the Java breakpoints of the workspace: line and exception breakpoints with their id, type, line, enabled and installed state, hit count, condition, suspend policy and the file they are attached to. Read only. The id is what eclipse_set_breakpoint takes to update or remove one again. Use eclipse_debug_status to see whether a session is stopped at one."; //$NON-NLS-1$
+		return "Lists the Java breakpoints of the workspace: line and exception breakpoints with their id, type, line, enabled and installed state, hit count, condition and whether it is enabled, suspend policy and the file they are attached to. Read only. The id is what eclipse_set_breakpoint takes to update or remove one again. Use eclipse_debug_status to see whether a session is stopped at one."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -108,7 +108,8 @@ public final class ListBreakpointsTool implements IMcpTool {
 				json.put("line", Integer.valueOf(line.getLineNumber())); //$NON-NLS-1$
 			}
 			if (breakpoint instanceof IJavaLineBreakpoint lineWithCondition && lineWithCondition.supportsCondition()) {
-				json.put("condition", lineWithCondition.getCondition()); //$NON-NLS-1$
+				json.put("condition", lineWithCondition.getCondition()) //$NON-NLS-1$
+						.put("conditionEnabled", Boolean.valueOf(lineWithCondition.isConditionEnabled())); //$NON-NLS-1$
 			}
 			if (breakpoint instanceof IJavaExceptionBreakpoint exception) {
 				json.put("caught", Boolean.valueOf(exception.isCaught())) //$NON-NLS-1$
