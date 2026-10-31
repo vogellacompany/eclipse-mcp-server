@@ -48,7 +48,9 @@ Every push to `main` publishes to the update site; pushing a `v<version>` tag ad
 
 Changes apply immediately.
 The page also shows the URL, the bearer token and the discovery file, and can regenerate the token.
-If the port is taken, the server stays down and the page says why; it never moves to another port behind a client's back.
+By default, if the configured port is taken, the server stays down and the page says why.
+To let the operating system choose an available port at each start, add `-Dcom.vogella.eclipse.mcp.server.ephemeralPort=true` after `-vmargs` in `eclipse.ini`.
+The selected port is written to the workspace discovery file; clients must rediscover that endpoint after every restart.
 
 ### In an RCP application
 
