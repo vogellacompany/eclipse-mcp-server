@@ -57,6 +57,8 @@ public final class McpServerService {
 
 	private static final String LOOPBACK = "127.0.0.1"; //$NON-NLS-1$
 
+	private static final String EPHEMERAL_PORT_PROPERTY = "com.vogella.eclipse.mcp.server.ephemeralPort"; //$NON-NLS-1$
+
 	/** How long a request waits for the tools to load, kept below the 30 seconds Claude Code gives a connection. */
 	private static final long READY_WAIT_MILLIS = 25_000;
 
@@ -201,7 +203,8 @@ public final class McpServerService {
 		if (isRunning()) {
 			return;
 		}
-		int port = McpPreferences.getPort();
+		boolean ephemeralPort = Boolean.getBoolean(EPHEMERAL_PORT_PROPERTY);
+		int port = ephemeralPort ? 0 : McpPreferences.getPort();
 		String token = TokenStore.get();
 		McpJsonMapper jsonMapper = new JacksonMcpJsonMapperSupplier().get();
 		toolExecutor = Executors.newCachedThreadPool(runnable -> {
@@ -217,7 +220,7 @@ public final class McpServerService {
 				.build();
 		readyGate = new ReadyGate(READY_WAIT_MILLIS);
 
-		if (!awaitPort(port)) {
+		if (!ephemeralPort && !awaitPort(port)) {
 			ILog.get().warn("Port %d on %s is still taken after %d seconds, trying to listen on it anyway" //$NON-NLS-1$
 					.formatted(Integer.valueOf(port), LOOPBACK, Long.valueOf(PORT_WAIT_MILLIS / 1000)));
 		}
@@ -232,6 +235,7 @@ public final class McpServerService {
 			EndpointFile.markFailed(lastError);
 			throw new McpServerException("Could not start the MCP server on %s:%d".formatted(LOOPBACK, port), e); //$NON-NLS-1$
 		}
+		int listeningPort = ephemeralPort ? ((ServerConnector) jetty.getConnectors()[0]).getLocalPort() : port;
 
 		// loading the tools takes seconds on a fresh start, and the socket is already bound by now so
 		// that a client reconnecting after a restart waits in the ready gate instead of being refused
@@ -250,10 +254,10 @@ public final class McpServerService {
 							+ "Builds, test runs and provisioning return a handle to poll. With several clients connected, pass ids explicitly instead of relying on a most-recent default; a session ends with an HTTP DELETE or after 60 seconds without a request.") //$NON-NLS-1$
 					.capabilities(ServerCapabilities.builder().tools(false).build()).jsonMapper(jsonMapper)
 					.jsonSchemaValidator(new BundleJsonSchemaValidator()).tools(specifications).build();
-			runningPort = port;
-			endpoint = new McpEndpoint("http://%s:%d%s".formatted(LOOPBACK, port, ENDPOINT_PATH), token); //$NON-NLS-1$
+			runningPort = listeningPort;
+			endpoint = new McpEndpoint("http://%s:%d%s".formatted(LOOPBACK, listeningPort, ENDPOINT_PATH), token); //$NON-NLS-1$
 			ClientSessions.setProvider(ActiveSessions::count);
-			TracePages.setPublisher((title, html) -> "http://%s:%d%s/%s".formatted(LOOPBACK, Integer.valueOf(port), //$NON-NLS-1$
+			TracePages.setPublisher((title, html) -> "http://%s:%d%s/%s".formatted(LOOPBACK, Integer.valueOf(listeningPort), //$NON-NLS-1$
 					TRACE_PATH, TracePageStore.add(title, html)));
 			EndpointFile.write(endpoint);
 		} catch (RuntimeException | Error e) {
