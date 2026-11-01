@@ -128,6 +128,16 @@ class SubstituteBundlePackTest {
 	}
 
 	@Test
+	void aPatternOutsideTheProjectIsRefusedByName() throws Exception {
+		Path project = plugin("bin.includes = META-INF/,../lib/*.so\n");
+		Path jar = temp.resolve("packed.jar");
+
+		IOException e = assertThrows(IOException.class, () -> SubstituteBundleTool.pack(project, jar));
+
+		assertTrue(e.getMessage().contains("'../lib/*.so'"), e.getMessage());
+	}
+
+	@Test
 	void anUnreadableDirectoryIsReportedRatherThanEndingThePack() throws Exception {
 		Path project = plugin("bin.includes = META-INF/,icons/\n");
 		Path locked = Files.createDirectories(project.resolve("icons/locked"));

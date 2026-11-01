@@ -874,7 +874,9 @@ public final class SubstituteBundleTool implements IMcpTool {
 		try (JarFile file = new JarFile(jar.toFile())) {
 			for (var entries = file.entries(); entries.hasMoreElements();) {
 				ZipEntry entry = entries.nextElement();
-				if (entry.isDirectory() || entry.getSize() < marker.length || entry.getSize() > 1024) {
+				// a streamed entry reports size -1, and is read rather than skipped
+				long size = entry.getSize();
+				if (entry.isDirectory() || size >= 0 && (size < marker.length || size > 1024)) {
 					continue;
 				}
 				try (InputStream in = file.getInputStream(entry)) {
@@ -893,6 +895,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 	 * copyTree records it, rather than ending the pack.
 	 */
 	private static List<Path> matching(Path project, String pattern, List<String> unreadable) throws IOException {
+		inside(project, project.resolve(fixedPart(pattern)), "bin.includes entry '" + pattern + "'"); //$NON-NLS-1$ //$NON-NLS-2$
 		String glob = pattern.endsWith("/") ? pattern.substring(0, pattern.length() - 1) : pattern; //$NON-NLS-1$
 		PathMatcher matcher = project.getFileSystem().getPathMatcher("glob:" + glob); //$NON-NLS-1$
 		// ** crosses directories, so no number of segments bounds it
@@ -924,6 +927,19 @@ public final class SubstituteBundleTool implements IMcpTool {
 		});
 		matches.sort(null);
 		return matches;
+	}
+
+	/** The directories of a pattern before its first wildcard, which must stay inside the project like a literal entry. */
+	private static String fixedPart(String pattern) {
+		int wildcard = pattern.length();
+		for (char c : new char[] { '*', '?', '[', '{' }) {
+			int at = pattern.indexOf(c);
+			if (at >= 0) {
+				wildcard = Math.min(wildcard, at);
+			}
+		}
+		int slash = pattern.lastIndexOf('/', wildcard);
+		return slash < 0 ? "" : pattern.substring(0, slash); //$NON-NLS-1$
 	}
 
 	/**
