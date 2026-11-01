@@ -50,6 +50,74 @@ class SubstituteBundlePackTest {
 	}
 
 	@Test
+	void aFragmentLikeSwtGetsItsManifestAndItsNativeLibraries() throws Exception {
+		// SWT's fragments list neither META-INF nor the libraries by name, and rely on the build adding the one and expanding the other
+		Path project = plugin("bin.includes = .,*.so,fragment.properties,missing/\n");
+		Files.writeString(project.resolve("libswt-gtk.so"), "elf");
+		Files.writeString(project.resolve("libswt-cairo-gtk.so"), "elf");
+		Files.writeString(project.resolve("fragment.properties"), "name=f");
+		Path jar = temp.resolve("packed.jar");
+
+		SubstituteBundleTool.Packed packed = SubstituteBundleTool.pack(project, jar);
+
+		assertEquals(Set.of("META-INF/MANIFEST.MF", "a/B.class", "fragment.properties", "libswt-cairo-gtk.so",
+				"libswt-gtk.so"), entries(jar));
+		assertEquals(List.of("missing/"), packed.unmatched());
+		try (JarFile file = new JarFile(jar.toFile())) {
+			assertEquals("p", file.getManifest().getMainAttributes().getValue("Bundle-SymbolicName"));
+		}
+	}
+
+	@Test
+	void aDoubleStarPatternReachesAnyDepth() throws Exception {
+		Path project = plugin("bin.includes = .,**/*.so\n");
+		Files.createDirectories(project.resolve("os/linux/x86_64"));
+		Files.writeString(project.resolve("os/linux/x86_64/libdeep.so"), "elf");
+		Files.writeString(project.resolve("libroot.so"), "elf");
+		Path jar = temp.resolve("packed.jar");
+
+		SubstituteBundleTool.Packed packed = SubstituteBundleTool.pack(project, jar);
+
+		assertTrue(entries(jar).containsAll(Set.of("os/linux/x86_64/libdeep.so", "libroot.so")), "got " + entries(jar));
+		assertTrue(packed.unmatched().isEmpty(), "got " + packed.unmatched());
+	}
+
+	@Test
+	void anUnreadableDirectoryUnderAPatternIsReportedRatherThanEndingThePack() throws Exception {
+		Path project = plugin("bin.includes = .,**/*.png\n");
+		Path locked = Files.createDirectories(project.resolve("locked"));
+		Files.writeString(locked.resolve("hidden.png"), "x");
+		try {
+			Files.setPosixFilePermissions(locked, Set.<PosixFilePermission>of());
+		} catch (UnsupportedOperationException e) {
+			assumeTrue(false, "no POSIX permissions here");
+		}
+		assumeTrue(!Files.isReadable(locked), "permissions are not enforced for this user");
+		Path jar = temp.resolve("packed.jar");
+		try {
+			SubstituteBundleTool.Packed packed = SubstituteBundleTool.pack(project, jar);
+
+			assertEquals(List.of(locked.toString()), packed.unreadable());
+			assertTrue(entries(jar).contains("icons/x.png"));
+		} finally {
+			Files.setPosixFilePermissions(locked, Set.of(PosixFilePermission.OWNER_READ,
+					PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE));
+		}
+	}
+
+	@Test
+	void aGitLfsPointerInPlaceOfANativeLibraryIsFound() throws Exception {
+		Path project = plugin("bin.includes = .,*.so\n");
+		Files.writeString(project.resolve("libswt-gtk.so"),
+				"version https://git-lfs.github.com/spec/v1\noid sha256:f268f3c3\nsize 610344\n");
+		Path jar = temp.resolve("packed.jar");
+
+		SubstituteBundleTool.pack(project, jar);
+
+		assertEquals(List.of("libswt-gtk.so"), SubstituteBundleTool.lfsPointers(jar));
+	}
+
+	@Test
 	void anEntryOutsideTheProjectIsRefusedByName() throws Exception {
 		Path project = plugin("bin.includes = META-INF/,../\n");
 		Path jar = temp.resolve("packed.jar");
@@ -58,6 +126,29 @@ class SubstituteBundlePackTest {
 
 		assertTrue(e.getMessage().contains("'../'"), e.getMessage());
 		assertTrue(e.getMessage().contains(project.toString()), e.getMessage());
+	}
+
+	@Test
+	void bracketAndBracePatternsAreExpandedToo() throws Exception {
+		Path project = plugin("bin.includes = .,lib[0-9].so,about{.html}\n");
+		Files.writeString(project.resolve("lib1.so"), "elf");
+		Files.writeString(project.resolve("about.html"), "<html/>");
+		Path jar = temp.resolve("packed.jar");
+
+		SubstituteBundleTool.Packed packed = SubstituteBundleTool.pack(project, jar);
+
+		assertTrue(entries(jar).containsAll(Set.of("lib1.so", "about.html")), "got " + entries(jar));
+		assertTrue(packed.unmatched().isEmpty(), "got " + packed.unmatched());
+	}
+
+	@Test
+	void aPatternOutsideTheProjectIsRefusedByName() throws Exception {
+		Path project = plugin("bin.includes = META-INF/,../lib/*.so\n");
+		Path jar = temp.resolve("packed.jar");
+
+		IOException e = assertThrows(IOException.class, () -> SubstituteBundleTool.pack(project, jar));
+
+		assertTrue(e.getMessage().contains("'../lib/*.so'"), e.getMessage());
 	}
 
 	@Test

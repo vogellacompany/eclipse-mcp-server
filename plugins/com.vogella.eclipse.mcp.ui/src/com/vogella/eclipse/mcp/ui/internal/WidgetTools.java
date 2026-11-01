@@ -441,15 +441,13 @@ public final class WidgetTools {
 			Shell shell = table.getShell();
 			for (int i = 0; i < rows.length; i++) {
 				String rowPath = path + "/r" + i; //$NON-NLS-1$ //$NON-NLS-2$
-				org.eclipse.swt.graphics.Rectangle rowBounds = rowBounds(rows[i]);
-				if (rowBounds == null) {
-					continue;
-				}
 				boolean node = rows[i] instanceof org.eclipse.swt.widgets.TreeItem;
 				int children = node ? ((org.eclipse.swt.widgets.TreeItem) rows[i]).getItemCount() : 0;
 				boolean expanded = node && ((org.eclipse.swt.widgets.TreeItem) rows[i]).getExpanded();
 				total[0]++;
+				// past maxResults a row is only counted, since its bounds and text are a native call each
 				if (into.size() < maxResults) {
+					org.eclipse.swt.graphics.Rectangle rowBounds = rowBounds(rows[i]);
 					org.eclipse.swt.graphics.Rectangle inShell = mapToCapture(table.getDisplay(), table, shell, rowBounds);
 					JsonObject row = new JsonObject().put("path", rowPath) //$NON-NLS-1$
 							.put("kind", "row") //$NON-NLS-1$ //$NON-NLS-2$
@@ -491,8 +489,11 @@ public final class WidgetTools {
 			case org.eclipse.swt.widgets.Item item -> item.getText();
 			case org.eclipse.swt.widgets.Label label -> label.getText();
 			case org.eclipse.swt.widgets.Button button -> button.getText();
-			case org.eclipse.swt.widgets.Text field -> field.getText();
-			case org.eclipse.swt.custom.StyledText field -> field.getText();
+			// only the head: an editor's getText copies the whole document for one node
+			case org.eclipse.swt.widgets.Text field -> field.getCharCount() == 0 ? null
+					: field.getText(0, Math.min(field.getCharCount(), MAX_TEXT + 1) - 1);
+			case org.eclipse.swt.custom.StyledText field -> field.getCharCount() == 0 ? null
+					: field.getTextRange(0, Math.min(field.getCharCount(), MAX_TEXT + 1));
 			case org.eclipse.swt.widgets.Combo combo -> combo.getText();
 			case org.eclipse.swt.widgets.Link link -> link.getText();
 			case org.eclipse.swt.widgets.Group group -> group.getText();

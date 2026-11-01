@@ -73,6 +73,19 @@ class RunScriptToolTest {
 
 	@Test
 	@SuppressWarnings("unchecked")
+	void anArgumentTheToolDoesNotDeclareIsReported() throws Exception {
+		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("steps", List.of(
+				Map.of("tool", "eclipse_list_projects", "label", "typo", "arguments", Map.of("maxResult", Integer.valueOf(1))),
+				Map.of("tool", "eclipse_list_projects", "label", "fine", "arguments", Map.of("maxResults", Integer.valueOf(1))))));
+
+		List<Map<String, Object>> steps = (List<Map<String, Object>>) result.get("steps");
+		assertEquals(List.of("maxResult"), steps.get(0).get("ignoredArguments"), "got " + steps.get(0));
+		assertEquals(null, steps.get(1).get("ignoredArguments"), "got " + steps.get(1));
+		assertEquals(Boolean.TRUE, steps.get(0).get("ok"), "a typo is reported, not failed: " + steps.get(0));
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
 	void stepsRunInOrderAndTheAnswersAreKept() throws Exception {
 		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("steps", List.of(
 				Map.of("tool", "eclipse_list_projects", "label", "first"),

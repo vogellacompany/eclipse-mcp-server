@@ -271,7 +271,7 @@ class FetchPullRequestToolTest {
 		Files.writeString(git.getRepository().getWorkTree().toPath().resolve(file), content);
 		git.add().addFilepattern(file).call();
 		return git.commit().setMessage(message).setAuthor("Test", "test@example.com")
-				.setCommitter("Test", "test@example.com").call();
+				.setCommitter("Test", "test@example.com").setSign(Boolean.FALSE).call();
 	}
 
 	/** What GitHub does for every pull request: advertise its head under refs/pull. */

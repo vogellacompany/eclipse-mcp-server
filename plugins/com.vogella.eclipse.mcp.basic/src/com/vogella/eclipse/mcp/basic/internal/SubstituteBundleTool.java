@@ -8,11 +8,13 @@ import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.PathMatcher;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -63,7 +65,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Makes the IDE run a workspace project's bundle in place of the installed one at the next restart, by packing the project and pointing this installation's bundles.info line at the packed jar. CHANGES THE INSTALLATION, not the workspace, and runs as a dry run unless dryRun is set to false; the dry run shows the exact line before and after. THIS IS THE ONLY WAY IN FOR MOST OF THE SDK: a hot install through eclipse_install_bundle is invisible to anything that reads the registry once at startup, the theme engine among them, and the dropins directory cannot replace a bundle that belongs to an installed feature, because a feature demands its bundles at an exact version, which covers nearly everything in an SDK. THE RISK IS REAL: a bundles.info that names a jar which is not there leaves the bundles that need it unresolvable, and if that bundle is one the framework itself needs, the IDE does not start and no tool here can reach it; short of that the IDE still runs and action repair points such a line back at the installed jar. NEVER DELETE A PACKED JAR BY HAND: action cleanup does it and re-reads bundles.info first, because this file is rewritten at every start and by other sessions, so a jar that looks unreferenced can be the one the next start loads. The original line is recorded, so action restore needs nothing from the caller, and action status reports what is substituted right now, checked against bundles.info rather than believed from the record, including a substitution another session made and, under referencingSubstitutedJars, every line that points at a packed jar even when nothing here recorded it, which is what stops somebody debugging an IDE that is not running what its plugins directory holds. THE VERSION FIELD IS WHAT MAKES IT TAKE EFFECT: simpleconfigurator matches a bundle on symbolic name plus version, so a line that keeps the installed version and only changes the path is read as a bundle already installed and the path is never looked at, which is a substitution that does nothing while every check on the file says it is in force. The version of the substituted jar is therefore written into the line. Ask action status for the 'running' field, which reports what the framework has actually loaded, its version, its state and the jar it came from, rather than what the file says, and believe that one. The line may also be rewritten at a restart, so everything here matches on the bundle name, the one stable field."; //$NON-NLS-1$
+		return "Makes the IDE run a workspace project's bundle in place of the installed one at the next restart, by packing the project and pointing this installation's bundles.info line at the packed jar. CHANGES THE INSTALLATION, not the workspace, and runs as a dry run unless dryRun is set to false; the dry run shows the exact line before and after. THIS IS THE ONLY WAY IN FOR MOST OF THE SDK: a hot install through eclipse_install_bundle is invisible to anything that reads the registry once at startup, the theme engine among them, and the dropins directory cannot replace a bundle that belongs to an installed feature, because a feature demands its bundles at an exact version, which covers nearly everything in an SDK. THE RISK IS REAL: a bundles.info that names a jar which is not there leaves the bundles that need it unresolvable, and if that bundle is one the framework itself needs, the IDE does not start and no tool here can reach it; short of that the IDE still runs and action repair points such a line back at the installed jar. NEVER DELETE A PACKED JAR BY HAND: action cleanup does it and re-reads bundles.info first, because this file is rewritten at every start and by other sessions, so a jar that looks unreferenced can be the one the next start loads. The original line is recorded, so action restore needs nothing from the caller, and action status reports what is substituted right now, checked against bundles.info rather than believed from the record, including a substitution another session made and, under referencingSubstitutedJars, every line that points at a packed jar even when nothing here recorded it, which is what stops somebody debugging an IDE that is not running what its plugins directory holds. THE VERSION FIELD IS WHAT MAKES IT TAKE EFFECT: simpleconfigurator matches a bundle on symbolic name plus version, so a line that keeps the installed version and only changes the path is read as a bundle already installed and the path is never looked at, which is a substitution that does nothing while every check on the file says it is in force. The version of the substituted jar is therefore written into the line. Ask action status for the 'running' field, which reports what the framework has actually loaded, its version, its state and the jar it came from, rather than what the file says, and believe that one. The line may also be rewritten at a restart, so everything here matches on the bundle name, the one stable field. Packing follows bin.includes, expands patterns such as *.so and always includes the manifest; entries that match nothing are listed under unmatchedIncludes, and a jar holding Git LFS pointers instead of the real files is refused."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -695,14 +697,26 @@ public final class SubstituteBundleTool implements IMcpTool {
 			return McpToolResult.error("Packing project '%s' from %s failed, and bundles.info was not changed: %s" //$NON-NLS-1$
 					.formatted(projectName, projectPath, e.getMessage()));
 		}
+		List<String> pointers = lfsPointers(jar);
+		if (!pointers.isEmpty()) {
+			Files.deleteIfExists(jar);
+			return McpToolResult.error(
+					"Not substituted, and bundles.info was not changed: %s in project '%s' are Git LFS pointer files, not the files themselves, and an IDE started on this jar would fail to load them. Run 'git lfs pull' in the repository, rebuild, and substitute again." //$NON-NLS-1$
+							.formatted(pointers, projectName)
+							+ (packed.unmatched().isEmpty() ? "" : " These bin.includes entries also matched nothing: " + packed.unmatched() + ".") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+							+ (packed.unreadable().isEmpty() ? "" : " These could not be read: " + packed.unreadable() + ".")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		}
 		lines.set(index, substituted);
 		Files.write(bundlesInfo, lines, StandardCharsets.UTF_8);
 		record(configuration, symbolicName, original, substituted);
 		JsonArray unreadable = new JsonArray();
 		packed.unreadable().forEach(unreadable::add);
+		JsonArray unmatched = new JsonArray();
+		packed.unmatched().forEach(unmatched::add);
 		return McpToolResult.of(result.put("dryRun", Boolean.FALSE) //$NON-NLS-1$
 				.put("entries", Integer.valueOf(packed.entries())) //$NON-NLS-1$
 				.put("unreadable", unreadable) //$NON-NLS-1$
+				.put("unmatchedIncludes", unmatched.size() == 0 ? null : unmatched) //$NON-NLS-1$
 				.put("restartRequired", Boolean.TRUE) //$NON-NLS-1$
 				.put("note", //$NON-NLS-1$
 						(packed.unreadable().isEmpty() ? "" //$NON-NLS-1$
@@ -763,6 +777,12 @@ public final class SubstituteBundleTool implements IMcpTool {
 		// every check on the file says it is in force
 		String substituted = "%s,%s,%s,%s,%s".formatted(fields[0], version, copy.toUri(), fields[3], fields[4]); //$NON-NLS-1$
 
+		List<String> pointers = lfsPointers(source);
+		if (!pointers.isEmpty()) {
+			return McpToolResult.error(
+					"Not substituted, and bundles.info was not changed: %s in %s are Git LFS pointer files, not the files themselves, and an IDE started on this jar would fail to load them. Run 'git lfs pull' in the repository, rebuild, and substitute again." //$NON-NLS-1$
+							.formatted(pointers, source));
+		}
 		JsonObject result = new JsonObject().put("bundle", symbolicName) //$NON-NLS-1$
 				.put("jar", source.toString()) //$NON-NLS-1$
 				.put("jarVersion", version) //$NON-NLS-1$
@@ -789,22 +809,33 @@ public final class SubstituteBundleTool implements IMcpTool {
 				.toString());
 	}
 
-	/** What packing produced: the entries written and the directories it could not read. */
-	public record Packed(int entries, List<String> unreadable) {
+	/**
+	 * What packing produced: the entries written, the directories it could not read,
+	 * and the bin.includes entries that matched nothing on disk.
+	 */
+	public record Packed(int entries, List<String> unreadable, List<String> unmatched) {
 	}
 
 	/**
-	 * Packs the project the way PDE would: the compiled output, plus what
-	 * build.properties lists under bin.includes, which is where the manifest, the
-	 * plugin.xml and any css or icons live. Every root it walks has to lie inside
-	 * the project; an entry that resolves anywhere else is refused by name.
+	 * Packs the project the way PDE would: the manifest, the compiled output, plus
+	 * what build.properties lists under bin.includes, which is where the plugin.xml,
+	 * any css or icons and a fragment's native libraries live. An entry may be a
+	 * pattern such as {@code *.so}. Every root it walks has to lie inside the
+	 * project; an entry that resolves anywhere else is refused by name.
 	 */
 	public static Packed pack(Path projectPath, Path jar) throws IOException {
 		Path project = projectPath.toAbsolutePath().normalize();
 		List<String> includes = binIncludes(project);
 		List<String> unreadable = new ArrayList<>();
+		List<String> unmatched = new ArrayList<>();
 		int written = 0;
 		try (OutputStream stream = Files.newOutputStream(jar); JarOutputStream out = new JarOutputStream(stream)) {
+			// PDE and Tycho put the manifest in whether bin.includes names it or not, and SWT's
+			// fragments rely on that; without it the jar is no bundle and the IDE does not start
+			Path manifest = project.resolve("META-INF/MANIFEST.MF"); //$NON-NLS-1$
+			if (Files.isRegularFile(manifest)) {
+				written += copyOne(project, manifest, out, unreadable);
+			}
 			Path output = inside(project, outputFolder(project), "the output folder"); //$NON-NLS-1$
 			if (Files.isDirectory(output)) {
 				written += copyTree(output, output, out, unreadable);
@@ -813,15 +844,116 @@ public final class SubstituteBundleTool implements IMcpTool {
 				if (".".equals(include)) { //$NON-NLS-1$
 					continue;
 				}
-				Path source = inside(project, project.resolve(include), "bin.includes entry '" + include + "'"); //$NON-NLS-1$ //$NON-NLS-2$
-				if (Files.isDirectory(source)) {
-					written += copyTree(project, source, out, unreadable);
-				} else if (Files.isRegularFile(source)) {
-					written += copyOne(project, source, out, unreadable);
+				List<Path> sources = firstWildcard(include) >= 0
+						? matching(project, include, unreadable)
+						: List.of(inside(project, project.resolve(include), "bin.includes entry '" + include + "'")); //$NON-NLS-1$ //$NON-NLS-2$
+				boolean found = false;
+				for (Path source : sources) {
+					if (Files.isDirectory(source)) {
+						written += copyTree(project, source, out, unreadable);
+						found = true;
+					} else if (Files.isRegularFile(source)) {
+						written += copyOne(project, source, out, unreadable);
+						found = true;
+					}
+				}
+				if (!found) {
+					unmatched.add(include);
 				}
 			}
 		}
-		return new Packed(written, List.copyOf(unreadable));
+		return new Packed(written, List.copyOf(unreadable), List.copyOf(unmatched));
+	}
+
+	/**
+	 * The entries of a packed jar that are Git LFS pointers rather than content. A
+	 * checkout without LFS, which a shallow clone of SWT is, has a pointer of a
+	 * hundred bytes where each native library should be.
+	 */
+	public static List<String> lfsPointers(Path jar) throws IOException {
+		byte[] marker = "version https://git-lfs.github.com/spec/".getBytes(StandardCharsets.US_ASCII); //$NON-NLS-1$
+		List<String> pointers = new ArrayList<>();
+		try (JarFile file = new JarFile(jar.toFile())) {
+			for (var entries = file.entries(); entries.hasMoreElements();) {
+				ZipEntry entry = entries.nextElement();
+				// a streamed entry reports size -1, and is read rather than skipped
+				long size = entry.getSize();
+				if (entry.isDirectory() || size >= 0 && (size < marker.length || size > 1024)) {
+					continue;
+				}
+				try (InputStream in = file.getInputStream(entry)) {
+					if (Arrays.equals(in.readNBytes(marker.length), marker)) {
+						pointers.add(entry.getName());
+					}
+				}
+			}
+		}
+		return pointers;
+	}
+
+	/**
+	 * The files and directories a bin.includes pattern such as {@code *.so} or
+	 * {@code lib/*.jar} names. A directory that cannot be read is recorded as
+	 * copyTree records it, rather than ending the pack.
+	 */
+	private static List<Path> matching(Path project, String pattern, List<String> unreadable) throws IOException {
+		inside(project, project.resolve(fixedPart(pattern)), "bin.includes entry '" + pattern + "'"); //$NON-NLS-1$ //$NON-NLS-2$
+		String glob = pattern.endsWith("/") ? pattern.substring(0, pattern.length() - 1) : pattern; //$NON-NLS-1$
+		PathMatcher matcher;
+		try {
+			// in Ant, which bin.includes follows, **/ also matches no directory at all, and in a Java glob it does not
+			matcher = project.getFileSystem().getPathMatcher("glob:" + glob.replace("**/", "{**/,}")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		} catch (IllegalArgumentException e) {
+			throw new IOException("bin.includes entry '%s' is not a valid pattern: %s".formatted(pattern, e.getMessage()), //$NON-NLS-1$
+					e);
+		}
+		// ** crosses directories, so no number of segments bounds it
+		int depth = glob.contains("**") ? Integer.MAX_VALUE : glob.split("/").length; //$NON-NLS-1$ //$NON-NLS-2$
+		List<Path> matches = new ArrayList<>();
+		Files.walkFileTree(project, Set.of(), depth, new SimpleFileVisitor<>() {
+			@Override
+			public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attrs) {
+				if (!directory.equals(project) && matcher.matches(project.relativize(directory))) {
+					matches.add(directory);
+					return FileVisitResult.SKIP_SUBTREE;
+				}
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+				if (matcher.matches(project.relativize(file))) {
+					matches.add(file);
+				}
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFileFailed(Path file, IOException e) {
+				unreadable.add(file.toString());
+				return FileVisitResult.CONTINUE;
+			}
+		});
+		matches.sort(null);
+		return matches;
+	}
+
+	/** Where the first glob character of a bin.includes entry is, or -1 for a plain path. */
+	private static int firstWildcard(String include) {
+		int first = -1;
+		for (char c : new char[] { '*', '?', '[', '{' }) {
+			int at = include.indexOf(c);
+			if (at >= 0 && (first < 0 || at < first)) {
+				first = at;
+			}
+		}
+		return first;
+	}
+
+	/** The directories of a pattern before its first wildcard, which must stay inside the project like a literal entry. */
+	private static String fixedPart(String pattern) {
+		int slash = pattern.lastIndexOf('/', firstWildcard(pattern));
+		return slash < 0 ? "" : pattern.substring(0, slash); //$NON-NLS-1$
 	}
 
 	/**
