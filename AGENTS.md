@@ -238,7 +238,7 @@ Do not undo these without understanding why they are there.
 
 ### Git
 
-- The git bundle requires EGit and JGit optionally, and every tool checks `EGit.isAvailable()` first. A tool class must not mention a JGit type in any method the verifier checks when the class loads, or the registry cannot create it without EGit and the tool disappears with an error at every start; `RevertFilesTool` and `FetchPullRequestTool` keep their JGit code in a nested class for that reason.
+- The git bundle requires EGit and JGit optionally, and every tool checks `EGit.isAvailable()` first. Verifying a class can load the JGit types its methods use, and a failure there loses the tool with an error at every start; `RevertFilesTool` and `FetchPullRequestTool` keep their JGit code in a nested class for that reason, and `GitToolsWithoutEGitTest` loads every git tool with JGit and EGit hidden.
 - The ide bundle requires `org.eclipse.jgit` with `resolution:=optional` and references it only from `GitContent`, so an IDE without EGit loses only `eclipse_open_compare`'s `revision` argument.
 
 ### p2

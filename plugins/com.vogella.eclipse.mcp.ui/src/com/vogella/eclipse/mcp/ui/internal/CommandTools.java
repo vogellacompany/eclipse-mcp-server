@@ -541,7 +541,7 @@ public final class CommandTools {
 		}
 
 		private static JsonObject dialogOpen(String wanted, String title, long waitedMillis, ExecutionRecorder recorder) {
-			return recorder.reportInto(new JsonObject().put("executed", Boolean.FALSE).put("timedOut", Boolean.FALSE) //$NON-NLS-1$ //$NON-NLS-2$
+			return recorder.reportInto(new JsonObject().put("executed", Boolean.TRUE).put("timedOut", Boolean.FALSE) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("id", wanted) //$NON-NLS-1$
 					.put("dialogOpen", Boolean.TRUE) //$NON-NLS-1$
 					.put("dialog", title) //$NON-NLS-1$
