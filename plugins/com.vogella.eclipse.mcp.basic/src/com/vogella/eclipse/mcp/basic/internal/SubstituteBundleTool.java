@@ -26,7 +26,6 @@ import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 
@@ -776,6 +775,12 @@ public final class SubstituteBundleTool implements IMcpTool {
 		// every check on the file says it is in force
 		String substituted = "%s,%s,%s,%s,%s".formatted(fields[0], version, copy.toUri(), fields[3], fields[4]); //$NON-NLS-1$
 
+		List<String> pointers = lfsPointers(source);
+		if (!pointers.isEmpty()) {
+			return McpToolResult.error(
+					"Not substituted, and bundles.info was not changed: %s in %s are Git LFS pointer files, not the files themselves, and an IDE started on this jar would fail to load them. Run 'git lfs pull' in the repository, rebuild, and substitute again." //$NON-NLS-1$
+							.formatted(pointers, source));
+		}
 		JsonObject result = new JsonObject().put("bundle", symbolicName) //$NON-NLS-1$
 				.put("jar", source.toString()) //$NON-NLS-1$
 				.put("jarVersion", version) //$NON-NLS-1$
@@ -838,7 +843,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 					continue;
 				}
 				List<Path> sources = include.contains("*") || include.contains("?") //$NON-NLS-1$ //$NON-NLS-2$
-						? matching(project, include)
+						? matching(project, include, unreadable)
 						: List.of(inside(project, project.resolve(include), "bin.includes entry '" + include + "'")); //$NON-NLS-1$ //$NON-NLS-2$
 				boolean found = false;
 				for (Path source : sources) {
@@ -882,15 +887,43 @@ public final class SubstituteBundleTool implements IMcpTool {
 		return pointers;
 	}
 
-	/** The files and directories a bin.includes pattern such as {@code *.so} or {@code lib/*.jar} names. */
-	private static List<Path> matching(Path project, String pattern) throws IOException {
+	/**
+	 * The files and directories a bin.includes pattern such as {@code *.so} or
+	 * {@code lib/*.jar} names. A directory that cannot be read is recorded as
+	 * copyTree records it, rather than ending the pack.
+	 */
+	private static List<Path> matching(Path project, String pattern, List<String> unreadable) throws IOException {
 		String glob = pattern.endsWith("/") ? pattern.substring(0, pattern.length() - 1) : pattern; //$NON-NLS-1$
 		PathMatcher matcher = project.getFileSystem().getPathMatcher("glob:" + glob); //$NON-NLS-1$
-		int depth = glob.split("/").length; //$NON-NLS-1$
-		try (Stream<Path> walk = Files.walk(project, depth)) {
-			return walk.filter(path -> !path.equals(project) && matcher.matches(project.relativize(path))).sorted()
-					.toList();
-		}
+		// ** crosses directories, so no number of segments bounds it
+		int depth = glob.contains("**") ? Integer.MAX_VALUE : glob.split("/").length; //$NON-NLS-1$ //$NON-NLS-2$
+		List<Path> matches = new ArrayList<>();
+		Files.walkFileTree(project, Set.of(), depth, new SimpleFileVisitor<>() {
+			@Override
+			public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attrs) {
+				if (!directory.equals(project) && matcher.matches(project.relativize(directory))) {
+					matches.add(directory);
+					return FileVisitResult.SKIP_SUBTREE;
+				}
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+				if (matcher.matches(project.relativize(file))) {
+					matches.add(file);
+				}
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFileFailed(Path file, IOException e) {
+				unreadable.add(file.toString());
+				return FileVisitResult.CONTINUE;
+			}
+		});
+		matches.sort(null);
+		return matches;
 	}
 
 	/**

@@ -69,6 +69,42 @@ class SubstituteBundlePackTest {
 	}
 
 	@Test
+	void aDoubleStarPatternReachesAnyDepth() throws Exception {
+		Path project = plugin("bin.includes = .,**/*.so\n");
+		Files.createDirectories(project.resolve("os/linux/x86_64"));
+		Files.writeString(project.resolve("os/linux/x86_64/libdeep.so"), "elf");
+		Path jar = temp.resolve("packed.jar");
+
+		SubstituteBundleTool.Packed packed = SubstituteBundleTool.pack(project, jar);
+
+		assertTrue(entries(jar).contains("os/linux/x86_64/libdeep.so"), "got " + entries(jar));
+		assertTrue(packed.unmatched().isEmpty(), "got " + packed.unmatched());
+	}
+
+	@Test
+	void anUnreadableDirectoryUnderAPatternIsReportedRatherThanEndingThePack() throws Exception {
+		Path project = plugin("bin.includes = .,**/*.png\n");
+		Path locked = Files.createDirectories(project.resolve("locked"));
+		Files.writeString(locked.resolve("hidden.png"), "x");
+		try {
+			Files.setPosixFilePermissions(locked, Set.<PosixFilePermission>of());
+		} catch (UnsupportedOperationException e) {
+			assumeTrue(false, "no POSIX permissions here");
+		}
+		assumeTrue(!Files.isReadable(locked), "permissions are not enforced for this user");
+		Path jar = temp.resolve("packed.jar");
+		try {
+			SubstituteBundleTool.Packed packed = SubstituteBundleTool.pack(project, jar);
+
+			assertEquals(List.of(locked.toString()), packed.unreadable());
+			assertTrue(entries(jar).contains("icons/x.png"));
+		} finally {
+			Files.setPosixFilePermissions(locked, Set.of(PosixFilePermission.OWNER_READ,
+					PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE));
+		}
+	}
+
+	@Test
 	void aGitLfsPointerInPlaceOfANativeLibraryIsFound() throws Exception {
 		Path project = plugin("bin.includes = .,*.so\n");
 		Files.writeString(project.resolve("libswt-gtk.so"),

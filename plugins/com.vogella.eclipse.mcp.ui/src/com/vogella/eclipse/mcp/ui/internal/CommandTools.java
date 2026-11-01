@@ -244,17 +244,20 @@ public final class CommandTools {
 					pending.completeExceptionally(e);
 				}
 			});
+			long started = System.currentTimeMillis();
+			long deadline = started + timeoutSeconds * 1000L;
 			try {
 				if (returnOnDialog && !UiThread.onUiThread()) {
-					long started = System.currentTimeMillis();
-					String dialog = awaitDialog(pending, before, started + timeoutSeconds * 1000L);
+					String dialog = awaitDialog(pending, before, deadline);
 					if (dialog != null) {
 						pending.whenComplete((text, error) -> logLateCompletion(wanted, text, error));
 						return McpToolResult.of(dialogOpen(wanted, dialog, System.currentTimeMillis() - started, recorder)
 								.toString());
 					}
 				}
-				return McpToolResult.of(pending.get(timeoutSeconds, TimeUnit.SECONDS));
+				// one deadline for both waits, or a handler that opens no dialog is waited for twice
+				return McpToolResult.of(pending.get(Math.max(0, deadline - System.currentTimeMillis()),
+						TimeUnit.MILLISECONDS));
 			} catch (TimeoutException e) {
 				// registered here so a completion between the timeout and this line is logged too
 				pending.whenComplete((text, error) -> logLateCompletion(wanted, text, error));
