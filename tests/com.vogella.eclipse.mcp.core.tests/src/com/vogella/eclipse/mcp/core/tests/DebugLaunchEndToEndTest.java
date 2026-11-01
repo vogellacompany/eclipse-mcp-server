@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.File;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -81,6 +82,11 @@ class DebugLaunchEndToEndTest {
 	}
 
 	private IJavaProject projectWithBreakpoint() throws Exception {
+		return projectWithBreakpoint(null);
+	}
+
+	/** The breakpoint sits on the {@code int doubled} line, where {@code answer} is 42. */
+	private IJavaProject projectWithBreakpoint(String condition) throws Exception {
 		IJavaProject project = fixture.createJavaProject(PROJECT);
 		IFile file = TestFixture.addType(project, "sample", "Main", MAIN_SOURCE);
 		TestFixture.build(project.getProject());
@@ -95,8 +101,11 @@ class DebugLaunchEndToEndTest {
 			}
 		}
 		assertTrue(line > 0, "the fixture source changed shape");
-		Map<String, Object> answer = TestFixture.callAndParse("eclipse_set_breakpoint",
-				Map.of("type", "sample.Main", "line", Integer.valueOf(line)));
+		Map<String, Object> arguments = new HashMap<>(Map.of("type", "sample.Main", "line", Integer.valueOf(line)));
+		if (condition != null) {
+			arguments.put("condition", condition);
+		}
+		Map<String, Object> answer = TestFixture.callAndParse("eclipse_set_breakpoint", arguments);
 		assertEquals(Boolean.TRUE, answer.get("created"), String.valueOf(answer));
 		return project;
 	}
@@ -150,6 +159,43 @@ class DebugLaunchEndToEndTest {
 		assertTrue(Boolean.TRUE.equals(resumed.get("timedOut")), "resume should report that nothing stopped: "
 				+ resumed);
 
+		waitUntilTerminated(sessionId);
+	}
+
+	/**
+	 * A condition the tool stored but left disabled suspended on every hit, so a
+	 * false condition is what tells an evaluated condition from an ignored one.
+	 */
+	@Test
+	void aFalseConditionDoesNotSuspend() throws Exception {
+		ensureDefaultVmInstall();
+		projectWithBreakpoint("answer == 0");
+
+		Map<String, Object> launched = TestFixture.callAndParse("eclipse_debug_launch", Map.of(
+				"project", PROJECT, "mainType", "sample.Main", "waitForSuspendSeconds", Integer.valueOf(10)));
+
+		assertEquals(Boolean.FALSE, launched.get("suspended"), "a false condition suspended the program: " + launched);
+		// the tiny main runs to its end well within the wait, so it passed the breakpoint line
+		assertEquals(Boolean.TRUE, launched.get("terminated"), String.valueOf(launched));
+		String sessionId = (String) launched.get("sessionId");
+		assertNotNull(sessionId);
+		waitUntilTerminated(sessionId);
+	}
+
+	@Test
+	void aTrueConditionSuspends() throws Exception {
+		ensureDefaultVmInstall();
+		projectWithBreakpoint("answer == 42");
+
+		Map<String, Object> launched = TestFixture.callAndParse("eclipse_debug_launch", Map.of(
+				"project", PROJECT, "mainType", "sample.Main", "waitForSuspendSeconds", Integer.valueOf(25)));
+
+		assertTrue(Boolean.TRUE.equals(launched.get("suspended")),
+				"a true condition did not suspend the program: " + launched);
+		assertLocation(launched, "Main.main(Main.java");
+		String sessionId = (String) launched.get("sessionId");
+		assertNotNull(sessionId);
+		TestFixture.callAndParse("eclipse_debug_control", Map.of("sessionId", sessionId, "action", "terminate"));
 		waitUntilTerminated(sessionId);
 	}
 

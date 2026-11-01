@@ -114,7 +114,7 @@ public final class SetBreakpointTool implements IMcpTool {
 							args.getInt("hitCount", 0, 0, 1_000_000), true, null); //$NON-NLS-1$
 			applyCommon(created, args, true);
 			if (created instanceof IJavaLineBreakpoint lineBp && args.getString("condition") != null) { //$NON-NLS-1$
-				lineBp.setCondition(args.getString("condition")); //$NON-NLS-1$
+				setCondition(lineBp, args.getString("condition")); //$NON-NLS-1$
 			}
 			return answer(Boolean.TRUE, Boolean.FALSE, created, targetTypeName);
 		} catch (DebugSupport.Refusal e) {
@@ -163,7 +163,7 @@ public final class SetBreakpointTool implements IMcpTool {
 		}
 		applyCommon(existing, args, args.has("enabled")); //$NON-NLS-1$
 		if (existing instanceof IJavaLineBreakpoint lineBp && args.getString("condition") != null) { //$NON-NLS-1$
-			lineBp.setCondition(args.getString("condition")); //$NON-NLS-1$
+			setCondition(lineBp, args.getString("condition")); //$NON-NLS-1$
 		}
 		if (existing instanceof IJavaExceptionBreakpoint exception) {
 			if (args.has("caught")) { //$NON-NLS-1$
@@ -173,6 +173,17 @@ public final class SetBreakpointTool implements IMcpTool {
 				exception.setUncaught(args.getBoolean("uncaught", true)); //$NON-NLS-1$
 			}
 		}
+	}
+
+	/**
+	 * JDT evaluates a condition only while it is enabled, and a new breakpoint starts with it
+	 * disabled, so storing the expression alone would suspend on every hit. A blank condition
+	 * stays disabled, so the breakpoint list does not report one in effect.
+	 */
+	private static void setCondition(IJavaLineBreakpoint breakpoint, String condition) throws CoreException {
+		breakpoint.setCondition(condition);
+		breakpoint.setConditionEnabled(!condition.isBlank());
+		breakpoint.setConditionSuspendOnTrue(true);
 	}
 
 	/** Applies what both create and update share; defaults apply only on create. */

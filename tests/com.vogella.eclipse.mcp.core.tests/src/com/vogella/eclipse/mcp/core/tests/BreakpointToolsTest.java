@@ -108,8 +108,19 @@ class BreakpointToolsTest {
 						"suspendPolicy", "vm"));
 
 		assertEquals("args.length == 0", updated.get("condition"));
+		assertEquals(Boolean.TRUE, updated.get("conditionEnabled"), "a condition that is not enabled is never evaluated");
 		assertEquals(Integer.valueOf(3), ((Number) updated.get("hitCount")).intValue());
 		assertEquals("vm", updated.get("suspendPolicy"));
+	}
+
+	@Test
+	void enablesTheConditionOfANewBreakpoint() throws Exception {
+		Map<String, Object> created = TestFixture.callAndParse("eclipse_set_breakpoint",
+				Map.of("type", "sample.Main", "line", Integer.valueOf(4), "condition", "args.length == 0"));
+
+		assertEquals("args.length == 0", created.get("condition"), String.valueOf(created));
+		assertEquals(Boolean.TRUE, created.get("conditionEnabled"),
+				"a condition that is not enabled is never evaluated: " + created);
 	}
 
 	@Test
