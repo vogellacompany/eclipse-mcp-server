@@ -702,7 +702,9 @@ public final class SubstituteBundleTool implements IMcpTool {
 			Files.deleteIfExists(jar);
 			return McpToolResult.error(
 					"Not substituted, and bundles.info was not changed: %s in project '%s' are Git LFS pointer files, not the files themselves, and an IDE started on this jar would fail to load them. Run 'git lfs pull' in the repository, rebuild, and substitute again." //$NON-NLS-1$
-							.formatted(pointers, projectName));
+							.formatted(pointers, projectName)
+							+ (packed.unmatched().isEmpty() ? "" : " These bin.includes entries also matched nothing: " + packed.unmatched() + ".") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+							+ (packed.unreadable().isEmpty() ? "" : " These could not be read: " + packed.unreadable() + ".")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		}
 		lines.set(index, substituted);
 		Files.write(bundlesInfo, lines, StandardCharsets.UTF_8);
@@ -842,7 +844,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 				if (".".equals(include)) { //$NON-NLS-1$
 					continue;
 				}
-				List<Path> sources = include.contains("*") || include.contains("?") //$NON-NLS-1$ //$NON-NLS-2$
+				List<Path> sources = firstWildcard(include) >= 0
 						? matching(project, include, unreadable)
 						: List.of(inside(project, project.resolve(include), "bin.includes entry '" + include + "'")); //$NON-NLS-1$ //$NON-NLS-2$
 				boolean found = false;
@@ -897,7 +899,13 @@ public final class SubstituteBundleTool implements IMcpTool {
 	private static List<Path> matching(Path project, String pattern, List<String> unreadable) throws IOException {
 		inside(project, project.resolve(fixedPart(pattern)), "bin.includes entry '" + pattern + "'"); //$NON-NLS-1$ //$NON-NLS-2$
 		String glob = pattern.endsWith("/") ? pattern.substring(0, pattern.length() - 1) : pattern; //$NON-NLS-1$
-		PathMatcher matcher = project.getFileSystem().getPathMatcher("glob:" + glob); //$NON-NLS-1$
+		PathMatcher matcher;
+		try {
+			matcher = project.getFileSystem().getPathMatcher("glob:" + glob); //$NON-NLS-1$
+		} catch (IllegalArgumentException e) {
+			throw new IOException("bin.includes entry '%s' is not a valid pattern: %s".formatted(pattern, e.getMessage()), //$NON-NLS-1$
+					e);
+		}
 		// ** crosses directories, so no number of segments bounds it
 		int depth = glob.contains("**") ? Integer.MAX_VALUE : glob.split("/").length; //$NON-NLS-1$ //$NON-NLS-2$
 		List<Path> matches = new ArrayList<>();
@@ -929,16 +937,21 @@ public final class SubstituteBundleTool implements IMcpTool {
 		return matches;
 	}
 
-	/** The directories of a pattern before its first wildcard, which must stay inside the project like a literal entry. */
-	private static String fixedPart(String pattern) {
-		int wildcard = pattern.length();
+	/** Where the first glob character of a bin.includes entry is, or -1 for a plain path. */
+	private static int firstWildcard(String include) {
+		int first = -1;
 		for (char c : new char[] { '*', '?', '[', '{' }) {
-			int at = pattern.indexOf(c);
-			if (at >= 0) {
-				wildcard = Math.min(wildcard, at);
+			int at = include.indexOf(c);
+			if (at >= 0 && (first < 0 || at < first)) {
+				first = at;
 			}
 		}
-		int slash = pattern.lastIndexOf('/', wildcard);
+		return first;
+	}
+
+	/** The directories of a pattern before its first wildcard, which must stay inside the project like a literal entry. */
+	private static String fixedPart(String pattern) {
+		int slash = pattern.lastIndexOf('/', firstWildcard(pattern));
 		return slash < 0 ? "" : pattern.substring(0, slash); //$NON-NLS-1$
 	}
 

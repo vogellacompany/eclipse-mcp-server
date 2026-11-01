@@ -128,6 +128,19 @@ class SubstituteBundlePackTest {
 	}
 
 	@Test
+	void bracketAndBracePatternsAreExpandedToo() throws Exception {
+		Path project = plugin("bin.includes = .,lib[0-9].so,about{.html}\n");
+		Files.writeString(project.resolve("lib1.so"), "elf");
+		Files.writeString(project.resolve("about.html"), "<html/>");
+		Path jar = temp.resolve("packed.jar");
+
+		SubstituteBundleTool.Packed packed = SubstituteBundleTool.pack(project, jar);
+
+		assertTrue(entries(jar).containsAll(Set.of("lib1.so", "about.html")), "got " + entries(jar));
+		assertTrue(packed.unmatched().isEmpty(), "got " + packed.unmatched());
+	}
+
+	@Test
 	void aPatternOutsideTheProjectIsRefusedByName() throws Exception {
 		Path project = plugin("bin.includes = META-INF/,../lib/*.so\n");
 		Path jar = temp.resolve("packed.jar");
