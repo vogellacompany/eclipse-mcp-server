@@ -73,11 +73,12 @@ class SubstituteBundlePackTest {
 		Path project = plugin("bin.includes = .,**/*.so\n");
 		Files.createDirectories(project.resolve("os/linux/x86_64"));
 		Files.writeString(project.resolve("os/linux/x86_64/libdeep.so"), "elf");
+		Files.writeString(project.resolve("libroot.so"), "elf");
 		Path jar = temp.resolve("packed.jar");
 
 		SubstituteBundleTool.Packed packed = SubstituteBundleTool.pack(project, jar);
 
-		assertTrue(entries(jar).contains("os/linux/x86_64/libdeep.so"), "got " + entries(jar));
+		assertTrue(entries(jar).containsAll(Set.of("os/linux/x86_64/libdeep.so", "libroot.so")), "got " + entries(jar));
 		assertTrue(packed.unmatched().isEmpty(), "got " + packed.unmatched());
 	}
 

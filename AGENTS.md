@@ -97,7 +97,8 @@ On timeout the adapter cancels the monitor first, and `abandon` records calls th
 Every long running operation a client drives has a dialog on it somewhere: p2's unsigned content prompt, the workspace chooser on restart, `org.eclipse.debug.ui`'s "Errors in Workspace" status handler, the compare "no differences" message.
 Do not let it be raised on a client path; answer it and report what was answered.
 Before adding a tool that runs project code or touches the installation, look for a prompting `IStatusHandler` on that path.
-`eclipse_run_workbench_command` probes the Display while it waits, which a modal dialog's nested event loop answers, and returns `dialogOpen` with the title once a new modal shell other than a `ProgressMonitorDialog` shows on two probes in a row; otherwise it caps its wait and answers `timedOut`. Either way the future keeps running and a late result goes to the Error Log; its `IExecutionListener` is what makes `handlerFinished` trustworthy.
+`eclipse_run_workbench_command` probes the Display while it waits, which a modal dialog's nested event loop answers, and returns `dialogOpen` with the title once a new modal shell other than a `ProgressMonitorDialog` shows on two probes in a row; otherwise it caps its wait and answers `timedOut`.
+Either way the future keeps running and a late result goes to the Error Log; its `IExecutionListener` is what makes `handlerFinished` trustworthy.
 
 **IDE-only tools live in `com.vogella.eclipse.mcp.ide`.**
 `com.vogella.eclipse.mcp.ui` does not require `org.eclipse.ui.ide`, `org.eclipse.compare`, `org.eclipse.debug.ui` or `org.eclipse.jgit`, because an RCP product that adds it would otherwise pull them and the Debug perspective in.
@@ -238,7 +239,8 @@ Do not undo these without understanding why they are there.
 
 ### Git
 
-- The git bundle requires EGit and JGit optionally, and every tool checks `EGit.isAvailable()` first. Verifying a class can load the JGit types its methods use, and a failure there loses the tool with an error at every start; `RevertFilesTool` and `FetchPullRequestTool` keep their JGit code in a nested class for that reason, and `GitToolsWithoutEGitTest` loads every git tool with JGit and EGit hidden.
+- The git bundle requires EGit and JGit optionally, and every tool checks `EGit.isAvailable()` first.
+  Verifying a class can load the JGit types its methods use, and a failure there loses the tool with an error at every start; `RevertFilesTool` and `FetchPullRequestTool` keep their JGit code in a nested class for that reason, and `GitToolsWithoutEGitTest` loads every git tool with JGit and EGit hidden.
 - The ide bundle requires `org.eclipse.jgit` with `resolution:=optional` and references it only from `GitContent`, so an IDE without EGit loses only `eclipse_open_compare`'s `revision` argument.
 
 ### p2

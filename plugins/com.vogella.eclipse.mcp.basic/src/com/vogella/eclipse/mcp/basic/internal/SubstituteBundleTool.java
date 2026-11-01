@@ -901,7 +901,8 @@ public final class SubstituteBundleTool implements IMcpTool {
 		String glob = pattern.endsWith("/") ? pattern.substring(0, pattern.length() - 1) : pattern; //$NON-NLS-1$
 		PathMatcher matcher;
 		try {
-			matcher = project.getFileSystem().getPathMatcher("glob:" + glob); //$NON-NLS-1$
+			// in Ant, which bin.includes follows, **/ also matches no directory at all, and in a Java glob it does not
+			matcher = project.getFileSystem().getPathMatcher("glob:" + glob.replace("**/", "{**/,}")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		} catch (IllegalArgumentException e) {
 			throw new IOException("bin.includes entry '%s' is not a valid pattern: %s".formatted(pattern, e.getMessage()), //$NON-NLS-1$
 					e);
