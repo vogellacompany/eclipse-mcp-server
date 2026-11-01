@@ -547,7 +547,7 @@ public final class CommandTools {
 					.put("dialog", title) //$NON-NLS-1$
 					.put("waitedMillis", Long.valueOf(waitedMillis)) //$NON-NLS-1$
 					.put("note", //$NON-NLS-1$
-							"The handler opened the modal dialog '%s' and is waiting inside it for an answer. Read it with eclipse_get_widget_tree and shellTitle, answer it with eclipse_dismiss_dialog or by pressing its buttons; what the command does after that is written to the Error Log." //$NON-NLS-1$
+							"The modal dialog '%s' opened while the handler was running and the handler has not returned, so it is most likely waiting inside that dialog for an answer. Read it with eclipse_get_widget_tree and shellTitle, answer it with eclipse_dismiss_dialog or by pressing its buttons; what the command does after that is written to the Error Log." //$NON-NLS-1$
 									.formatted(title)));
 		}
 
