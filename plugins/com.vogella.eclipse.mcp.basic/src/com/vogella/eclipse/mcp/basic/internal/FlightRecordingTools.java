@@ -71,7 +71,12 @@ public final class FlightRecordingTools {
 			try {
 				String dumpTo = args.getString("dumpOnExitTo"); //$NON-NLS-1$
 				Map<String, String> overrides = new TreeMap<>();
-				if (arguments != null && arguments.get("settingsOverrides") instanceof Map<?, ?> given) { //$NON-NLS-1$
+				Object requestedOverrides = arguments == null ? null : arguments.get("settingsOverrides"); //$NON-NLS-1$
+				if (requestedOverrides != null && !(requestedOverrides instanceof Map<?, ?>)) {
+					return McpToolResult.error("settingsOverrides has to be an object of event#setting to value, and is %s." //$NON-NLS-1$
+							.formatted(requestedOverrides));
+				}
+				if (requestedOverrides instanceof Map<?, ?> given) {
 					for (Map.Entry<?, ?> entry : given.entrySet()) {
 						if (!(entry.getValue() instanceof String value)) {
 							return McpToolResult.error("settingsOverrides '%s' has to be a string, such as '1 ms' or 'true', and is %s." //$NON-NLS-1$
@@ -114,7 +119,7 @@ public final class FlightRecordingTools {
 
 		@Override
 		public String getDescription() {
-			return "Dumps a recording and returns it aggregated: which classes the bytes went into, which call chains allocated them, where the time was spent, what was thrown, and what the collector did. The raw file is not returned unless outputPath is given, because a recording is megabytes of binary and the aggregate is the answer. READ THE BYTES AS AN ESTIMATE: the allocation sampler is throttled and reports a weight per sample, so the figures rank allocators correctly and do not add up to what the process allocated. allocationByStack is the field that names a culprit, because a class such as Path or byte[] says nothing on its own. WHERE THE TIME WENT is under time: execution and native samples told apart, with parked stacks left out and counted in idleExcluded, nothingBusy with nothingBusyNote when under one sample in twenty was working so that the frames below name no culprit, topBySelfTime, topByPresence (frames anywhere on the stack; those on every stack are under onEveryStack), a merged call tree with a branch per thread (a run of equal counts folded into chain), byThread for the names threadNames can select, and the achieved rate under sampling. hotMethods is only the innermost frame of execution samples, which on a flat profile such as a startup says little; prefer topByPresence and tree. thrown groups jdk.JavaErrorThrow and jdk.JavaExceptionThrow by class, message and nearest non-JDK frame. threadNames, fromSeconds and toSeconds select what every part of the answer is about, and one file is read once per call, so splitting startup from idle and shutdown is one call per phase. Pass keepRunning to read a recording several times without ending it."; //$NON-NLS-1$
+			return "Dumps a recording and returns it aggregated: which classes the bytes went into, which call chains allocated them, where the time was spent, what was thrown, and what the collector did. The raw file is not returned unless outputPath is given, because a recording is megabytes of binary and the aggregate is the answer. READ THE BYTES AS AN ESTIMATE: the allocation sampler is throttled and reports a weight per sample, so the figures rank allocators correctly and do not add up to what the process allocated. allocationByStack is the field that names a culprit, because a class such as Path or byte[] says nothing on its own. WHERE THE TIME WENT is under time: execution and native samples told apart, withoutStack counting those the JVM recorded no stack for, which the tree and the flame graph cannot place, with parked stacks left out and counted in idleExcluded, nothingBusy with nothingBusyNote when under one sample in twenty was working so that the frames below name no culprit, topBySelfTime, topByPresence (frames anywhere on the stack; those on every stack are under onEveryStack), a merged call tree with a branch per thread (a run of equal counts folded into chain), byThread for the names threadNames can select, and the achieved rate under sampling. hotMethods is only the innermost frame of execution samples, which on a flat profile such as a startup says little; prefer topByPresence and tree. thrown groups jdk.JavaErrorThrow and jdk.JavaExceptionThrow by class, message and nearest non-JDK frame. threadNames, fromSeconds and toSeconds select what every part of the answer is about, and one file is read once per call, so splitting startup from idle and shutdown is one call per phase. Pass keepRunning to read a recording several times without ending it."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -176,8 +181,13 @@ public final class FlightRecordingTools {
 				return McpToolResult.error("toSeconds %s has to be after fromSeconds %s.".formatted(to, from)); //$NON-NLS-1$
 			}
 			boolean includeIdle = args.getBoolean("includeIdle", false); //$NON-NLS-1$
-			List<String> threadNames = arguments != null && arguments.get("threadNames") instanceof List<?> list //$NON-NLS-1$
-					&& !list.isEmpty() ? list.stream().map(String::valueOf).toList() : null;
+			Object requestedThreads = arguments == null ? null : arguments.get("threadNames"); //$NON-NLS-1$
+			if (requestedThreads != null && !(requestedThreads instanceof List<?>)) {
+				return McpToolResult.error("threadNames has to be an array of strings, and is %s.".formatted(requestedThreads)); //$NON-NLS-1$
+			}
+			List<String> threadNames = requestedThreads instanceof List<?> list && !list.isEmpty()
+					? list.stream().map(String::valueOf).toList()
+					: null;
 			FlightRecording.Aggregation options = new FlightRecording.Aggregation(
 					args.getInt("topClasses", 15, 1, 200), //$NON-NLS-1$
 					args.getInt("topStacks", 10, 1, 100), //$NON-NLS-1$

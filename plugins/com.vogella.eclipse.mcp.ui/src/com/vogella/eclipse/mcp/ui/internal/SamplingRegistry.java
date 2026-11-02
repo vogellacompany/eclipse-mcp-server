@@ -389,7 +389,7 @@ public final class SamplingRegistry {
 		List<String> waits = selection.waits().entrySet().stream()
 				.sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry::getKey)).limit(3)
 				.map(entry -> IdleFrames.brief(entry.getKey())).toList();
-		return "Nothing was busy. %d stacks over %d ticks were working, on average %s threads, and %d were threads waiting, mostly in %s. So no frame is named as a culprit.%s" //$NON-NLS-1$
+		return "Nothing was busy. %d stacks over %d ticks were working, on average %s threads, and %d were stacks of waiting threads, mostly in %s. So no frame is named as a culprit.%s" //$NON-NLS-1$
 				.formatted(Integer.valueOf(selection.busy()), Integer.valueOf(selection.ticks()),
 						String.format(Locale.ROOT, "%.2f", Double.valueOf(selection.busy() / (double) selection.ticks())), //$NON-NLS-1$
 						Integer.valueOf(selection.idle()), String.join(", ", waits), //$NON-NLS-1$

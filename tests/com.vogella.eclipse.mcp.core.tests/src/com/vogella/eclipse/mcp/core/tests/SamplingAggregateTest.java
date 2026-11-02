@@ -225,7 +225,7 @@ class SamplingAggregateTest {
 		assertEquals(150, number(answer, "idleByState"));
 		assertEquals(598, number(answer, "idleByFrame"));
 		assertEquals(0, number(answer, "idleSamplesExcluded"));
-		assertTrue(String.valueOf(answer.get("nothingBusyNote")).contains("748 were threads waiting"), "got " + answer);
+		assertTrue(String.valueOf(answer.get("nothingBusyNote")).contains("748 were stacks of waiting threads"), "got " + answer);
 		assertEquals(300, number(((List<Map<String, Object>>) answer.get("idleFrames")).get(0), "samples"),
 				"only the dispatchers' polls, got " + answer);
 		for (Map<String, Object> thread : (List<Map<String, Object>>) answer.get("byThread")) {

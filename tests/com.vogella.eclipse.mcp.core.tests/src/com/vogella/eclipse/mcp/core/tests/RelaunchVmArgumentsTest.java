@@ -19,6 +19,7 @@ import org.eclipse.core.runtime.Platform;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
@@ -411,6 +412,35 @@ class RelaunchVmArgumentsTest {
 		assertTrue(refusal.contains("NoSuchFlagAtAll"), refusal);
 		assertTrue(refusal.contains("leaving out"), refusal);
 		assertOnlyTheLogIsThere(dir, log);
+	}
+
+	@Test
+	void aRecordingInVmArgsIsNotProbedSinceNothingWouldDeleteItsFile(@TempDir Path dir) throws Exception {
+		Path kept = Files.writeString(dir.resolve("kept.jfr"), "a recording of the running IDE");
+		RelaunchVmArguments arguments = RelaunchVmArguments
+				.of(Map.of("vmArgs", List.of("-XX:StartFlightRecording=filename=" + kept)));
+
+		assertNull(arguments.jvmRefusal(null));
+
+		assertEquals("a recording of the running IDE", Files.readString(kept));
+		JsonObject answer = new JsonObject();
+		arguments.addTo(answer);
+		assertTrue(answer.toString().contains("NOT TRIED"), answer.toString());
+	}
+
+	@Test
+	void aCallWithTooLittleTimeLeftRefusesWithoutStartingAJvm(@TempDir Path dir) {
+		Path file = dir.resolve("deeper/startup.jfr");
+		RelaunchVmArguments arguments = RelaunchVmArguments
+				.of(Map.of("flightRecording", Map.of("file", file.toString())));
+		CallBudget.enter(4);
+		try {
+			String refusal = arguments.jvmRefusal(null);
+			assertTrue(refusal.contains("too little of this call is left"), refusal);
+		} finally {
+			CallBudget.leave();
+		}
+		assertFalse(Files.exists(file.getParent()), "nothing was tried, so nothing was created");
 	}
 
 	@Test
