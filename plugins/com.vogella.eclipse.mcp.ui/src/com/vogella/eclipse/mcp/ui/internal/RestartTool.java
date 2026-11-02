@@ -63,6 +63,9 @@ public final class RestartTool implements IMcpTool {
 	 */
 	private static volatile JsonObject lastFailure;
 
+	/** Touched on the UI thread only; a second request would append its arguments behind the first one's -vmargs. */
+	private static boolean restartPending;
+
 	@Override
 	public String getName() {
 		return "eclipse_restart"; //$NON-NLS-1$
@@ -70,7 +73,7 @@ public final class RestartTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Restarts the Eclipse IDE, into the same workspace or into another one, which is what makes an installed or updated feature active. The answer names the workspace it will return to and the one it is leaving, so a caller that switches can find its way back. PASS workspace TO SWITCH: an absolute path, created when it is not there, which is how a measurement gets a workspace of its own instead of sharing the one somebody works in. The IDE that comes up is this same installation with this same server in it, reachable at the same port with the same token, but everything workspace-shaped is different: other projects, other preferences, a build from nothing, and the local history and the element tree of the old workspace stay behind. WHETHER THE SERVER RUNS IS ITSELF A WORKSPACE PREFERENCE, so it is written into the target workspace before the relaunch, which the answer reports under server; without that the IDE comes up in a workspace that has never had the server switched on and nothing can reach it. The discovery file is per workspace too, so a client that reads it has to read the new one; the answer names its absolute path under endpointFile, for the workspace being restarted into, so it does not have to be constructed. THE CONNECTION WILL DROP BY DESIGN: this tool answers first and restarts a couple of seconds later, so a dropped connection right after a successful result is the expected outcome and not a failure. THE ANSWER REPORTS WHAT WAS REQUESTED, NOT THE OUTCOME, because the server dies with the IDE and cannot report its own success: verify with startedAt in the discovery file. A restart the platform vetoes, which a save prompt or a listener can do, leaves the IDE running and is reported as previousRestartFailed by the next call and in the Error Log, rather than being silently indistinguishable from success. Reconnect with the same bearer token, which survives restarts and updates; the server comes back on the same port. NOT EVERY CLIENT RECONNECTS ON ITS OWN: one that connects its MCP servers once per session keeps failing with a refused connection while the new server is up and answering, and then needs its user to reconnect it, in Claude Code through /mcp. Plan for that before restarting a session nobody is watching. Refuses when anything is unsaved or a modal dialog is open, naming which of the two fired, unless save or force is passed; the check covers every dirty part in every window, which is the set the platform itself would prompt for. force DISCARDS that work outright, closing dirty editors without saving, because leaving it to the platform means a prompt on an IDE nobody is looking at and a restart that never happens. A blocking dialog is better cleared with eclipse_dismiss_dialog than forced past. It works independently of eclipse_update, so a half applied update can still be recovered by restarting. Pass splash false to come back without the splash screen: this appends -nosplash to the arguments the workbench hands the launcher, the same channel it uses to pass the workspace, and splashSuppressed reports whether that argument was added, not what the launcher then did with it."; //$NON-NLS-1$
+		return "Restarts the Eclipse IDE, into the same workspace or into another one, which is what makes an installed or updated feature active. The answer names the workspace it will return to and the one it is leaving, so a caller that switches can find its way back. PASS workspace TO SWITCH: an absolute path, created when it is not there, which is how a measurement gets a workspace of its own instead of sharing the one somebody works in. The IDE that comes up is this same installation with this same server in it, reachable at the same port with the same token, but everything workspace-shaped is different: other projects, other preferences, a build from nothing, and the local history and the element tree of the old workspace stay behind. WHETHER THE SERVER RUNS IS ITSELF A WORKSPACE PREFERENCE, so it is written into the target workspace before the relaunch, which the answer reports under server; without that the IDE comes up in a workspace that has never had the server switched on and nothing can reach it. The discovery file is per workspace too, so a client that reads it has to read the new one; the answer names its absolute path under endpointFile, for the workspace being restarted into, so it does not have to be constructed. THE CONNECTION WILL DROP BY DESIGN: this tool answers first and restarts a couple of seconds later, so a dropped connection right after a successful result is the expected outcome and not a failure. THE ANSWER REPORTS WHAT WAS REQUESTED, NOT THE OUTCOME, because the server dies with the IDE and cannot report its own success: verify with startedAt in the discovery file. A restart the platform vetoes, which a save prompt or a listener can do, leaves the IDE running and is reported as previousRestartFailed by the next call and in the Error Log, rather than being silently indistinguishable from success. Reconnect with the same bearer token, which survives restarts and updates; the server comes back on the same port. NOT EVERY CLIENT RECONNECTS ON ITS OWN: one that connects its MCP servers once per session keeps failing with a refused connection while the new server is up and answering, and then needs its user to reconnect it, in Claude Code through /mcp. Plan for that before restarting a session nobody is watching. Refuses when anything is unsaved or a modal dialog is open, naming which of the two fired, unless save or force is passed; the check covers every dirty part in every window, which is the set the platform itself would prompt for. force DISCARDS that work outright, closing dirty editors without saving, because leaving it to the platform means a prompt on an IDE nobody is looking at and a restart that never happens. A blocking dialog is better cleared with eclipse_dismiss_dialog than forced past. It works independently of eclipse_update, so a half applied update can still be recovered by restarting. Pass splash false to come back without the splash screen: this appends -nosplash to the arguments the workbench hands the launcher, the same channel it uses to pass the workspace, and splashSuppressed reports whether that argument was added, not what the launcher then did with it. PASS flightRecording TO TRACE STARTUP: sampling and recordings die with the old JVM and the server comes up after most of startup is over, so nothing else covers it. The new JVM records with Java Flight Recorder from its own initialization, before any Eclipse code runs, into the file the answer names under flightRecording. That file is EMPTY until it is written, by default 60 seconds into the new JVM and without ending the IDE, so read it after that with eclipse_stop_flight_recording passing file. The sample rate decides what startup shows: raise it with eventSettings, for example jdk.ExecutionSample#period=1ms. stackDepth keeps 256 frames by default, since the 64 of JFR truncates most startup stacks. vmArgs adds other JVM arguments the same way. Both apply to THIS ONE RELAUNCH. They are tried on a throwaway JVM first and refused when it does not start, because a refused argument leaves the launcher's error dialog and no server. An argument that makes the JVM exit or run something else, such as -version or -jar, is refused by name, and a development mode IDE refuses them all."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -83,7 +86,15 @@ public final class RestartTool implements IMcpTool {
 				    "force":  {"type":"boolean","default":false,"description":"Restart even with unsaved changes or an open modal dialog. DISCARDS that work: dirty editors are closed without saving and dirty views are marked clean, so the platform has nothing left to prompt about."},
 				    "splash": {"type":"boolean","default":true,"description":"False comes back without the splash screen. The argument is added to the relaunch arguments; whether the launcher honours it is not something this server can observe."},
 				    "clean":  {"type":"boolean","description":"Relaunch with -clean, which discards the registry and resolver caches. Defaults to true when this session hot installed or substituted a bundle, because the caches written at shutdown then describe the wrong contributions and the editors restored at the next start fail with InvalidRegistryObjectException; false otherwise. The answer reports clean and cleanReason."},
-				    "workspace": {"type":"string","description":"Absolute path of the workspace to start into. Omit to come back into the current one. The directory is created when it does not exist, because a path that is not there opens the workspace chooser and waits for a person. A workspace another IDE has open cannot be taken over, and that is only visible once the relaunch has happened."}
+				    "workspace": {"type":"string","description":"Absolute path of the workspace to start into. Omit to come back into the current one. The directory is created when it does not exist, because a path that is not there opens the workspace chooser and waits for a person. A workspace another IDE has open cannot be taken over, and that is only visible once the relaunch has happened."},
+				    "flightRecording": {"type":["object","string"],"description":"Record the new JVM with Java Flight Recorder from its start, for this one relaunch. An object, where an empty one takes every default, or a string as in eclipse_debug_launch and eclipse_run_tests: 'off' for no recording, 'default' or 'profile' for those settings with every other default.","properties":{
+				      "settings": {"type":"string","default":"profile","description":"'profile', 'default', or the absolute path of a .jfc file."},
+				      "file": {"type":"string","description":"Absolute path of the .jfr file, which must not exist yet. Defaults to a new temporary file."},
+				      "stackDepth": {"type":"integer","minimum":1,"maximum":2048,"default":256,"description":"Frames each stack keeps, 256 by default because the JVM's own 64 truncates most startup stacks."},
+				      "seconds": {"type":"integer","minimum":0,"maximum":86400,"default":60,"description":"Write the file this long after the recording starts, without ending the IDE, and end the recording there. 0 records until the IDE exits."},
+				      "eventSettings": {"type":"array","items":{"type":"string"},"description":"Event settings added to the settings, such as jdk.ExecutionSample#period=1ms or jdk.NativeMethodSample#period=1ms. An event the JVM does not know is refused."}
+				    },"additionalProperties":false},
+				    "vmArgs": {"type":"array","items":{"type":"string"},"description":"Further JVM arguments for this one relaunch, one per item without quotes, added after those of eclipse.ini so that they win. A value belongs in the same item as its option. An argument that makes the JVM exit or run something else, such as -version or -jar, is refused."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -100,15 +111,38 @@ public final class RestartTool implements IMcpTool {
 		boolean splash = args.getBoolean("splash", true); //$NON-NLS-1$
 		boolean clean = args.getBoolean("clean", FrameworkChanges.any()); //$NON-NLS-1$
 		String workspace = args.getString("workspace"); //$NON-NLS-1$
+
+		RelaunchVmArguments vmArguments;
+		try {
+			vmArguments = RelaunchVmArguments.of(arguments);
+		} catch (IllegalArgumentException e) {
+			return McpToolResult.error(e.getMessage());
+		}
+		if (workspace != null || !vmArguments.isEmpty()) {
+			// the steps below create directories and wait for a JVM, the latter off the UI thread
+			UiThread.Outcome early = UiThread.run(UI_TIMEOUT_SECONDS, () -> refusalInAdvance(save, force));
+			if (early.error() != null) {
+				return McpToolResult.error("Could not restart: " + early.error()); //$NON-NLS-1$
+			}
+			if (!early.value().isEmpty()) {
+				return McpToolResult.error(early.value().toString());
+			}
+		}
 		if (workspace != null) {
 			McpToolResult refusal = checkWorkspace(workspace);
 			if (refusal != null) {
 				return refusal;
 			}
 		}
+		if (!vmArguments.isEmpty()) {
+			McpToolResult refusal = checkVmArguments(vmArguments, workspace);
+			if (refusal != null) {
+				return refusal;
+			}
+		}
 
 		UiThread.Outcome outcome = UiThread.run(UI_TIMEOUT_SECONDS,
-				() -> prepare(save, force, splash, workspace, clean, args.has("clean"))); //$NON-NLS-1$
+				() -> prepare(save, force, splash, workspace, clean, args.has("clean"), vmArguments)); //$NON-NLS-1$
 		if (outcome.error() != null) {
 			return McpToolResult.error("Could not restart: " + outcome.error()); //$NON-NLS-1$
 		}
@@ -283,6 +317,50 @@ public final class RestartTool implements IMcpTool {
 	}
 
 	/**
+	 * Whether the IDE can be relaunched with these JVM arguments, tried on a throwaway JVM.
+	 *
+	 * @param workspace the workspace asked for, or {@code null} for the current one
+	 * @return the refusal, or null when it can
+	 */
+	public static McpToolResult checkVmArguments(RelaunchVmArguments vmArguments, String workspace) {
+		String refusal = vmArgumentsRefusal(org.eclipse.core.runtime.Platform.inDevelopmentMode(), workspace,
+				workspaceLocation());
+		if (refusal == null) {
+			refusal = vmArguments.jvmRefusal();
+		}
+		return refusal == null ? null : McpToolResult.error(refusal);
+	}
+
+	/**
+	 * Why this IDE cannot take JVM arguments at all, or {@code null}, which leaves the trial on a JVM to decide.
+	 *
+	 * @param workspace the workspace asked for, or {@code null} for the current one
+	 */
+	public static String vmArgumentsRefusal(boolean developmentMode, String workspace, String instanceLocation) {
+		if (developmentMode) {
+			// the workbench forces a plain restart here, so the relaunch arguments would be dropped without a word
+			return "This IDE runs in development mode, where the platform keeps the command line of the launch it came from, so a relaunch cannot change its JVM arguments. Start it by hand with them; a launch from the IDE takes them in its launch configuration's VM arguments."; //$NON-NLS-1$
+		}
+		if (workspace == null && instanceLocation == null) {
+			return "This IDE has no workspace to relaunch into."; //$NON-NLS-1$
+		}
+		return null;
+	}
+
+	/**
+	 * The workspace the exit data has to name, or {@code null} to leave it to {@code restart(true)}.
+	 * <p>
+	 * JVM arguments rule out {@code restart(true)} even for the current workspace, since it
+	 * appends {@code -data} behind {@code -vmargs}, where the JVM refuses it.
+	 */
+	public static String exitDataWorkspace(String target, boolean hasVmArguments, String currentWorkspace) {
+		if (target != null) {
+			return target;
+		}
+		return hasVmArguments ? currentWorkspace : null;
+	}
+
+	/**
 	 * Switches the server on in the workspace the IDE is going to.
 	 * <p>
 	 * Whether the server runs is an instance preference, so it belongs to the
@@ -354,30 +432,58 @@ public final class RestartTool implements IMcpTool {
 	}
 
 	/**
-	 * Points the relaunch at another workspace.
+	 * Points the relaunch at a workspace, with JVM arguments behind it when there are any.
 	 * <p>
 	 * This is what {@code restart(true)} does for the current workspace: the
 	 * launcher reads the arguments out of the exit data, and the exit code decides
 	 * whether they are used at all, so both have to be set together.
 	 */
-	private static void relaunchInto(String workspace) {
+	public static void relaunchInto(String workspace, RelaunchVmArguments vmArguments) {
 		String existing = System.getProperty(EXIT_DATA_PROPERTY, ""); //$NON-NLS-1$
-		System.setProperty(EXIT_DATA_PROPERTY, existing + "-data\n" + workspace + "\n"); //$NON-NLS-1$ //$NON-NLS-2$
+		System.setProperty(EXIT_DATA_PROPERTY, existing + "-data\n" + workspace + "\n" + vmArguments.exitData()); //$NON-NLS-1$ //$NON-NLS-2$
 		// the code that makes the launcher read the arguments above; a plain restart
 		// ignores them and comes back where it was
 		System.setProperty(EXIT_CODE_PROPERTY, org.eclipse.equinox.app.IApplication.EXIT_RELAUNCH.toString());
 	}
 
-	private static JsonObject prepare(boolean save, boolean force, boolean splash, String workspace, boolean clean, boolean cleanExplicit) {
-		String cannot = cannotRestartReason();
+	/**
+	 * The refusal {@code prepare} is certain to give, or an empty object.
+	 * <p>
+	 * Saves and discards nothing, since the slower steps after this can still refuse.
+	 * Unsaved work does not count under {@code save}, which may clear it.
+	 */
+	private static JsonObject refusalInAdvance(boolean save, boolean force) {
+		JsonObject cannot = cannotRestart();
 		if (cannot != null) {
-			return new JsonObject().put("restarting", Boolean.FALSE).put("reason", "Refused: " + cannot); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			return cannot;
+		}
+		JsonObject blocked = force ? null
+				: closeRefusal(openModalDialogs(), save ? new JsonArray() : dirtyEditorTitles(),
+						save ? List.of() : dirtyParts(), "restarting", "restarting"); //$NON-NLS-1$ //$NON-NLS-2$
+		return blocked == null ? new JsonObject() : refused(blocked);
+	}
+
+	private static JsonObject cannotRestart() {
+		String cannot = restartPending ? "a restart is already on its way, and its arguments cannot change now." : cannotRestartReason(); //$NON-NLS-1$
+		return cannot == null ? null
+				: new JsonObject().put("restarting", Boolean.FALSE).put("reason", "Refused: " + cannot); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+	}
+
+	private static JsonObject refused(JsonObject refusal) {
+		refusal.put("restarting", Boolean.FALSE); //$NON-NLS-1$
+		addLastFailure(refusal);
+		return refusal;
+	}
+
+	private static JsonObject prepare(boolean save, boolean force, boolean splash, String workspace, boolean clean, boolean cleanExplicit,
+			RelaunchVmArguments vmArguments) {
+		JsonObject cannot = cannotRestart();
+		if (cannot != null) {
+			return cannot;
 		}
 		CloseGuard guard = guard(save, force, "restarting", "restarting"); //$NON-NLS-1$ //$NON-NLS-2$
 		if (guard.refusal() != null) {
-			JsonObject refusal = guard.refusal().put("restarting", Boolean.FALSE); //$NON-NLS-1$
-			addLastFailure(refusal);
-			return refusal;
+			return refused(guard.refusal());
 		}
 		JsonObject discarded = guard.discarded();
 		// not waiting for either: a build has nothing to save, and a launched JVM outliving the IDE would keep its workspace lock
@@ -389,17 +495,18 @@ public final class RestartTool implements IMcpTool {
 		boolean splashSuppressed = splash ? false : appendNoSplash();
 		boolean cleaning = clean && appendArgument(CLEAN);
 		String target = workspace == null ? null : String.valueOf(pathOf(workspace));
-		JsonObject server = null;
-		if (target != null) {
-			server = carryTheServerOver(Path.of(target));
-			relaunchInto(target);
+		JsonObject server = target == null ? null : carryTheServerOver(Path.of(target));
+		String exitDataWorkspace = exitDataWorkspace(target, !vmArguments.isEmpty(), workspaceLocation());
+		if (exitDataWorkspace != null) {
+			relaunchInto(exitDataWorkspace, vmArguments);
 		}
 		// answer first, restart after: the server dies with the IDE, so restarting
 		// inside the call gives the caller a dropped connection instead of a result
 		Display display = Workbenches.display();
 		// restart(true), not restart(): the no argument form relaunches without -data and waits for a human at the workspace chooser
-		boolean current = workspace == null;
+		boolean current = exitDataWorkspace == null;
 		lastFailure = null;
+		restartPending = true;
 		display.timerExec(RESTART_DELAY_MILLIS, () -> performRestart(current, previousExitData, previousExitCode));
 		JsonObject result = new JsonObject().put("restarting", Boolean.TRUE) //$NON-NLS-1$
 				.put("inMillis", RESTART_DELAY_MILLIS) //$NON-NLS-1$
@@ -420,6 +527,9 @@ public final class RestartTool implements IMcpTool {
 						"REQUESTED, NOT YET DONE: this answer is sent BEFORE the restart, so it reports what was asked for and cannot report the outcome. The old server keeps answering for a couple of seconds, so a reachability check right after this succeeds against the process that is about to die; compare startedAt in the discovery file instead. A restart the platform refuses leaves the IDE up and is reported as previousRestartFailed by the next call to this tool, and in the Error Log. Reconnect with the same bearer token, which survives restarts and updates. The IDE is relaunched into the workspace named above; if it comes back asking which workspace to use, the relaunch lost its arguments and a human has to answer the chooser." //$NON-NLS-1$
 								+ (workspace == null ? "" //$NON-NLS-1$
 										: " THIS IS A DIFFERENT WORKSPACE: check what came up before measuring anything in it, because a workspace another IDE holds open is refused by the lock and the chooser opens instead. previousWorkspace is the way back.")); //$NON-NLS-1$
+		if (!vmArguments.isEmpty()) {
+			vmArguments.addTo(result);
+		}
 		addLastFailure(result);
 		return result;
 	}
@@ -445,6 +555,18 @@ public final class RestartTool implements IMcpTool {
 	 * @param underVerb   what would happen under an open dialog, for the refusal
 	 */
 	static CloseGuard guard(boolean save, boolean force, String discardVerb, String underVerb) {
+		JsonArray modal = openModalDialogs();
+		JsonObject discarded = null;
+		if (save) {
+			saveEverything();
+		} else if (force) {
+			discarded = discardEverything();
+		}
+		JsonArray dirty = dirtyEditorTitles();
+		return new CloseGuard(force ? null : closeRefusal(modal, dirty, dirtyParts(), discardVerb, underVerb), discarded);
+	}
+
+	private static JsonArray openModalDialogs() {
 		JsonArray modal = new JsonArray();
 		for (Shell shell : Workbenches.display().getShells()) {
 			boolean isModal = (shell.getStyle()
@@ -453,35 +575,33 @@ public final class RestartTool implements IMcpTool {
 				modal.add(shell.getText());
 			}
 		}
-		JsonObject discarded = null;
-		if (save) {
-			saveEverything();
-		} else if (force) {
-			discarded = discardEverything();
+		return modal;
+	}
+
+	/** The answer when something blocks the close, or {@code null}. */
+	private static JsonObject closeRefusal(JsonArray modal, JsonArray dirty, List<MPart> dirtyModelParts, String discardVerb,
+			String underVerb) {
+		if (dirty.size() == 0 && dirtyModelParts.isEmpty() && modal.size() == 0) {
+			return null;
 		}
-		JsonArray dirty = dirtyEditorTitles();
-		List<MPart> dirtyModelParts = dirtyParts();
-		if (!force && (dirty.size() > 0 || !dirtyModelParts.isEmpty() || modal.size() > 0)) {
-			// compose from whichever guard actually fired: naming unsaved work when the
-			// blocker is a dialog sends the caller to save, which changes nothing
-			StringBuilder reason = new StringBuilder("Refused: "); //$NON-NLS-1$
+		// compose from whichever guard actually fired: naming unsaved work when the
+		// blocker is a dialog sends the caller to save, which changes nothing
+		StringBuilder reason = new StringBuilder("Refused: "); //$NON-NLS-1$
+		if (dirty.size() > 0 || !dirtyModelParts.isEmpty()) {
+			reason.append("there are unsaved changes, which %s would discard. Pass save to save them first, or force to discard them." //$NON-NLS-1$
+					.formatted(discardVerb));
+		}
+		if (modal.size() > 0) {
 			if (dirty.size() > 0 || !dirtyModelParts.isEmpty()) {
-				reason.append("there are unsaved changes, which %s would discard. Pass save to save them first, or force to discard them." //$NON-NLS-1$
-						.formatted(discardVerb));
+				reason.append(' ');
 			}
-			if (modal.size() > 0) {
-				if (dirty.size() > 0 || !dirtyModelParts.isEmpty()) {
-					reason.append(' ');
-				}
-				reason.append("a modal dialog is open, and %s under one loses whatever is in it. Close it with eclipse_dismiss_dialog, or pass force." //$NON-NLS-1$
-						.formatted(underVerb));
-			}
-			return new CloseGuard(new JsonObject().put("dirtyEditors", dirty) //$NON-NLS-1$
-					.put("dirtyParts", names(dirtyModelParts)) //$NON-NLS-1$
-					.put("openModalDialogs", modal) //$NON-NLS-1$
-					.put("reason", reason.toString()), discarded); //$NON-NLS-1$
+			reason.append("a modal dialog is open, and %s under one loses whatever is in it. Close it with eclipse_dismiss_dialog, or pass force." //$NON-NLS-1$
+					.formatted(underVerb));
 		}
-		return new CloseGuard(null, discarded);
+		return new JsonObject().put("dirtyEditors", dirty) //$NON-NLS-1$
+				.put("dirtyParts", names(dirtyModelParts)) //$NON-NLS-1$
+				.put("openModalDialogs", modal) //$NON-NLS-1$
+				.put("reason", reason.toString()); //$NON-NLS-1$
 	}
 
 	/** Cancels builds and terminates this server's launches, for a restart or an exit. */
@@ -575,6 +695,7 @@ public final class RestartTool implements IMcpTool {
 		if (restarted) {
 			return;
 		}
+		restartPending = false;
 		restore(EXIT_DATA_PROPERTY, previousExitData);
 		restore(EXIT_CODE_PROPERTY, previousExitCode);
 		recordFailure(failure != null

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
@@ -46,6 +47,18 @@ class LaunchRecordingTest {
 	}
 
 	@Test
+	void onlyTheFormThatGetsSplitOnWhitespaceIsQuoted() {
+		Path spaced = Path.of("/tmp/with space/run.jfr");
+
+		String quoted = LaunchRecording.vmArgument("profile", spaced, 0);
+		assertTrue(quoted.startsWith("\"-XX:") && quoted.endsWith("\""), quoted);
+
+		String unquoted = LaunchRecording.unquotedVmArgument("profile", spaced, 0, List.of("jdk.ExecutionSample#period=1ms"));
+		assertTrue(unquoted.startsWith("-XX:"), unquoted);
+		assertTrue(unquoted.endsWith("filename=" + spaced + ",jdk.ExecutionSample#period=1ms"), unquoted);
+	}
+
+	@Test
 	void theCallersOwnVmArgumentsSurvive() {
 		assertEquals("-Xmx2g -XX:StartFlightRecording=x",
 				LaunchRecording.appendTo("-Xmx2g", "-XX:StartFlightRecording=x"));
@@ -82,7 +95,9 @@ class LaunchRecordingTest {
 		String note = LaunchRecording.note(FILE, 0);
 
 		assertTrue(note.contains(FILE.toString()), note);
-		assertTrue(note.contains("EXITS"), "the file is absent while the program runs, which surprises everyone once");
+		assertTrue(note.contains("EXITS"), note);
+		assertTrue(note.contains("EMPTY"), "the file is there but holds nothing while the program runs: " + note);
+		assertFalse(note.contains("is not there"), note);
 		assertTrue(note.contains("eclipse_stop_flight_recording"), note);
 		assertTrue(note.contains("jcmd"), "the way out for a program that must keep running: " + note);
 
