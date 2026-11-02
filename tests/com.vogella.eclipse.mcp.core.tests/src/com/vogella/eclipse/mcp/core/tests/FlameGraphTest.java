@@ -10,6 +10,8 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import com.vogella.eclipse.mcp.core.FlameGraph;
+import com.vogella.eclipse.mcp.core.IdleFrames;
+import com.vogella.eclipse.mcp.core.ProductFamily;
 
 /**
  * The flame graph page.
@@ -133,6 +135,87 @@ class FlameGraphTest {
 		String json = page.substring(start, page.indexOf("</script>", start));
 		Map<String, Object> tree = TestFixture.parse(json);
 		assertEquals(5, ((Number) tree.get("v")).intValue(), "got " + json);
+	}
+
+	@Test
+	void theServerSaysWhatIsIdleAndThePageDoesNotDecide() throws Exception {
+		FlameGraph.Builder builder = FlameGraph.builder()
+				.add(List.of("trunk", "Display.sleep"), 3, true)
+				.add(List.of("trunk", "work"), 1, false);
+
+		Map<String, Object> trunk = onlyChild(TestFixture.parse(json(builder)));
+		assertEquals(3, ((Number) trunk.get("i")).intValue(), "only part of the trunk waits, got " + trunk);
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> kids = (List<Map<String, Object>>) trunk.get("c");
+		assertEquals(3, ((Number) kids.get(0).get("i")).intValue());
+		assertFalse(kids.get(1).containsKey("i"), "work is not idle, got " + kids);
+
+		String page = FlameGraph.page(new FlameGraph.Spec("t", "s", "samples", builder, List.of(), null));
+		assertFalse(page.contains("WToolkit"), "the page's script must not carry its own idle list");
+	}
+
+	@Test
+	void aSaturatedThreadAmongParkedOnesIsBusy() {
+		// one thread on every tick out of seventy stacks per tick is one percent of the stacks
+		assertFalse(IdleFrames.nothingBusy(100, 100));
+		assertTrue(IdleFrames.nothingBusy(2, 150));
+		assertTrue(IdleFrames.nothingBusy(0, 150));
+		assertFalse(IdleFrames.nothingBusy(0, 0), "without anything to measure against there is no verdict");
+	}
+
+	@Test
+	void aQuietProfileIsSaidOnThePageAndEvenWithoutAGraph() {
+		FlameGraph.Builder crumbs = FlameGraph.builder().add(List.of("a"), 1).quiet("Nothing was busy.");
+		assertTrue(FlameGraph.page(new FlameGraph.Spec("t", "s", "samples", crumbs, List.of(), null))
+				.contains("data-quiet=\"Nothing was busy.\""));
+
+		String empty = FlameGraph.page(new FlameGraph.Spec("t", "s", "samples",
+				FlameGraph.builder().quiet("Nothing was busy."), List.of(), null));
+		assertTrue(empty.contains("Nothing was busy."));
+		assertFalse(empty.contains("No stacks were recorded"), "the samples were taken and were idle");
+	}
+
+	@Test
+	void theWarningsAndTheProductReachThePageEscaped() {
+		ProductFamily family = new ProductFamily("A \"B\"", List.of("org.a."), "productPrefixes");
+		String page = FlameGraph.page(new FlameGraph.Spec("t", "s", "samples", FlameGraph.builder().add(List.of("a"), 1),
+				List.of(), null, List.of(), false, List.of("the clock <drifted>"), family));
+
+		assertTrue(page.contains("the clock &lt;drifted&gt;"));
+		assertTrue(page.contains("data-product=\"{"), "the script reads the family from here");
+		assertFalse(page.contains("A \"B\""), "a label must not break out of the attribute");
+		assertTrue(page.contains("id=\"only\""), "the reader has to be able to filter to the family");
+		assertFalse(FlameGraph.page(new FlameGraph.Spec("t", "s", "samples", FlameGraph.builder().add(List.of("a"), 1),
+				List.of(), null)).contains("id=\"only\""), "there is nothing to filter to without a family");
+	}
+
+	@Test
+	void onlyAPageThatAsksRanksByCaller() {
+		FlameGraph.Builder builder = FlameGraph.builder().add(List.of("a"), 1);
+
+		assertTrue(FlameGraph.page(new FlameGraph.Spec("t", "s", "bytes", builder, List.of(), null, List.of(), true))
+				.contains("data-rank=\"caller\""));
+		assertFalse(FlameGraph.page(new FlameGraph.Spec("t", "s", "samples", builder, List.of(), null))
+				.contains("data-rank=\"caller\""));
+	}
+
+	@Test
+	void onlyAPageThatAsksShowsIdleStacksFromTheStart() {
+		FlameGraph.Builder builder = FlameGraph.builder().add(List.of("a"), 1, true);
+
+		assertTrue(FlameGraph.page(new FlameGraph.Spec("t", "s", "samples", builder, List.of(), null, List.of(), false,
+				List.of(), null, true)).contains("data-idle=\"shown\""));
+		assertFalse(FlameGraph.page(new FlameGraph.Spec("t", "s", "samples", builder, List.of(), null))
+				.contains("data-idle=\"shown\""));
+	}
+
+	@Test
+	void pooledThreadsShareOneBranch() {
+		assertEquals("Worker-N", FlameGraph.threadBranch("Worker-19: Indexing"));
+		assertEquals("pool-N", FlameGraph.threadBranch("pool-7"));
+		assertEquals("Start Level", FlameGraph.threadBranch("Start Level: Equinox Container: 49d75ff2"));
+		assertEquals("main", FlameGraph.threadBranch("main"));
+		assertEquals("unnamed", FlameGraph.threadBranch(null));
 	}
 
 	private static String json(FlameGraph.Builder builder) {

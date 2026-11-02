@@ -49,31 +49,50 @@ public final class ServerFrames {
 		return name.startsWith("mcp-") || name.startsWith("mcp "); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
-	/** Classifies a stack given as the class name of each frame, innermost first. */
-	public static Verdict classify(String threadName, List<String> classNamesInnermostFirst) {
+	/**
+	 * Classifies a stack given as the class name of each frame, innermost first. A truncated one has
+	 * lost its outer frames, so its outermost frame says nothing about who started the thread.
+	 */
+	public static Verdict classify(String threadName, List<String> classNamesInnermostFirst, boolean truncated) {
 		if (isServerThread(threadName)) {
 			return Verdict.DROP;
 		}
-		boolean own = false;
-		boolean serving = false;
-		for (String name : classNamesInnermostFirst) {
+		int outermostOwn = -1;
+		for (int i = 0; i < classNamesInnermostFirst.size(); i++) {
+			String name = classNamesInnermostFirst.get(i);
 			if (name != null && name.startsWith(MCP_SDK)) {
 				// the SDK is only ever on a stack because this server serves a request
 				return Verdict.DROP;
 			}
-			own |= isOwn(name);
-			serving |= startsWithAny(name, SERVING);
+			if (isOwn(name)) {
+				outermostOwn = i;
+			}
 		}
-		if (!own) {
+		if (outermostOwn < 0) {
 			return Verdict.KEEP;
 		}
-		if (serving) {
-			return Verdict.DROP;
+		// only outside the server: an application a tool dispatched to may well use Jackson itself
+		for (String name : classNamesInnermostFirst.subList(outermostOwn + 1, classNamesInnermostFirst.size())) {
+			if (startsWithAny(name, SERVING)) {
+				return Verdict.DROP;
+			}
 		}
-		String innermost = firstNonJdk(classNamesInnermostFirst);
-		String outermost = firstNonJdk(classNamesInnermostFirst.reversed());
-		// a thread the server started, such as the sampler or a tool call, or the server's code executing
-		return isOwn(outermost) || isOwn(innermost) ? Verdict.DROP : Verdict.ELIDE;
+		// the server's code executing, also when it is in one of its libraries at the moment
+		for (String name : classNamesInnermostFirst) {
+			if (!startsWithAny(name, JDK) && !startsWithAny(name, SERVING)) {
+				if (isOwn(name)) {
+					return Verdict.DROP;
+				}
+				break;
+			}
+		}
+		// a thread the server started, such as the sampler or a tool call
+		return !truncated && isOwn(firstNonJdk(classNamesInnermostFirst.reversed())) ? Verdict.DROP : Verdict.ELIDE;
+	}
+
+	/** Whether the class belongs to the JDK. */
+	public static boolean isJdk(String className) {
+		return startsWithAny(className, JDK);
 	}
 
 	private static String firstNonJdk(List<String> names) {

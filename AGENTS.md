@@ -231,6 +231,13 @@ Do not undo these without understanding why they are there.
 
 - The sampler uses `ThreadMXBean` and must never need the UI thread or a workspace lock. Its budget counts ticks, not stacks, and parked threads are excluded by default.
 - `SamplingRegistry.align` roots truncated stacks at their shared outermost frame (`truncatedNote`), folds equal-count runs into `chain`, and lists frames on every sample under `onEveryStack`.
+- `FlightRecording.aggregate` reads a file once and filters afterwards: a `.jfr` is not in time order, so the recording start a time window is relative to is known only after the read. Its logic (`TimeProfile`, `ThrownEvents`, `StackAlignment`) holds no `jdk.jfr` type, so it stays testable and the optional import stays in one class.
+- The JVM reports a thrown Error once in `jdk.JavaErrorThrow` and twice in `jdk.JavaExceptionThrow`, which alone is throttled, so `ThrownEvents` counts the error events of a group and never adds the streams; `FlightRecordingToolsTest` pins this against the real JVM.
+- `IdleFrames` is the one idle definition for sampling, recordings and pages; a stack is idle only with a wait within its innermost four frames, because native callbacks run real work below a wait. The sampler also counts a WAITING or TIMED_WAITING thread as idle, which a recording cannot see. The server marks idle per stack through `FlameGraph.Builder.add`, and the page's script must not decide it again, or the answer and the page disagree.
+- `IdleFrames.nothingBusy` makes both answers and pages say that nothing was busy instead of naming a wait. The sampler measures busy stacks against ticks, not against all stacks, or one saturated thread among seventy parked ones would count as idle.
+- `ServerFrames` counts Jetty, Jackson and the like as the server's only outside its outermost own frame or as the code the server is running: a tool can dispatch to an application on the UI thread that uses them itself, and that work must stay in the profile. The outermost frame says nothing about a stack that was cut.
+- `ProductFamily` reads the running product only for a recording of this IDE; a `.jfr` given by `file` has only `productPrefixes`, since this IDE's product says nothing about another JVM.
+- The page gathers sibling frames below `THIN` pixels into an "N smaller" block that opens on click; its search walks the whole tree rather than what is drawn, or it misses what sits in a block.
 
 ### Debug
 

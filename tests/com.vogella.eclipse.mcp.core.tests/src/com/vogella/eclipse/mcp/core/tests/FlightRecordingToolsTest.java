@@ -5,7 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -85,6 +88,184 @@ class FlightRecordingToolsTest {
 	private static boolean namesTheAllocatingFrame(Map<String, Object> stopped) {
 		return names(stopped, "allocationByStack", "stack").stream()
 				.anyMatch(stack -> stack.contains("FlightRecordingToolsTest.allocate"));
+	}
+
+	@Test
+	void aMisspeltSettingIsRefusedRatherThanRecordedWithTheOldValue() throws Exception {
+		McpToolResult noSuchSetting = TestFixture.call(START,
+				Map.of("settingsOverrides", Map.of("jdk.ExecutionSample#perod", "1 ms")));
+		// a JVM without jdk.jfr refuses for its own reason, which says so
+		assumeTrue(!noSuchSetting.text().contains("does not expose"), "this JVM does not expose jdk.jfr");
+
+		assertTrue(noSuchSetting.isError(), noSuchSetting.text());
+		assertTrue(noSuchSetting.text().contains("perod"), noSuchSetting.text());
+		assertTrue(TestFixture.call(START, Map.of("settingsOverrides", Map.of("jdk.NoSuchEvent#period", "1 ms"))).isError());
+		assertTrue(TestFixture.call(START, Map.of("settingsOverrides", Map.of("noSeparator", "1 ms"))).isError());
+	}
+
+	@Test
+	void aSettingWhoseValueIsNotAStringIsRefusedByName() throws Exception {
+		Map<String, Object> absent = new HashMap<>();
+		absent.put("jdk.ExecutionSample#period", null);
+		for (Map<String, Object> overrides : List.of(absent, Map.<String, Object>of("jdk.ExecutionSample#period", Map.of("nested", "1 ms")),
+				Map.<String, Object>of("jdk.ExecutionSample#period", List.of("1 ms")),
+				Map.<String, Object>of("jdk.ExecutionSample#period", Integer.valueOf(1)))) {
+			McpToolResult result = TestFixture.call(START, Map.of("settingsOverrides", overrides));
+
+			assertTrue(result.isError(), result.text());
+			assertTrue(result.text().contains("jdk.ExecutionSample#period"), result.text());
+		}
+	}
+
+	@Test
+	void anEmptyTimeWindowAndAnUnknownWeightAreRefused() throws Exception {
+		McpToolResult window = TestFixture.call(STOP,
+				Map.of("file", "does-not-matter.jfr", "fromSeconds", Integer.valueOf(5), "toSeconds", Integer.valueOf(5)));
+		assertTrue(window.isError() && window.text().contains("toSeconds"), window.text());
+		McpToolResult weight = TestFixture.call(STOP, Map.of("file", "does-not-matter.jfr", "flameWeight", "weight"));
+		assertTrue(weight.isError() && weight.text().contains("flameWeight"), weight.text());
+	}
+
+	/** One real recording read from several angles, since a file needs no second recording. */
+	@Test
+	@SuppressWarnings("unchecked")
+	void readsWhereTheTimeWentAndWhatWasThrownFromARealRecording() throws Exception {
+		Map<String, Object> started = TestFixture.callAndParse(START,
+				Map.of("settings", "profile", "durationSeconds", Integer.valueOf(0), "maxSizeMegabytes", Integer.valueOf(16),
+						"settingsOverrides", Map.of("jdk.ExecutionSample#period", "10 ms", "jdk.JavaExceptionThrow#enabled",
+								"true", "jdk.JavaExceptionThrow#throttle", "off")));
+		assumeTrue(started.get("recordingId") != null, "this JVM does not expose jdk.jfr");
+		assertEquals("10 ms", ((Map<String, Object>) started.get("settingsOverrides")).get("jdk.ExecutionSample#period"));
+
+		Thread busy = new Thread(FlightRecordingToolsTest::spinAndThrow, "jfr-test-busy");
+		Thread other = new Thread(FlightRecordingToolsTest::spin, "other-busy");
+		Thread server = new Thread(FlightRecordingToolsTest::spin, "mcp-jfr-test");
+		other.start();
+		server.start();
+		busy.start();
+		busy.join();
+		other.join();
+		server.join();
+		Path file = Files.createTempFile("mcp-flight-test", ".jfr");
+		try {
+			Map<String, Object> stopped = TestFixture.callAndParse(STOP,
+					Map.of("recordingId", started.get("recordingId"), "outputPath", file.toString()));
+			Map<String, Object> time = (Map<String, Object>) stopped.get("time");
+			Map<String, Object> sampling = (Map<String, Object>) ((Map<String, Object>) time.get("sampling")).get("execution");
+			assertEquals("10 ms", sampling.get("period"), "the override has to reach the recording, got " + sampling);
+			double recordingSeconds = ((Number) time.get("recordingSeconds")).doubleValue();
+			assertTrue(recordingSeconds > 0, "got " + time);
+
+			assertTrue(((Number) stopped.get("serverEventsExcluded")).intValue() > 0, "got " + stopped);
+			Map<String, Object> withServer = TestFixture.callAndParse(STOP,
+					Map.of("file", file.toString(), "includeMcpFrames", Boolean.TRUE));
+			assertEquals(time.get("sampling"), ((Map<String, Object>) withServer.get("time")).get("sampling"),
+					"the achieved rate is the JVM's, whoever the samples belong to");
+
+			Map<String, Object> selected = TestFixture.callAndParse(STOP,
+					Map.of("file", file.toString(), "threadNames", List.of("JFR-TEST-*", "no-such-thread")));
+			Map<String, Object> selectedTime = (Map<String, Object>) selected.get("time");
+			assertEquals(List.of("no-such-thread"), selectedTime.get("threadNamesNotFound"));
+			assertTrue(((Number) selectedTime.get("eventsOnOtherThreads")).intValue() > 0, "got " + selectedTime);
+			assertTrue(names(selectedTime, "topBySelfTime", "frame").stream().anyMatch(frame -> frame.contains(".spin")),
+					"the thread's own frame should be where its time went, got " + selectedTime);
+			assertTrue(selectedTime.get("tree").toString().contains("thread: jfr-test-busy"), "got " + selectedTime);
+			assertTrue(names(selectedTime, "byThread", "thread").size() > 1,
+					"byThread keeps the other threads so that a name can be chosen, got " + selectedTime);
+
+			Map<String, Object> thrown = (Map<String, Object>) selected.get("thrown");
+			Map<String, Object> group = ((List<Map<String, Object>>) thrown.get("groups")).stream()
+					.filter(entry -> MESSAGE.equals(entry.get("message"))).findFirst().orElseThrow();
+			assertEquals("java.lang.Error", group.get("class"));
+			assertTrue(String.valueOf(group.get("frame")).endsWith("FlightRecordingToolsTest.spinAndThrow"), "got " + group);
+			// with the throttle off the JVM reports each Error once as an error and twice as an exception
+			assertEquals(THROWS, ((Number) group.get("count")).intValue(), "got " + group);
+			assertEquals(THROWS, ((Number) group.get("errorEvents")).intValue(), "got " + group);
+
+			Map<String, Object> beforeAnything = TestFixture.callAndParse(STOP,
+					Map.of("file", file.toString(), "toSeconds", Double.valueOf(0.000001)));
+			Map<String, Object> beforeTime = (Map<String, Object>) beforeAnything.get("time");
+			assertTrue(((Number) beforeTime.get("eventsOutsideWindow")).intValue() > 0, "got " + beforeTime);
+			assertEquals(0, ((Number) beforeTime.get("samples")).intValue(), "got " + beforeTime);
+
+			// a right name whose samples the window or the frame filter removed was still found
+			assertEquals(List.of("no-such-thread"), readTime(file, Map.of("threadNames", List.of("jfr-test-busy", "no-such-thread"),
+					"toSeconds", Double.valueOf(0.000001))).get("threadNamesNotFound"));
+			assertEquals(List.of("no-such-thread"), readTime(file, Map.of("threadNames", List.of("jfr-test-busy", "no-such-thread"),
+					"frameFilter", "no.such.Frame")).get("threadNamesNotFound"));
+
+			Map<String, Object> whole = readTime(file, Map.of());
+			int wholeSamples = ((Number) whole.get("samples")).intValue();
+
+			Map<String, Object> onlyBusy = readTime(file, Map.of("threadNames", List.of("JFR-TEST-*")));
+			assertEquals(observed(whole), ((Number) onlyBusy.get("samples")).intValue()
+					+ ((Number) onlyBusy.get("idleExcluded")).intValue()
+					+ ((Number) onlyBusy.get("eventsOnOtherThreads")).intValue(),
+					"only samples may count as on another thread, got " + onlyBusy);
+
+			Map<String, Object> secondHalf = readTime(file, Map.of("fromSeconds", Double.valueOf(recordingSeconds / 2)));
+			int outside = ((Number) secondHalf.get("eventsOutsideWindow")).intValue();
+			assertTrue(outside > 0, "got " + secondHalf);
+			assertTrue(((Number) secondHalf.get("samples")).intValue() < wholeSamples, "got " + secondHalf);
+			assertEquals(observed(whole), observed(secondHalf) + outside,
+					"only samples may count as outside the window, got " + secondHalf);
+
+			Map<String, Object> onlyNative = readTime(file, Map.of("sampleKind", "native"));
+			assertTrue(((Number) onlyNative.get("otherKindExcluded")).intValue() > 0, "got " + onlyNative);
+			assertEquals(0, ((Number) onlyNative.get("execution")).intValue(), "got " + onlyNative);
+
+			Map<String, Object> timePage = TestFixture.callAndParse(STOP,
+					Map.of("file", file.toString(), "show", Boolean.TRUE, "flameWeight", "time"));
+			assertEquals("time samples", timePage.get("traceWeight"));
+			Map<String, Object> bytesPage = TestFixture.callAndParse(STOP, Map.of("file", file.toString(), "show", Boolean.TRUE));
+			assertEquals("estimated allocated bytes", bytesPage.get("traceWeight"));
+		} finally {
+			Files.deleteIfExists(file);
+		}
+	}
+
+	/** The time block of one read of a file, with every thread listed so that byThread can be summed. */
+	@SuppressWarnings("unchecked")
+	private static Map<String, Object> readTime(Path file, Map<String, Object> filters) throws Exception {
+		Map<String, Object> arguments = new HashMap<>(filters);
+		arguments.put("file", file.toString());
+		arguments.put("topThreads", Integer.valueOf(200));
+		return (Map<String, Object>) TestFixture.callAndParse(STOP, arguments).get("time");
+	}
+
+	/** Every sample byThread saw, which is before the thread and kind filters. */
+	@SuppressWarnings("unchecked")
+	private static int observed(Map<String, Object> time) {
+		int samples = 0;
+		for (Map<String, Object> thread : (List<Map<String, Object>>) time.get("byThread")) {
+			samples += ((Number) thread.get("execution")).intValue() + ((Number) thread.get("native")).intValue();
+		}
+		return samples;
+	}
+
+	private static final String MESSAGE = "thrown by the flight recording test";
+
+	private static final int THROWS = 7;
+
+	/** Kept in one method, so that both the samples and the thrown errors name it. */
+	private static long spin() {
+		long until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(800);
+		long sum = 0;
+		while (System.nanoTime() < until) {
+			sum += System.nanoTime() % 7;
+		}
+		return sum;
+	}
+
+	private static void spinAndThrow() {
+		long sum = spin();
+		for (int i = 0; i < THROWS + (sum == Long.MIN_VALUE ? 1 : 0); i++) {
+			try {
+				throw new Error(MESSAGE);
+			} catch (Error expected) {
+				// only the event counts
+			}
+		}
 	}
 
 	@Test
