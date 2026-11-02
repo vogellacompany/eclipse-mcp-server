@@ -1,10 +1,12 @@
 package com.vogella.eclipse.mcp.ui.internal;
 
+import org.osgi.framework.BundleContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Deactivate;
 
 import com.vogella.eclipse.mcp.core.LogClearedHandlers;
+import com.vogella.eclipse.mcp.core.StartupTimeline;
 import com.vogella.eclipse.mcp.core.TracePages;
 import com.vogella.eclipse.mcp.core.UiDispatch;
 
@@ -22,17 +24,21 @@ public final class McpUiComponent {
 
 	private final BrowserOpener browserOpener = new BrowserOpener();
 
+	private final StartupUiCapture startupCapture = new StartupUiCapture(StartupTimeline.getDefault());
+
 	@Activate
-	void activate() {
+	void activate(BundleContext context) {
 		// only hooks are set here, nothing that reaches Platform or the workbench:
 		// this can run before either exists
 		LogClearedHandlers.set(errorLogRefresh);
 		UiDispatch.set(UiThread.EXECUTOR);
 		TracePages.setOpener(browserOpener);
+		startupCapture.start(context);
 	}
 
 	@Deactivate
 	void deactivate() {
+		startupCapture.deactivate();
 		LogClearedHandlers.unset(errorLogRefresh);
 		UiDispatch.unset(UiThread.EXECUTOR);
 		TracePages.unsetOpener(browserOpener);
