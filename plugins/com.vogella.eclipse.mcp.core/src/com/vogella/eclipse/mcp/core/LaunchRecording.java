@@ -1,12 +1,13 @@
 package com.vogella.eclipse.mcp.core;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Records a launched JVM with Java Flight Recorder through its command line.
  * <p>
  * The IDE's own recording tools cannot see a launched process, so the decision is made before the launch
- * and the file exists only once the program ends.
+ * and the file stays empty until the recording is written.
  */
 public final class LaunchRecording {
 
@@ -48,14 +49,25 @@ public final class LaunchRecording {
 	 *                to rely on the exit dump alone
 	 */
 	public static String vmArgument(String settings, Path file, int seconds) {
-		String duration = seconds > 0 ? ",duration=%ds".formatted(Integer.valueOf(seconds)) : ""; //$NON-NLS-1$ //$NON-NLS-2$
-		String argument = "-XX:StartFlightRecording=name=%s,settings=%s,dumponexit=true%s,filename=%s" //$NON-NLS-1$
-				.formatted(NAME, settings, duration, file);
+		String argument = unquotedVmArgument(settings, file, seconds, List.of());
 		// the launch keeps its VM arguments as one string and the platform splits it
 		// on whitespace, so an unquoted path with a space in it arrives as two
 		// arguments and the launch fails on the second. The temporary directory has
 		// one on any Windows account whose name has one, which is most of them
 		return argument.indexOf(' ') < 0 ? argument : '"' + argument + '"'; //$NON-NLS-1$
+	}
+
+	/**
+	 * The argument as the JVM has to receive it, for a channel that keeps an argument
+	 * together by itself and would hand quotes on literally: the launcher's exit data.
+	 *
+	 * @param eventSettings added to the settings, such as {@code jdk.ExecutionSample#period=1ms}
+	 */
+	public static String unquotedVmArgument(String settings, Path file, int seconds, List<String> eventSettings) {
+		String duration = seconds > 0 ? ",duration=%ds".formatted(Integer.valueOf(seconds)) : ""; //$NON-NLS-1$ //$NON-NLS-2$
+		String events = eventSettings.isEmpty() ? "" : "," + String.join(",", eventSettings); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		return "-XX:StartFlightRecording=name=%s,settings=%s,dumponexit=true%s,filename=%s%s" //$NON-NLS-1$
+				.formatted(NAME, settings, duration, file, events);
 	}
 
 	/** Appended rather than replaced, so a caller's own VM arguments survive. */
@@ -69,7 +81,7 @@ public final class LaunchRecording {
 			return "The JVM records itself into %s and writes it after %d seconds WITHOUT ending the program, which is what makes a startup measurable: the application keeps running and the file is complete. THE RECORDING ENDS THERE: this is a duration, so it is one window and nothing is added afterwards, not even when the program exits, and the file keeps the timestamp of that dump. For a window later in the run, dump it from outside with 'jcmd <pid> JFR.dump name=%s filename=...', which leaves the recording running. Read the file with eclipse_stop_flight_recording passing file." //$NON-NLS-1$
 					.formatted(file, Integer.valueOf(seconds), NAME);
 		}
-		return "The JVM records itself into %s and writes it when it EXITS, so the file is not there while the program runs and a program that is killed rather than ended leaves nothing. To measure something that must keep running, pass flightRecordingSeconds, or dump it from outside with 'jcmd <pid> JFR.dump name=%s filename=...', which leaves the process running. Read the file with eclipse_stop_flight_recording passing file." //$NON-NLS-1$
+		return "The JVM records itself into %s and writes it when it EXITS, so the file exists from the start but stays EMPTY while the program runs, and a program that is killed rather than ended leaves it empty. To measure something that must keep running, pass flightRecordingSeconds, or dump it from outside with 'jcmd <pid> JFR.dump name=%s filename=...', which leaves the process running. Read the file with eclipse_stop_flight_recording passing file." //$NON-NLS-1$
 				.formatted(file, NAME);
 	}
 }
