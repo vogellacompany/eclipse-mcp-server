@@ -10,6 +10,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import com.vogella.eclipse.mcp.core.FlameGraph;
+import com.vogella.eclipse.mcp.core.IdleFrames;
 
 /**
  * The flame graph page.
@@ -133,6 +134,35 @@ class FlameGraphTest {
 		String json = page.substring(start, page.indexOf("</script>", start));
 		Map<String, Object> tree = TestFixture.parse(json);
 		assertEquals(5, ((Number) tree.get("v")).intValue(), "got " + json);
+	}
+
+	@Test
+	void thePagesIdleListIsTheOneDefinition() {
+		String page = FlameGraph.page(new FlameGraph.Spec("t", "s", "samples",
+				FlameGraph.builder().add(List.of("a"), 1), List.of(), null));
+
+		assertFalse(page.contains("/*IDLE_FRAMES*/"), "the placeholder has to be filled");
+		for (String frame : IdleFrames.frames()) {
+			assertTrue(page.contains('"' + frame + '"'), frame);
+		}
+	}
+
+	@Test
+	void onlyAPageThatAsksRanksByCaller() {
+		FlameGraph.Builder builder = FlameGraph.builder().add(List.of("a"), 1);
+
+		assertTrue(FlameGraph.page(new FlameGraph.Spec("t", "s", "bytes", builder, List.of(), null, List.of(), true))
+				.contains("data-rank=\"caller\""));
+		assertFalse(FlameGraph.page(new FlameGraph.Spec("t", "s", "samples", builder, List.of(), null))
+				.contains("data-rank=\"caller\""));
+	}
+
+	@Test
+	void pooledThreadsShareOneBranch() {
+		assertEquals("Worker-N", FlameGraph.threadBranch("Worker-19: Indexing"));
+		assertEquals("Start Level", FlameGraph.threadBranch("Start Level: Equinox Container: 49d75ff2"));
+		assertEquals("main", FlameGraph.threadBranch("main"));
+		assertEquals("unnamed", FlameGraph.threadBranch(null));
 	}
 
 	private static String json(FlameGraph.Builder builder) {

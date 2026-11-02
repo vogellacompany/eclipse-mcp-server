@@ -231,6 +231,9 @@ Do not undo these without understanding why they are there.
 
 - The sampler uses `ThreadMXBean` and must never need the UI thread or a workspace lock. Its budget counts ticks, not stacks, and parked threads are excluded by default.
 - `SamplingRegistry.align` roots truncated stacks at their shared outermost frame (`truncatedNote`), folds equal-count runs into `chain`, and lists frames on every sample under `onEveryStack`.
+- `FlightRecording.aggregate` reads a file once and filters afterwards: a `.jfr` is not in time order, so the recording start a time window is relative to is known only after the read. Its logic (`TimeProfile`, `ThrownEvents`, `StackAlignment`) holds no `jdk.jfr` type, so it stays testable and the optional import stays in one class.
+- The JVM reports a thrown Error once in `jdk.JavaErrorThrow` and twice in `jdk.JavaExceptionThrow`, which alone is throttled, so `ThrownEvents` counts the error events of a group and never adds the streams; `FlightRecordingToolsTest` pins this against the real JVM.
+- `IdleFrames` is the one idle definition, and the page's script gets its list from it; a stack is idle only with a wait within its innermost four frames, because native callbacks run real work below a wait.
 
 ### Debug
 

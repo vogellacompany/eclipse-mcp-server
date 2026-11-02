@@ -76,6 +76,11 @@ public final class ServerFrames {
 		return isOwn(outermost) || isOwn(innermost) ? Verdict.DROP : Verdict.ELIDE;
 	}
 
+	/** Whether the class belongs to the JDK. */
+	public static boolean isJdk(String className) {
+		return startsWithAny(className, JDK);
+	}
+
 	private static String firstNonJdk(List<String> names) {
 		for (String name : names) {
 			if (!startsWithAny(name, JDK)) {

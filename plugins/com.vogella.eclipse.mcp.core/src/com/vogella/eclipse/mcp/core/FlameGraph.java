@@ -167,10 +167,15 @@ public final class FlameGraph {
 
 	/** What the page says about itself, beside the graph. */
 	public record Spec(String title, String subtitle, String unit, Builder flame, List<Table> tables, String note,
-			List<Stat> stats) {
+			List<Stat> stats, boolean rankByCaller) {
 
 		public Spec(String title, String subtitle, String unit, Builder flame, List<Table> tables, String note) {
 			this(title, subtitle, unit, flame, tables, note, List.of());
+		}
+
+		public Spec(String title, String subtitle, String unit, Builder flame, List<Table> tables, String note,
+				List<Stat> stats) {
+			this(title, subtitle, unit, flame, tables, note, stats, false);
 		}
 	}
 
@@ -184,6 +189,15 @@ public final class FlameGraph {
 
 	public static Builder builder() {
 		return new Builder();
+	}
+
+	/** Pool threads differ only by a number, and a branch per worker would split one job into many. */
+	public static String threadBranch(String name) {
+		if (name == null) {
+			return "unnamed"; //$NON-NLS-1$
+		}
+		// Eclipse workers append the running job, "Worker-19: Indexing", which is not the thread
+		return name.replaceAll(":.*$", "").replaceAll("([-# ])\\d+$", "$1N").strip(); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 	}
 
 	/** Splits a rendered stack such as {@code a &lt;- b &lt;- c}, innermost frame first. */
@@ -219,6 +233,7 @@ public final class FlameGraph {
 		StringBuilder out = new StringBuilder(1 << 16);
 		out.append("<!doctype html>\n<html lang=\"en\" data-unit=\""); //$NON-NLS-1$
 		escape(spec.unit(), out);
+		out.append(spec.rankByCaller() ? "\" data-rank=\"caller" : ""); //$NON-NLS-1$ //$NON-NLS-2$
 		out.append("\">\n<head>\n<meta charset=\"utf-8\">\n"); //$NON-NLS-1$
 		out.append("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>"); //$NON-NLS-1$
 		escape(spec.title(), out);
@@ -299,10 +314,21 @@ public final class FlameGraph {
 			out.append("<script id=\"profile\" type=\"application/json\">"); //$NON-NLS-1$
 			// inside a script element, so only the closing tag has to be broken up
 			out.append(spec.flame().toJson().replace("</", "<\\/")); //$NON-NLS-1$ //$NON-NLS-2$
-			out.append("</script>\n<script>\n").append(SCRIPT).append("\n</script>\n"); //$NON-NLS-1$ //$NON-NLS-2$
+			out.append("</script>\n<script>\n").append(SCRIPT.replace(IDLE_PLACEHOLDER, idleFrames())).append("\n</script>\n"); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		out.append("</body>\n</html>\n"); //$NON-NLS-1$
 		return out.toString();
+	}
+
+	private static String idleFrames() {
+		StringBuilder list = new StringBuilder("["); //$NON-NLS-1$
+		for (String frame : IdleFrames.frames()) {
+			if (list.length() > 1) {
+				list.append(", "); //$NON-NLS-1$
+			}
+			quote(frame, list);
+		}
+		return list.append(']').toString();
 	}
 
 	private static void quote(String value, StringBuilder out) {
@@ -343,6 +369,8 @@ public final class FlameGraph {
 			}
 		}
 	}
+
+	private static final String IDLE_PLACEHOLDER = "/*IDLE_FRAMES*/"; //$NON-NLS-1$
 
 	private static final String STYLE = """
 			:root {
@@ -490,10 +518,9 @@ public final class FlameGraph {
 			    { key: 'jdk', label: 'JDK', hue: 40, s: 22, l: 58, prefix: ['java.', 'javax.', 'jdk.', 'sun.', 'com.sun.'] },
 			    { key: 'other', label: 'Libraries', hue: 330, s: 45, l: 64, test: function () { return true; } }
 			  ];
-			  // leaf waits a thread sits in while doing nothing, drawn grey so the work stands out
-			  var IDLE = ['Display.sleep', 'Unsafe.park', 'LockSupport.park', 'Object.wait', 'Thread.sleep',
-			    'Net.accept', 'Net.poll', 'EPoll.wait', 'waitForEvents', 'waitForReferencePendingList',
-			    'ReferenceQueue.remove', 'SocketDispatcher.read', 'KQueue.poll', 'WEPoll.wait'];
+			  // waits a thread sits in while doing nothing, drawn grey so the work stands out: IdleFrames, matched as it does
+			  var IDLE = /*IDLE_FRAMES*/;
+			  var BY_CALLER = document.documentElement.dataset.rank === 'caller';
 
 			  function family(name) {
 			    for (var i = 0; i < FAMILIES.length; i++) {
@@ -503,7 +530,14 @@ public final class FlameGraph {
 			    return FAMILIES[FAMILIES.length - 1];
 			  }
 			  function isIdle(name) {
-			    for (var i = 0; i < IDLE.length; i++) if (name.indexOf(IDLE[i]) >= 0) return true;
+			    var body = name.replace(/:\\d+$/, ''), dot = body.lastIndexOf('.'), method = body.slice(dot + 1);
+			    var type = dot < 0 ? '' : body.slice(0, dot);
+			    type = type.slice(Math.max(type.lastIndexOf('.'), type.lastIndexOf('$')) + 1);
+			    for (var i = 0; i < IDLE.length; i++) {
+			      var at = IDLE[i].indexOf('.');
+			      if (at < 0 ? method.indexOf(IDLE[i]) === 0
+			        : type === IDLE[i].slice(0, at) && method.indexOf(IDLE[i].slice(at + 1)) === 0) return true;
+			    }
 			    return false;
 			  }
 			  // decorate once: parent links, family, idle, self weight
@@ -546,11 +580,12 @@ public final class FlameGraph {
 			    return 'hsl(' + (f.hue + (h % 11) - 5) + ' ' + f.s + '% ' + (f.l + (h % 9) - 4) + '%)';
 			  }
 			  function fmt(v) {
+			    // the only bytes here are the allocation sampler's weights, which are estimates
 			    if (unit === 'bytes') {
-			      if (v < 1024) return v + ' B';
-			      if (v < 1048576) return (v / 1024).toFixed(1) + ' KB';
-			      if (v < 1073741824) return (v / 1048576).toFixed(1) + ' MB';
-			      return (v / 1073741824).toFixed(2) + ' GB';
+			      if (v < 1024) return '~' + v + ' B';
+			      if (v < 1048576) return '~' + (v / 1024).toFixed(1) + ' KB';
+			      if (v < 1073741824) return '~' + (v / 1048576).toFixed(1) + ' MB';
+			      return '~' + (v / 1073741824).toFixed(2) + ' GB';
 			    }
 			    return v.toLocaleString('en') + (unit ? ' ' + unit : '');
 			  }
@@ -744,7 +779,37 @@ public final class FlameGraph {
 
 			  var hot = document.getElementById('hot');
 			  var hottest = document.getElementById('hottest');
-			  document.getElementById('railTitle').textContent = unit === 'bytes' ? 'Where the bytes are allocated' : 'Where the time sits';
+			  document.getElementById('railTitle').textContent = BY_CALLER
+			    ? (unit === 'bytes' ? 'Nearest non-JDK allocator' : 'Nearest non-JDK frame')
+			    : (unit === 'bytes' ? 'Where the bytes are allocated' : 'Where the time sits');
+
+			  // the frame a weight is credited to: JDK leaves such as Arrays.copyOf name no culprit
+			  function credited(node) {
+			    if (!BY_CALLER) return node;
+			    for (var n = node; n !== root && n.f.key !== 'thread'; n = n.p) if (n.f.key !== 'jdk') return n;
+			    return node;
+			  }
+			  // the widest frame that is not trunk: dispatch plumbing names nothing, and the launcher path runs to about half of a startup
+			  var PLUMBING = /^(java\\.lang\\.invoke\\.|java\\.lang\\.reflect\\.|jdk\\.internal\\.reflect\\.)|\\.0x|SafeRunner\\.run/;
+			  function widest(total) {
+			    var below = {}, onStack = {};
+			    (function walk(n) {
+			      var fresh = n !== root && n.f.key !== 'thread' && !n.idle && !onStack[n.n] && !PLUMBING.test(n.n);
+			      if (fresh) { below[n.n] = (below[n.n] || 0) + n.w; onStack[n.n] = true; }
+			      (n.c || []).forEach(function (kid) { if (kid.w > 0) walk(kid); });
+			      if (fresh) delete onStack[n.n];
+			    })(root);
+			    var best = null;
+			    Object.keys(below).forEach(function (name) {
+			      if (below[name] * 5 < total * 2 && (best === null || below[name] > below[best])) best = name;
+			    });
+			    return best === null ? null : { name: best, w: below[best] };
+			  }
+			  function select(name) {
+			    exact = name;
+			    hottest.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x.title === name); });
+			    draw();
+			  }
 
 			  // the answer first: follow the heaviest branch until a frame keeps more than it passes on
 			  function summarise() {
@@ -758,7 +823,19 @@ public final class FlameGraph {
 			      path.push(n);
 			    }
 			    hot.replaceChildren();
-			    if (path.length && total) {
+			    var wide = BY_CALLER && total ? widest(total) : null;
+			    if (wide) {
+			      var wideLead = document.createElement('b');
+			      wideLead.textContent = pct(wide.w, total);
+			      var wideName = document.createElement('code');
+			      wideName.textContent = short(wide.name);
+			      var mark = document.createElement('button');
+			      mark.type = 'button';
+			      mark.textContent = 'Highlight it';
+			      mark.addEventListener('click', function () { select(wide.name); });
+			      hot.append(wideLead, (unit === 'bytes' ? ' of the estimated bytes are allocated below ' : ' of the ' + (hidden.idle ? 'busy ' : '') + 'samples run below '),
+			        wideName, ', the widest frame under 40% of the total. ', mark);
+			    } else if (path.length && total) {
 			      var thread = path[0].f.key === 'thread' ? short(path[0].n) : null;
 			      var end = path[path.length - 1];
 			      var lead = document.createElement('b');
@@ -780,7 +857,10 @@ public final class FlameGraph {
 
 			    var self = {};
 			    (function walk(node) {
-			      if (node !== root && !node.idle && node.f.key !== 'thread' && visible(node) && node.s > 0) self[node.n] = (self[node.n] || 0) + node.s;
+			      if (node !== root && !node.idle && node.f.key !== 'thread' && visible(node) && node.s > 0) {
+			        var to = credited(node).n;
+			        self[to] = (self[to] || 0) + node.s;
+			      }
 			      (node.c || []).forEach(walk);
 			    })(root);
 			    var ranked = Object.keys(self).sort(function (a, b) { return self[b] - self[a]; }).slice(0, 12);

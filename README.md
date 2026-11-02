@@ -201,7 +201,7 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_debug_status`, `eclipse_debug_get_frames` | Sessions, threads, frames and variables |
 | ✎ `eclipse_debug_evaluate`, `eclipse_debug_control` | Evaluate expressions, step, resume and terminate |
 | `eclipse_start_sampling`, `eclipse_stop_sampling`, `eclipse_show_trace` | Sample thread stacks to profile or diagnose a freeze, and render them as a flame graph |
-| `eclipse_start_flight_recording`, `eclipse_stop_flight_recording` | Record the IDE's JVM with Java Flight Recorder |
+| `eclipse_start_flight_recording`, `eclipse_stop_flight_recording` | Record the IDE's JVM with Java Flight Recorder, or read any `.jfr`, and report allocation, time per thread and window, what was thrown, and a flame graph of bytes or time |
 
 **Git**
 
