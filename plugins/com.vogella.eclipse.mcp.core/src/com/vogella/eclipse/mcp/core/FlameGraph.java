@@ -606,7 +606,8 @@ public final class FlameGraph {
 			    var below = 0, belowIdle = 0, kids = n.c || [];
 			    for (var i = 0; i < kids.length; i++) { prep(kids[i], n); below += kids[i].v; belowIdle += kids[i].i; }
 			    n.s = Math.max(n.v - below, 0);
-			    n.si = n.s > 0 && n.i > belowIdle;
+			    // the idle part of the self weight: one frame can both wait and work, as the UI thread's dispatch does
+			    n.si = n.i - belowIdle;
 			  })(root, null);
 
 			  // pkg.Outer$Inner.method:12 -> Outer$Inner.method:12, which is the part that tells frames apart
@@ -650,7 +651,8 @@ public final class FlameGraph {
 			  }
 			  function pct(v, of) { return of ? (v * 100 / of).toFixed(v * 1000 < of ? 2 : 1) + '%' : '0%'; }
 			  function base() { return root.w || root.v; }
-			  function selfWeight(n) { return (hidden.idle && n.si) || (only && !n.u) ? 0 : n.s; }
+			  function busySelf(n) { return only && !n.u ? 0 : n.s - n.si; }
+			  function selfWeight(n) { return only && !n.u ? 0 : hidden.idle ? n.s - n.si : n.s; }
 			  function weight(n) {
 			    if (n !== root && hidden[n.f.key]) return 0;
 			    var w = selfWeight(n), kids = n.c || [];
@@ -674,7 +676,7 @@ public final class FlameGraph {
 			    return { big: big, small: small };
 			  }
 			  function blockOf(parent, frames) {
-			    var block = parent.more || (parent.more = { block: true, p: parent, s: 0, i: 0, f: { key: 'block', label: 'Smaller frames, drawn as one' } });
+			    var block = parent.more || (parent.more = { block: true, p: parent, s: 0, si: 0, i: 0, f: { key: 'block', label: 'Smaller frames, drawn as one' } });
 			    block.c = frames;
 			    block.v = block.w = frames.reduce(function (sum, k) { return sum + k.w; }, 0);
 			    block.n = frames.length + ' smaller';
@@ -721,8 +723,8 @@ public final class FlameGraph {
 			      r.setAttribute('class', 'f');
 			      r.setAttribute('fill', marking ? (hit ? '#ffb347' : 'hsl(248 18% 24%)') : fill(node));
 			      g.appendChild(r);
-			      // the heat stripe: how much of this frame's width is spent in the frame itself
-			      var own = node.si || node === root || node.f.key === 'thread' ? 0 : span * selfWeight(node) / node.w;
+			      // the heat stripe: how much of this frame's width is work in the frame itself
+			      var own = node === root || node.f.key === 'thread' ? 0 : span * busySelf(node) / node.w;
 			      if (!marking && own >= 1) {
 			        var h = document.createElementNS(NS, 'rect');
 			        h.setAttribute('class', 'heat');
@@ -836,7 +838,8 @@ public final class FlameGraph {
 			    var sums = {}, idle = 0;
 			    (function walk(n) {
 			      if (n !== root) {
-			        if (n.si) idle += n.s; else sums[n.f.key] = (sums[n.f.key] || 0) + n.s;
+			        idle += n.si;
+			        sums[n.f.key] = (sums[n.f.key] || 0) + n.s - n.si;
 			      }
 			      (n.c || []).forEach(walk);
 			    })(root);
@@ -921,7 +924,7 @@ public final class FlameGraph {
 			    while (n.c) {
 			      var best = null;
 			      for (var i = 0; i < n.c.length; i++) if (n.c[i].w > 0 && (!best || n.c[i].w > best.w)) best = n.c[i];
-			      if (!best || best.w < n.s || best.w * 4 < total) break;
+			      if (!best || best.w < selfWeight(n) || best.w * 4 < total) break;
 			      n = best;
 			      path.push(n);
 			    }
@@ -963,9 +966,9 @@ public final class FlameGraph {
 			    var self = {};
 			    (function walk(node) {
 			      if (!(node.w > 0) || (node !== root && hidden[node.f.key])) return;
-			      if (node !== root && !node.si && node.f.key !== 'thread' && selfWeight(node) > 0) {
+			      if (node !== root && node.f.key !== 'thread' && busySelf(node) > 0) {
 			        var to = credited(node).n;
-			        self[to] = (self[to] || 0) + node.s;
+			        self[to] = (self[to] || 0) + busySelf(node);
 			      }
 			      (node.c || []).forEach(walk);
 			    })(root);

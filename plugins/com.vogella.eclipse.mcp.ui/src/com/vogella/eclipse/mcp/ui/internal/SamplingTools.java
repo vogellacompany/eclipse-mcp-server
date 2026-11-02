@@ -116,7 +116,7 @@ public final class SamplingTools {
 
 		@Override
 		public String getDescription() {
-			return "Stops a sampling session and returns the aggregated result: the frames where the time was actually spent, the frames most often present on the stack, and the samples merged into one call tree. Frames present on every sample are listed once under onEveryStack rather than in topByPresence, since they are the trunk and not a finding. In the tree, a run of frames that each have one child with the same count is folded into 'chain' on the first of them, so the launcher and event loop boilerplate is one line rather than forty nested objects. Samples deeper than maxDepth lose their outermost frames; the tree is then rooted at the outermost frame the truncated samples still share and says so under truncatedNote. The raw samples are not returned unless asked for, because a hundred samples of seventy frames is seven thousand lines. byThread lists only the threads that contributed a sample the answer is about, with threadsSampled, threadsListed and threadsOmitted beside it; pass includeThreads for all of them. Without frameFilter each byThread entry adds up: samples is kept (what the tree holds) plus idleExcluded plus serverExcluded. Under a frameFilter samples still counts all of the thread's stacks while those three count only the ones with the frame, and what is missing across all threads is samplesWithoutTheFilteredFrame. Threads that were parked or waiting are excluded by default and counted in idleSamplesExcluded, split into idleByState (WAITING or TIMED_WAITING) and idleByFrame (RUNNABLE but in a wait, such as a native event loop), with the waits under idleFrames. nothingBusy is true when under one thread in twenty was working on average, and nothingBusyNote then says so, in which case topBySelfTime holds crumbs and names no culprit. The answer says so if sampling stopped early because its tick budget ran out."; //$NON-NLS-1$
+			return "Stops a sampling session and returns the aggregated result: the frames where the time was actually spent, the frames most often present on the stack, and the samples merged into one call tree. Frames present on every sample are listed once under onEveryStack rather than in topByPresence, since they are the trunk and not a finding. In the tree, a run of frames that each have one child with the same count is folded into 'chain' on the first of them, so the launcher and event loop boilerplate is one line rather than forty nested objects. Samples deeper than maxDepth lose their outermost frames; the tree is then rooted at the outermost frame the truncated samples still share and says so under truncatedNote. The raw samples are not returned unless asked for, because a hundred samples of seventy frames is seven thousand lines. byThread lists only the threads that contributed a sample the answer is about, with threadsSampled, threadsListed and threadsOmitted beside it; pass includeThreads for all of them. Without frameFilter each byThread entry adds up: samples is kept (what the tree holds) plus idleExcluded plus serverExcluded. Under a frameFilter samples still counts all of the thread's stacks while those three count only the ones with the frame, and what is missing across all threads is samplesWithoutTheFilteredFrame. Threads that were parked or waiting are excluded by default and counted in idleSamplesExcluded, split into idleByState (WAITING or TIMED_WAITING) and idleByFrame (RUNNABLE but in a wait, such as a native event loop), with the waits under idleFrames. idleSamples and serverSamplesExcluded are only comparable within one includeIdleThreads setting, since a parked stack on a server thread counts as idle with it off and as the server's with it on. nothingBusy is true when under one thread in twenty was working on average, and nothingBusyNote then says so, in which case topBySelfTime holds crumbs and names no culprit. The answer says so if sampling stopped early because its tick budget ran out."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -161,16 +161,17 @@ public final class SamplingTools {
 			}
 			boolean includeIdle = args.getBoolean("includeIdleThreads", false); //$NON-NLS-1$
 			String frameFilter = args.getString("frameFilter"); //$NON-NLS-1$
-			JsonObject result = SamplingRegistry.aggregate(session, args.getInt("topMethods", 15, 1, 200), //$NON-NLS-1$
+			SamplingRegistry.Selection selection = SamplingRegistry.select(session, includeIdle, frameFilter,
+					args.getBoolean("includeMcpFrames", false)); //$NON-NLS-1$
+			JsonObject result = SamplingRegistry.aggregate(selection, args.getInt("topMethods", 15, 1, 200), //$NON-NLS-1$
 					args.getInt("minSamples", 2, 1, 1000), //$NON-NLS-1$
-					args.getBoolean("includeRawSamples", false), includeIdle, frameFilter, //$NON-NLS-1$
-					args.getBoolean("includeThreads", false), args.getBoolean("includeMcpFrames", false)); //$NON-NLS-1$ //$NON-NLS-2$
+					args.getBoolean("includeRawSamples", false), //$NON-NLS-1$
+					args.getBoolean("includeThreads", false)); //$NON-NLS-1$
 			ProductFamily product = ProductFamily.of(arguments, true);
 			result.put("productFamily", product == null ? null : product.toJson()); //$NON-NLS-1$
 			boolean open = args.getBoolean("open", false); //$NON-NLS-1$
 			if (open || args.getBoolean("show", false)) { //$NON-NLS-1$
-				TracePage.publishSampling(session, includeIdle, frameFilter, args.getBoolean("includeMcpFrames", false), //$NON-NLS-1$
-						product, result, open);
+				TracePage.publishSampling(selection, product, result, open);
 			}
 			return McpToolResult.of(result.toString());
 		}

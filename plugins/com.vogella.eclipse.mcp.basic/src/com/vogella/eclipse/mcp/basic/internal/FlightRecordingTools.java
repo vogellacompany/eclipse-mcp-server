@@ -72,7 +72,13 @@ public final class FlightRecordingTools {
 				String dumpTo = args.getString("dumpOnExitTo"); //$NON-NLS-1$
 				Map<String, String> overrides = new TreeMap<>();
 				if (arguments != null && arguments.get("settingsOverrides") instanceof Map<?, ?> given) { //$NON-NLS-1$
-					given.forEach((key, value) -> overrides.put(String.valueOf(key), String.valueOf(value)));
+					for (Map.Entry<?, ?> entry : given.entrySet()) {
+						if (!(entry.getValue() instanceof String value)) {
+							return McpToolResult.error("settingsOverrides '%s' has to be a string, such as '1 ms' or 'true', and is %s." //$NON-NLS-1$
+									.formatted(entry.getKey(), entry.getValue()));
+						}
+						overrides.put(String.valueOf(entry.getKey()), value);
+					}
 				}
 				String id = FlightRecording.start(settings, overrides, maxAge, maxSize * 1024L * 1024L, duration,
 						args.getString("name"), dumpTo == null ? null : Path.of(dumpTo)); //$NON-NLS-1$

@@ -212,6 +212,7 @@ class FlameGraphTest {
 	@Test
 	void pooledThreadsShareOneBranch() {
 		assertEquals("Worker-N", FlameGraph.threadBranch("Worker-19: Indexing"));
+		assertEquals("pool-N", FlameGraph.threadBranch("pool-7"));
 		assertEquals("Start Level", FlameGraph.threadBranch("Start Level: Equinox Container: 49d75ff2"));
 		assertEquals("main", FlameGraph.threadBranch("main"));
 		assertEquals("unnamed", FlameGraph.threadBranch(null));

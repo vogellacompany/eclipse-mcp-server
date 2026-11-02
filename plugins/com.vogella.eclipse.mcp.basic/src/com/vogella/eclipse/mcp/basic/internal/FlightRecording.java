@@ -190,7 +190,11 @@ final class FlightRecording {
 		if (!keepRunning) {
 			// a recording with a duration has stopped by itself, and stopping it again throws
 			if (recording.getState() == RecordingState.RUNNING) {
-				recording.stop();
+				try {
+					recording.stop();
+				} catch (IllegalStateException e) {
+					// its duration ran out between the check and the stop
+				}
 			}
 			recording.close();
 			RECORDINGS.remove(id);
@@ -219,6 +223,7 @@ final class FlightRecording {
 		int allExecution = 0;
 		int allNative = 0;
 		boolean truncated = false;
+		Set<String> threadFiltersUsed = new HashSet<>();
 
 		try (RecordingFile recordingFile = new RecordingFile(file)) {
 			while (recordingFile.hasMoreEvents()) {
@@ -246,6 +251,8 @@ final class FlightRecording {
 				RecordedStackTrace stackTrace = event.getStackTrace();
 				List<RecordedFrame> frames = stackTrace == null ? List.of() : stackTrace.getFrames();
 				String thread = threadName(event);
+				// before every filter: a right name whose samples they all removed was still found
+				noteThreadFilters(thread, options.threadNames(), threadFiltersUsed);
 				if (!options.includeServer() && !frames.isEmpty()) {
 					List<String> classes = new ArrayList<>(frames.size());
 					for (RecordedFrame frame : frames) {
@@ -289,7 +296,6 @@ final class FlightRecording {
 		Map<String, long[]> byStack = new HashMap<>();
 		Map<String, long[]> hotMethods = new HashMap<>();
 		Map<String, Integer> matchedCounts = new HashMap<>();
-		Set<String> threadFiltersUsed = new HashSet<>();
 		List<StackAlignment.Stack> allocationStacks = new ArrayList<>();
 		TimeProfile time = new TimeProfile(options.time());
 		ThrownEvents thrown = new ThrownEvents();
@@ -324,7 +330,7 @@ final class FlightRecording {
 			if (sample) {
 				time.observe(event.thread(), execution, event.frames());
 			}
-			if (!threadSelected(event.thread(), options.threadNames(), threadFiltersUsed)) {
+			if (!threadSelected(event.thread(), options.threadNames())) {
 				if (sample) {
 					otherThreads++;
 				}
@@ -461,20 +467,15 @@ final class FlightRecording {
 		return thread.equalsIgnoreCase(pattern);
 	}
 
-	private static boolean threadSelected(String thread, List<String> patterns, Set<String> used) {
-		if (patterns == null) {
-			return true;
+	private static boolean threadSelected(String thread, List<String> patterns) {
+		return patterns == null
+				|| thread != null && patterns.stream().anyMatch(pattern -> threadMatches(thread, pattern));
+	}
+
+	private static void noteThreadFilters(String thread, List<String> patterns, Set<String> used) {
+		if (patterns != null && thread != null) {
+			patterns.stream().filter(pattern -> threadMatches(thread, pattern)).forEach(used::add);
 		}
-		if (thread == null) {
-			return false;
-		}
-		for (String pattern : patterns) {
-			if (threadMatches(thread, pattern)) {
-				used.add(pattern);
-				return true;
-			}
-		}
-		return false;
 	}
 
 	private static JsonObject rate(Map<String, String> settings, String type, int samples, long durationNanos) {

@@ -104,6 +104,20 @@ class FlightRecordingToolsTest {
 	}
 
 	@Test
+	void aSettingWhoseValueIsNotAStringIsRefusedByName() throws Exception {
+		Map<String, Object> absent = new HashMap<>();
+		absent.put("jdk.ExecutionSample#period", null);
+		for (Map<String, Object> overrides : List.of(absent, Map.<String, Object>of("jdk.ExecutionSample#period", Map.of("nested", "1 ms")),
+				Map.<String, Object>of("jdk.ExecutionSample#period", List.of("1 ms")),
+				Map.<String, Object>of("jdk.ExecutionSample#period", Integer.valueOf(1)))) {
+			McpToolResult result = TestFixture.call(START, Map.of("settingsOverrides", overrides));
+
+			assertTrue(result.isError(), result.text());
+			assertTrue(result.text().contains("jdk.ExecutionSample#period"), result.text());
+		}
+	}
+
+	@Test
 	void anEmptyTimeWindowAndAnUnknownWeightAreRefused() throws Exception {
 		McpToolResult window = TestFixture.call(STOP,
 				Map.of("file", "does-not-matter.jfr", "fromSeconds", Integer.valueOf(5), "toSeconds", Integer.valueOf(5)));
@@ -173,6 +187,12 @@ class FlightRecordingToolsTest {
 			Map<String, Object> beforeTime = (Map<String, Object>) beforeAnything.get("time");
 			assertTrue(((Number) beforeTime.get("eventsOutsideWindow")).intValue() > 0, "got " + beforeTime);
 			assertEquals(0, ((Number) beforeTime.get("samples")).intValue(), "got " + beforeTime);
+
+			// a right name whose samples the window or the frame filter removed was still found
+			assertEquals(List.of("no-such-thread"), readTime(file, Map.of("threadNames", List.of("jfr-test-busy", "no-such-thread"),
+					"toSeconds", Double.valueOf(0.000001))).get("threadNamesNotFound"));
+			assertEquals(List.of("no-such-thread"), readTime(file, Map.of("threadNames", List.of("jfr-test-busy", "no-such-thread"),
+					"frameFilter", "no.such.Frame")).get("threadNamesNotFound"));
 
 			Map<String, Object> whole = readTime(file, Map.of());
 			int wholeSamples = ((Number) whole.get("samples")).intValue();

@@ -19,20 +19,23 @@ public final class TracePage {
 	}
 
 	/** Publishes the page and records the outcome in {@code aggregate}. */
-	public static void publishSampling(SamplingRegistry.Session session, boolean includeIdle, String frameFilter,
-			boolean includeServer, ProductFamily product, JsonObject aggregate, boolean open) {
+	public static void publishSampling(SamplingRegistry.Selection selection, ProductFamily product, JsonObject aggregate,
+			boolean open) {
 		if (!TracePages.isAvailable()) {
 			aggregate.put("traceUrl", (Object) null).put("traceNote", TracePages.unavailable()); //$NON-NLS-1$ //$NON-NLS-2$
 			return;
 		}
-		FlameGraph.Builder flame = SamplingRegistry.flame(session, includeIdle, frameFilter, includeServer);
+		SamplingRegistry.Session session = selection.session();
+		boolean includeIdle = selection.includeIdle();
+		String frameFilter = selection.frameFilter();
+		FlameGraph.Builder flame = SamplingRegistry.flame(selection);
 		String title = "Sampling " + session.id(); //$NON-NLS-1$
-		long achieved = session.achievedIntervalMillis();
+		long achieved = selection.achievedIntervalMillis();
 		String interval = achieved == session.intervalMillis() ? "a %d ms interval".formatted(Long.valueOf(achieved)) //$NON-NLS-1$
 				: "an achieved %d ms interval (%d ms requested)".formatted(Long.valueOf(achieved), //$NON-NLS-1$
 						Integer.valueOf(session.intervalMillis()));
 		String subtitle = "%d samples over %d ms at %s%s".formatted(Integer.valueOf(flame.stacks()), //$NON-NLS-1$
-				Long.valueOf(session.elapsedMillis()), interval,
+				Long.valueOf(selection.elapsedMillis()), interval,
 				frameFilter == null ? "" : ", only stacks containing '%s'".formatted(frameFilter)); //$NON-NLS-1$ //$NON-NLS-2$
 
 		List<FlameGraph.Table> tables = List.of(
@@ -47,11 +50,11 @@ public final class TracePage {
 
 		List<FlameGraph.Stat> stats = List.of(
 				new FlameGraph.Stat("Samples", String.valueOf(flame.stacks())), //$NON-NLS-1$
-				new FlameGraph.Stat("Ticks", String.valueOf(session.ticks())), //$NON-NLS-1$
-				new FlameGraph.Stat("Duration", session.elapsedMillis() + " ms"), //$NON-NLS-1$ //$NON-NLS-2$
+				new FlameGraph.Stat("Ticks", String.valueOf(selection.ticks())), //$NON-NLS-1$
+				new FlameGraph.Stat("Duration", selection.elapsedMillis() + " ms"), //$NON-NLS-1$ //$NON-NLS-2$
 				new FlameGraph.Stat("Achieved interval", achieved + " ms"), //$NON-NLS-1$ //$NON-NLS-2$
 				new FlameGraph.Stat("Distinct frames", String.valueOf(flame.topTotal(Integer.MAX_VALUE).size()))); //$NON-NLS-1$
-		String warning = session.intervalWarning();
+		String warning = selection.intervalWarning();
 		String url = TracePages.publish(title,
 				FlameGraph.page(new FlameGraph.Spec(title, subtitle, "samples", flame, tables, note, stats, false, //$NON-NLS-1$
 						warning == null ? List.of() : List.of(warning), product, includeIdle)));

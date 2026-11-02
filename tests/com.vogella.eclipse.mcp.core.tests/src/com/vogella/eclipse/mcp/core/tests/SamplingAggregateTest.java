@@ -165,7 +165,7 @@ class SamplingAggregateTest {
 	}
 
 	private static Map<String, Object> answer(SamplingRegistry.Session session, boolean includeThreads) throws Exception {
-		return TestFixture.parse(SamplingRegistry.aggregate(session, 10, 1, false, false, null, includeThreads, false).toString());
+		return TestFixture.parse(SamplingRegistry.aggregate(SamplingRegistry.select(session, false, null, false), 10, 1, false, includeThreads).toString());
 	}
 
 	private static int number(Map<String, Object> map, String key) {
@@ -216,7 +216,7 @@ class SamplingAggregateTest {
 	@SuppressWarnings("unchecked")
 	void includingIdleStacksCountsOnlyThoseThatSurviveTheServerVerdict() throws Exception {
 		Map<String, Object> answer = TestFixture
-				.parse(SamplingRegistry.aggregate(session(idleIde(), 150), 10, 1, false, true, null, true, false).toString());
+				.parse(SamplingRegistry.aggregate(SamplingRegistry.select(session(idleIde(), 150), true, null, false), 10, 1, false, true).toString());
 
 		assertEquals(150, number(answer, "serverSamplesExcluded"), "mcp-jetty's parked selector, got " + answer);
 		assertEquals(750, number(answer, "samples"));
@@ -237,7 +237,7 @@ class SamplingAggregateTest {
 	@SuppressWarnings("unchecked")
 	void underAFilterByThreadStillCountsAllOfAThreadsSamples() throws Exception {
 		Map<String, Object> answer = TestFixture
-				.parse(SamplingRegistry.aggregate(session(idleIde(), 150), 10, 1, false, false, "DispatchMessage", true, false).toString());
+				.parse(SamplingRegistry.aggregate(SamplingRegistry.select(session(idleIde(), 150), false, "DispatchMessage", false), 10, 1, false, true).toString());
 
 		Map<String, Object> main = thread(answer, "main");
 		assertEquals(150, number(main, "samples"));
@@ -289,7 +289,7 @@ class SamplingAggregateTest {
 	@Test
 	void aFilterIsNoVerdictOnTheWholeIde() throws Exception {
 		Map<String, Object> answer = TestFixture
-				.parse(SamplingRegistry.aggregate(session(idleIde(), 150), 10, 1, false, false, "DispatchMessage", false, false).toString());
+				.parse(SamplingRegistry.aggregate(SamplingRegistry.select(session(idleIde(), 150), false, "DispatchMessage", false), 10, 1, false, false).toString());
 		assertEquals(Boolean.FALSE, answer.get("nothingBusy"), "got " + answer);
 	}
 
@@ -331,13 +331,17 @@ class SamplingAggregateTest {
 	}
 
 	private static String page(SamplingRegistry.Session session, boolean includeIdle, ProductFamily product) {
+		return page(SamplingRegistry.select(session, includeIdle, null, false), product);
+	}
+
+	private static String page(SamplingRegistry.Selection selection, ProductFamily product) {
 		AtomicReference<String> published = new AtomicReference<>();
 		TracePages.setPublisher((title, html) -> {
 			published.set(html);
 			return "http://localhost/" + title;
 		});
 		try {
-			TracePage.publishSampling(session, includeIdle, null, false, product, new JsonObject(), false);
+			TracePage.publishSampling(selection, product, new JsonObject(), false);
 		} finally {
 			TracePages.setPublisher(null);
 		}
@@ -384,10 +388,51 @@ class SamplingAggregateTest {
 	}
 
 	@Test
-	void poolThreadsAndRunningJobsShareOneBranch() {
-		assertEquals("Worker-N", SamplingRegistry.threadGroup("Worker-19: Indexing"));
-		assertEquals("pool-N", SamplingRegistry.threadGroup("pool-7"));
-		assertEquals("main", SamplingRegistry.threadGroup("main"));
-		assertEquals("unnamed", SamplingRegistry.threadGroup(null));
+	void aFrameThatBothWorksAndWaitsReachesThePageWithBothWeights() {
+		StackTraceElement[] dispatch = stack("org.eclipse.swt.widgets.Display.readAndDispatch", "org.jkiss.App.start");
+		List<Sample> samples = new ArrayList<>();
+		for (int i = 0; i < 3; i++) {
+			samples.add(new Sample(1, "main", Thread.State.RUNNABLE, dispatch));
+		}
+		samples.add(new Sample(1, "main", Thread.State.TIMED_WAITING, dispatch));
+
+		String html = page(session(samples, 4), true, null);
+
+		assertTrue(html.contains("{\"n\":\"org.eclipse.swt.widgets.Display.readAndDispatch\",\"v\":4,\"i\":1}"), html);
+	}
+
+	/** A live session goes on sampling between the views of one call, which must not make them differ. */
+	@Test
+	void theAnswerAndThePageOfOneCallDescribeOneSetOfSamples() throws Exception {
+		long[] self = { Thread.currentThread().threadId() };
+		SamplingRegistry.Session live = SamplingRegistry.getInstance().start(mx -> self, 10, 5000, 80);
+		try {
+			awaitTicks(live, 2);
+			SamplingRegistry.Selection selection = SamplingRegistry.select(live, true, null, true);
+			int samples = selection.samples().size();
+			awaitTicks(live, selection.ticks() + 3);
+
+			Map<String, Object> answer = TestFixture.parse(SamplingRegistry.aggregate(selection, 10, 1, false, true).toString());
+			assertEquals(samples, number(answer, "samples"), "got " + answer);
+			assertEquals(selection.ticks(), number(answer, "ticks"), "got " + answer);
+			JsonObject counts = new JsonObject();
+			SamplingRegistry.counts(selection, counts);
+			assertEquals(samples, number(TestFixture.parse(counts.toString()), "samples"), "got " + counts);
+			assertEquals(samples, SamplingRegistry.flame(selection).stacks());
+			String html = page(selection, null);
+			assertTrue(html.contains(samples + " samples over " + selection.elapsedMillis() + " ms"), html);
+			assertTrue(SamplingRegistry.select(live, true, null, true).samples().size() > samples,
+					"the session has to have moved on for this to prove anything");
+		} finally {
+			TestFixture.call("eclipse_stop_sampling", Map.of("sessionId", live.id()));
+		}
+	}
+
+	private static void awaitTicks(SamplingRegistry.Session session, int ticks) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+		while (session.ticks() < ticks) {
+			assertTrue(System.nanoTime() < deadline, "the session did not reach " + ticks + " ticks in 30 s");
+			Thread.sleep(5);
+		}
 	}
 }

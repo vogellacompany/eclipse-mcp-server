@@ -207,14 +207,6 @@ public final class SamplingRegistry {
 				return rounds < 2 ? intervalMillis : Math.round((lastTickAt - firstTickAt) / (double) (rounds - 1));
 			}
 		}
-
-		/** What to tell a reader whose conclusions rest on the clock when it drifted, or null when it held. */
-		String intervalWarning() {
-			long achieved = achievedIntervalMillis();
-			return achieved <= intervalMillis * 1.2 ? null
-					: "Sampling could not keep the requested %d ms interval and achieved %d ms. Sample fewer threads or ask for a longer interval; note also that sampling itself slows the work being measured, measurably so at short intervals across many threads." //$NON-NLS-1$
-							.formatted(Integer.valueOf(intervalMillis), Long.valueOf(achieved));
-		}
 	}
 
 	public synchronized Session start(Function<ThreadMXBean, long[]> threadIds, int intervalMillis, int maxSamples, int maxDepth) {
@@ -253,9 +245,21 @@ public final class SamplingRegistry {
 		return latest;
 	}
 
-	/** The samples a set of options selects, so every view of a session picks the same ones. */
-	private static Selection select(Session session, boolean includeIdle, String frameFilter, boolean includeServer) {
-		List<Sample> everything = session.snapshot();
+	/**
+	 * The samples a set of options selects. Taken once per call and handed to every view of that call,
+	 * so that they describe one set of samples however far a live session has moved on.
+	 */
+	public static Selection select(Session session, boolean includeIdle, String frameFilter, boolean includeServer) {
+		List<Sample> everything;
+		int ticks;
+		long elapsed;
+		long achieved;
+		synchronized (session.samples) {
+			everything = session.snapshot();
+			ticks = session.ticks();
+			elapsed = session.elapsedMillis();
+			achieved = session.achievedIntervalMillis();
+		}
 		List<Sample> all = everything;
 		int filtered = 0;
 		int serverDropped = 0;
@@ -317,8 +321,9 @@ public final class SamplingRegistry {
 				busy++;
 			}
 		}
-		return new Selection(everything, samples, idleByState + idleByFrame, idleByState, idleByFrame, waits, busy,
-				filtered, serverDropped, serverElided, fates);
+		return new Selection(session, includeIdle, frameFilter, includeServer, ticks, elapsed, achieved, everything,
+				samples, idleByState + idleByFrame, idleByState, idleByFrame, waits, busy, filtered, serverDropped,
+				serverElided, fates);
 	}
 
 	private static ServerFrames.Verdict serverVerdict(Sample sample, int maxDepth) {
@@ -336,65 +341,71 @@ public final class SamplingRegistry {
 		final Map<Long, Integer> server = new HashMap<>();
 	}
 
-	private record Selection(List<Sample> everything, List<Sample> samples, int idle, int idleByState, int idleByFrame,
-			Map<String, Integer> waits, int busy, int filtered, int serverDropped, int serverElided, Fates fates) {
+	/** What one call reads of a session, with the session's clock at that moment. */
+	public record Selection(Session session, boolean includeIdle, String frameFilter, boolean includeServer, int ticks,
+			long elapsedMillis, long achievedIntervalMillis, List<Sample> everything, List<Sample> samples, int idle,
+			int idleByState, int idleByFrame, Map<String, Integer> waits, int busy, int filtered, int serverDropped,
+			int serverElided, Fates fates) {
+
+		/** What to tell a reader whose conclusions rest on the clock when it drifted, or null when it held. */
+		String intervalWarning() {
+			int requested = session.intervalMillis();
+			return achievedIntervalMillis <= requested * 1.2 ? null
+					: "Sampling could not keep the requested %d ms interval and achieved %d ms. Sample fewer threads or ask for a longer interval; note also that sampling itself slows the work being measured, measurably so at short intervals across many threads." //$NON-NLS-1$
+							.formatted(Integer.valueOf(requested), Long.valueOf(achievedIntervalMillis));
+		}
 	}
 
 	/**
 	 * The selected samples merged into the tree a flame graph draws, weighted by
-	 * sample count. Built from the same selection the aggregate reports, so the
-	 * picture and the numbers beside it describe one set of samples.
+	 * sample count. Given the selection the answer reports, the picture and the
+	 * numbers beside it describe one set of samples.
 	 */
-	public static FlameGraph.Builder flame(Session session, boolean includeIdle, String frameFilter,
-			boolean includeServer) {
+	public static FlameGraph.Builder flame(Selection selection) {
 		FlameGraph.Builder builder = FlameGraph.builder();
-		Selection selection = select(session, includeIdle, frameFilter, includeServer);
-		for (Sample sample : align(selection.samples(), session.maxDepth()).samples()) {
+		for (Sample sample : align(selection.samples(), selection.session().maxDepth()).samples()) {
 			StackTraceElement[] stack = sample.stack();
 			List<String> frames = new ArrayList<>(stack.length + 1);
 			// the thread first, so each thread is a branch of its own rather than merged at Thread.run
-			frames.add(FlameGraph.THREAD_PREFIX + threadGroup(sample.threadName()));
+			frames.add(FlameGraph.THREAD_PREFIX + FlameGraph.threadBranch(sample.threadName()));
 			// outermost first, which is bottom up in the picture
 			for (int i = stack.length - 1; i >= 0; i--) {
 				frames.add(frame(stack[i]));
 			}
 			builder.add(frames, 1, waitOf(sample) != null);
 		}
-		return builder.quiet(quiet(session, selection, includeIdle, frameFilter));
+		return builder.quiet(quiet(selection));
 	}
 
 	/**
 	 * Says that nothing was busy, or null when something was. Measured per tick, since a tick
 	 * visits every thread, and not under a frame filter, which is a question of its own.
 	 */
-	private static String quiet(Session session, Selection selection, boolean includeIdle, String frameFilter) {
-		if (frameFilter != null || selection.idle() == 0
-				|| !IdleFrames.nothingBusy(selection.busy(), session.ticks())) {
+	private static String quiet(Selection selection) {
+		if (selection.frameFilter() != null || selection.idle() == 0
+				|| !IdleFrames.nothingBusy(selection.busy(), selection.ticks())) {
 			return null;
 		}
 		List<String> waits = selection.waits().entrySet().stream()
 				.sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry::getKey)).limit(3)
 				.map(entry -> IdleFrames.brief(entry.getKey())).toList();
 		return "Nothing was busy. %d stacks over %d ticks were working, on average %s threads, and %d were threads waiting, mostly in %s. So no frame is named as a culprit.%s" //$NON-NLS-1$
-				.formatted(Integer.valueOf(selection.busy()), Integer.valueOf(session.ticks()),
-						String.format(Locale.ROOT, "%.2f", Double.valueOf(selection.busy() / (double) session.ticks())), //$NON-NLS-1$
+				.formatted(Integer.valueOf(selection.busy()), Integer.valueOf(selection.ticks()),
+						String.format(Locale.ROOT, "%.2f", Double.valueOf(selection.busy() / (double) selection.ticks())), //$NON-NLS-1$
 						Integer.valueOf(selection.idle()), String.join(", ", waits), //$NON-NLS-1$
-						includeIdle ? "" : " To look at a stall, whose threads are parked, include the idle threads."); //$NON-NLS-1$ //$NON-NLS-2$
+						selection.includeIdle() ? "" : " To look at a stall, whose threads are parked, include the idle threads."); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	/** The counts of a selection, for an answer that draws the samples rather than aggregating them. */
-	public static void counts(Session session, boolean includeIdle, String frameFilter, boolean includeServer,
-			JsonObject into) {
-		Selection selection = select(session, includeIdle, frameFilter, includeServer);
-		counts(session, selection, includeIdle, frameFilter, includeServer, into);
+	public static void counts(Selection selection, JsonObject into) {
+		putCounts(selection, into);
 		into.put("samples", Integer.valueOf(selection.samples().size())); //$NON-NLS-1$
 	}
 
-	private static void counts(Session session, Selection selection, boolean includeIdle, String frameFilter,
-			boolean includeServer, JsonObject into) {
+	private static void putCounts(Selection selection, JsonObject into) {
 		into.put("busySamples", Integer.valueOf(selection.busy())) //$NON-NLS-1$
 				.put("idleSamples", Integer.valueOf(selection.idle())) //$NON-NLS-1$
-				.put("idleSamplesExcluded", Integer.valueOf(includeIdle ? 0 : selection.idle())) //$NON-NLS-1$
+				.put("idleSamplesExcluded", Integer.valueOf(selection.includeIdle() ? 0 : selection.idle())) //$NON-NLS-1$
 				.put("idleByState", Integer.valueOf(selection.idleByState())) //$NON-NLS-1$
 				.put("idleByFrame", Integer.valueOf(selection.idleByFrame())); //$NON-NLS-1$
 		JsonArray waits = new JsonArray();
@@ -405,16 +416,16 @@ public final class SamplingRegistry {
 		into.put("idleFrames", waits) //$NON-NLS-1$
 				.put("idleFramesTotal", Integer.valueOf(selection.waits().size())) //$NON-NLS-1$
 				.put("idleFramesTruncated", Boolean.valueOf(selection.waits().size() > IDLE_FRAMES)); //$NON-NLS-1$
-		String quiet = quiet(session, selection, includeIdle, frameFilter);
+		String quiet = quiet(selection);
 		into.put("nothingBusy", Boolean.valueOf(quiet != null)); //$NON-NLS-1$
 		if (quiet != null) {
 			into.put("nothingBusyNote", quiet); //$NON-NLS-1$
 		}
-		if (!includeServer) {
+		if (!selection.includeServer()) {
 			into.put("serverSamplesExcluded", Integer.valueOf(selection.serverDropped())) //$NON-NLS-1$
 					.put("serverFramesElidedFrom", Integer.valueOf(selection.serverElided())); //$NON-NLS-1$
 		}
-		if (frameFilter != null) {
+		if (selection.frameFilter() != null) {
 			into.put("samplesWithoutTheFilteredFrame", Integer.valueOf(selection.filtered())); //$NON-NLS-1$
 		}
 	}
@@ -429,21 +440,21 @@ public final class SamplingRegistry {
 	 * pump and the reference handler, none of which is ever the answer to the
 	 * question a caller is asking.
 	 */
-	public static JsonObject aggregate(Session session, int topMethods, int minSamples, boolean includeRaw,
-			boolean includeIdle, String frameFilter, boolean includeAllThreads, boolean includeServer) {
-		Selection selection = select(session, includeIdle, frameFilter, includeServer);
+	public static JsonObject aggregate(Selection selection, int topMethods, int minSamples, boolean includeRaw,
+			boolean includeAllThreads) {
+		Session session = selection.session();
 		List<Sample> everything = selection.everything();
 		List<Sample> samples = selection.samples();
 		int idle = selection.idle();
 		JsonArray threads = byThread(everything, selection.fates(), session, includeAllThreads);
 		JsonObject result = new JsonObject().put("sessionId", session.id()) //$NON-NLS-1$
 				.put("running", session.running()) //$NON-NLS-1$
-				.put("ticks", session.ticks()) //$NON-NLS-1$
+				.put("ticks", selection.ticks()) //$NON-NLS-1$
 				.put("samples", samples.size()); //$NON-NLS-1$
-		counts(session, selection, includeIdle, frameFilter, includeServer, result);
+		putCounts(selection, result);
 		result.put("intervalMillis", session.intervalMillis()) //$NON-NLS-1$
-				.put("achievedIntervalMillis", Long.valueOf(session.achievedIntervalMillis())) //$NON-NLS-1$
-				.put("elapsedMillis", session.elapsedMillis()) //$NON-NLS-1$
+				.put("achievedIntervalMillis", Long.valueOf(selection.achievedIntervalMillis())) //$NON-NLS-1$
+				.put("elapsedMillis", selection.elapsedMillis()) //$NON-NLS-1$
 				.put("byThread", threads); //$NON-NLS-1$
 		int listed = threads.size();
 		int sampled = contributing(everything).size();
@@ -455,17 +466,17 @@ public final class SamplingRegistry {
 					"byThread lists only the threads that contributed a sample this answer is about; %d parked or filtered ones are counted above and left out, because their state counts were most of the answer and said nothing about where the time went. Pass includeThreads true for all of them." //$NON-NLS-1$
 							.formatted(Integer.valueOf(sampled - listed)));
 		}
-		String intervalWarning = session.intervalWarning();
+		String intervalWarning = selection.intervalWarning();
 		if (intervalWarning != null) {
 			result.put("intervalWarning", intervalWarning); //$NON-NLS-1$
 		}
-		if (frameFilter != null) {
-			result.put("frameFilter", frameFilter); //$NON-NLS-1$
+		if (selection.frameFilter() != null) {
+			result.put("frameFilter", selection.frameFilter()); //$NON-NLS-1$
 		}
 		if (session.stoppedByBudget()) {
 			result.put("note", //$NON-NLS-1$
 					"Sampling stopped on its own after %d ticks because maxSamples was reached, %d ms in. If that is shorter than the operation you meant to profile, raise maxSamples." //$NON-NLS-1$
-							.formatted(session.ticks(), session.elapsedMillis()));
+							.formatted(selection.ticks(), selection.elapsedMillis()));
 		}
 		if (samples.isEmpty()) {
 			String empty = idle > 0
@@ -810,15 +821,6 @@ public final class SamplingRegistry {
 			}
 			return array;
 		}
-	}
-
-	/** Pool threads differ only by a number, and a branch per worker would split one job into many. */
-	public static String threadGroup(String name) {
-		if (name == null) {
-			return "unnamed"; //$NON-NLS-1$
-		}
-		// Eclipse workers append the running job, "Worker-19: Indexing", which is not the thread
-		return name.replaceAll(":.*$", "").replaceAll("([-# ])\\d+$", "$1N").strip(); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 	}
 
 	private static String frame(StackTraceElement element) {

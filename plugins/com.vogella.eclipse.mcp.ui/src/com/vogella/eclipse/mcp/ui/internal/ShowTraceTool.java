@@ -61,16 +61,16 @@ public final class ShowTraceTool implements IMcpTool {
 		}
 		boolean includeIdle = args.getBoolean("includeIdleThreads", false); //$NON-NLS-1$
 		String frameFilter = args.getString("frameFilter"); //$NON-NLS-1$
+		SamplingRegistry.Selection selection = SamplingRegistry.select(session, includeIdle, frameFilter,
+				args.getBoolean("includeMcpFrames", false)); //$NON-NLS-1$
 		JsonObject answer = new JsonObject().put("sessionId", session.id()) //$NON-NLS-1$
 				.put("running", Boolean.valueOf(session.running())) //$NON-NLS-1$
-				.put("ticks", Integer.valueOf(session.ticks())); //$NON-NLS-1$
-		boolean includeServer = args.getBoolean("includeMcpFrames", false); //$NON-NLS-1$
+				.put("ticks", Integer.valueOf(selection.ticks())); //$NON-NLS-1$
 		// the same counts eclipse_stop_sampling reports, so the two answers can be compared
-		SamplingRegistry.counts(session, includeIdle, frameFilter, includeServer, answer);
+		SamplingRegistry.counts(selection, answer);
 		ProductFamily product = ProductFamily.of(arguments, true);
 		answer.put("productFamily", product == null ? null : product.toJson()); //$NON-NLS-1$
-		TracePage.publishSampling(session, includeIdle, frameFilter, includeServer, product, answer,
-				args.getBoolean("open", false)); //$NON-NLS-1$
+		TracePage.publishSampling(selection, product, answer, args.getBoolean("open", false)); //$NON-NLS-1$
 		return McpToolResult.of(answer.toString());
 	}
 }
