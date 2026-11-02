@@ -17,7 +17,7 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
  * different questions. Both rank by the nearest non-JDK frame, because the JDK frames a
  * recording ends in, such as {@code Arrays.copyOf}, name no culprit.
  */
-final class FlightTracePage {
+public final class FlightTracePage {
 
 	private FlightTracePage() {
 	}
@@ -43,21 +43,22 @@ final class FlightTracePage {
 				table("Allocated below the frame", "Estimated bytes", flame.topTotal(15), FlameGraph::bytes)); //$NON-NLS-1$ //$NON-NLS-2$
 		publish("Allocation " + name, //$NON-NLS-1$
 				"%s, allocation stacks WEIGHTED BY ESTIMATED BYTES%s".formatted(source, filters), //$NON-NLS-1$
-				"bytes", flame, tables, note, stats, product, answer, open); //$NON-NLS-1$
+				"bytes", flame, tables, note, stats, false, product, answer, open); //$NON-NLS-1$
 	}
 
 	/** Publishes the time page and records the URL, or why there is none, in {@code answer}. */
-	static void publishTime(String name, String source, String filters, boolean includeIdle, FlameGraph.Builder flame,
+	public static void publishTime(String name, String source, String filters, boolean includeIdle, FlameGraph.Builder flame,
 			ProductFamily product, JsonObject answer, boolean open) {
 		answer.put("traceWeight", "time samples"); //$NON-NLS-1$ //$NON-NLS-2$
-		if (unavailable(flame, answer,
-				"No execution or native samples are left to draw. Check the time block of this answer: the filters or the idle exclusion may have removed them, or the recording's settings did not enable the samplers.")) { //$NON-NLS-1$
+		String empty = flame.quiet() != null ? flame.quiet()
+				: "No execution or native samples are left to draw. Check the time block of this answer: the filters or the idle exclusion may have removed them, or the recording's settings did not enable the samplers."; //$NON-NLS-1$
+		if (unavailable(flame, answer, empty)) {
 			return;
 		}
 		String note = "The width of a frame is how many execution and native samples had it on the stack, so it is time spent below that frame rather than in it. " //$NON-NLS-1$
 				+ "The list beside the graph credits each sample to its nearest non-JDK frame. " //$NON-NLS-1$
 				+ "Click a frame to zoom into it and Reset zoom to come back. " //$NON-NLS-1$
-				+ (includeIdle ? "Parked and waiting stacks are INCLUDED and hidden until the Idle chip is clicked." //$NON-NLS-1$
+				+ (includeIdle ? "Parked and waiting stacks are INCLUDED, as asked; the Idle chip hides them." //$NON-NLS-1$
 						: "Parked and waiting stacks are excluded, which is the default; re-read with includeIdle to see them.") //$NON-NLS-1$
 				+ " Samples are not time: the JVM takes few native samples per tick across all threads, so compare threads with care."; //$NON-NLS-1$
 		List<FlameGraph.Stat> stats = List.of(new FlameGraph.Stat("Samples", String.valueOf(flame.stacks())), //$NON-NLS-1$
@@ -66,7 +67,7 @@ final class FlightTracePage {
 				table("Where the time was spent", "Samples", flame.topSelf(15), String::valueOf), //$NON-NLS-1$ //$NON-NLS-2$
 				table("Most often on the stack", "Samples", flame.topTotal(15), String::valueOf)); //$NON-NLS-1$ //$NON-NLS-2$
 		publish("Time " + name, "%s, stacks WEIGHTED BY TIME SAMPLES%s".formatted(source, filters), //$NON-NLS-1$ //$NON-NLS-2$
-				"samples", flame, tables, note, stats, product, answer, open); //$NON-NLS-1$
+				"samples", flame, tables, note, stats, includeIdle, product, answer, open); //$NON-NLS-1$
 	}
 
 	private static boolean unavailable(FlameGraph.Builder flame, JsonObject answer, String empty) {
@@ -82,10 +83,10 @@ final class FlightTracePage {
 	}
 
 	private static void publish(String title, String subtitle, String unit, FlameGraph.Builder flame,
-			List<FlameGraph.Table> tables, String note, List<FlameGraph.Stat> stats, ProductFamily product,
-			JsonObject answer, boolean open) {
+			List<FlameGraph.Table> tables, String note, List<FlameGraph.Stat> stats, boolean idleShown,
+			ProductFamily product, JsonObject answer, boolean open) {
 		String url = TracePages.publish(title, FlameGraph.page(
-				new FlameGraph.Spec(title, subtitle, unit, flame, tables, note, stats, true, List.of(), product)));
+				new FlameGraph.Spec(title, subtitle, unit, flame, tables, note, stats, true, List.of(), product, idleShown)));
 		answer.put("traceUrl", url); //$NON-NLS-1$
 		if (open) {
 			String failed = TracePages.open(url);

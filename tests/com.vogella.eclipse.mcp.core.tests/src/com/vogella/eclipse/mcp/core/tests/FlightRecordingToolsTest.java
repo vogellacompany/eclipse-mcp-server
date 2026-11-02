@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -124,10 +125,13 @@ class FlightRecordingToolsTest {
 
 		Thread busy = new Thread(FlightRecordingToolsTest::spinAndThrow, "jfr-test-busy");
 		Thread other = new Thread(FlightRecordingToolsTest::spin, "other-busy");
+		Thread server = new Thread(FlightRecordingToolsTest::spin, "mcp-jfr-test");
 		other.start();
+		server.start();
 		busy.start();
 		busy.join();
 		other.join();
+		server.join();
 		Path file = Files.createTempFile("mcp-flight-test", ".jfr");
 		try {
 			Map<String, Object> stopped = TestFixture.callAndParse(STOP,
@@ -135,7 +139,14 @@ class FlightRecordingToolsTest {
 			Map<String, Object> time = (Map<String, Object>) stopped.get("time");
 			Map<String, Object> sampling = (Map<String, Object>) ((Map<String, Object>) time.get("sampling")).get("execution");
 			assertEquals("10 ms", sampling.get("period"), "the override has to reach the recording, got " + sampling);
-			assertTrue(((Number) time.get("recordingSeconds")).doubleValue() > 0, "got " + time);
+			double recordingSeconds = ((Number) time.get("recordingSeconds")).doubleValue();
+			assertTrue(recordingSeconds > 0, "got " + time);
+
+			assertTrue(((Number) stopped.get("serverEventsExcluded")).intValue() > 0, "got " + stopped);
+			Map<String, Object> withServer = TestFixture.callAndParse(STOP,
+					Map.of("file", file.toString(), "includeMcpFrames", Boolean.TRUE));
+			assertEquals(time.get("sampling"), ((Map<String, Object>) withServer.get("time")).get("sampling"),
+					"the achieved rate is the JVM's, whoever the samples belong to");
 
 			Map<String, Object> selected = TestFixture.callAndParse(STOP,
 					Map.of("file", file.toString(), "threadNames", List.of("JFR-TEST-*", "no-such-thread")));
@@ -163,6 +174,26 @@ class FlightRecordingToolsTest {
 			assertTrue(((Number) beforeTime.get("eventsOutsideWindow")).intValue() > 0, "got " + beforeTime);
 			assertEquals(0, ((Number) beforeTime.get("samples")).intValue(), "got " + beforeTime);
 
+			Map<String, Object> whole = readTime(file, Map.of());
+			int wholeSamples = ((Number) whole.get("samples")).intValue();
+
+			Map<String, Object> onlyBusy = readTime(file, Map.of("threadNames", List.of("JFR-TEST-*")));
+			assertEquals(observed(whole), ((Number) onlyBusy.get("samples")).intValue()
+					+ ((Number) onlyBusy.get("idleExcluded")).intValue()
+					+ ((Number) onlyBusy.get("eventsOnOtherThreads")).intValue(),
+					"only samples may count as on another thread, got " + onlyBusy);
+
+			Map<String, Object> secondHalf = readTime(file, Map.of("fromSeconds", Double.valueOf(recordingSeconds / 2)));
+			int outside = ((Number) secondHalf.get("eventsOutsideWindow")).intValue();
+			assertTrue(outside > 0, "got " + secondHalf);
+			assertTrue(((Number) secondHalf.get("samples")).intValue() < wholeSamples, "got " + secondHalf);
+			assertEquals(observed(whole), observed(secondHalf) + outside,
+					"only samples may count as outside the window, got " + secondHalf);
+
+			Map<String, Object> onlyNative = readTime(file, Map.of("sampleKind", "native"));
+			assertTrue(((Number) onlyNative.get("otherKindExcluded")).intValue() > 0, "got " + onlyNative);
+			assertEquals(0, ((Number) onlyNative.get("execution")).intValue(), "got " + onlyNative);
+
 			Map<String, Object> timePage = TestFixture.callAndParse(STOP,
 					Map.of("file", file.toString(), "show", Boolean.TRUE, "flameWeight", "time"));
 			assertEquals("time samples", timePage.get("traceWeight"));
@@ -171,6 +202,25 @@ class FlightRecordingToolsTest {
 		} finally {
 			Files.deleteIfExists(file);
 		}
+	}
+
+	/** The time block of one read of a file, with every thread listed so that byThread can be summed. */
+	@SuppressWarnings("unchecked")
+	private static Map<String, Object> readTime(Path file, Map<String, Object> filters) throws Exception {
+		Map<String, Object> arguments = new HashMap<>(filters);
+		arguments.put("file", file.toString());
+		arguments.put("topThreads", Integer.valueOf(200));
+		return (Map<String, Object>) TestFixture.callAndParse(STOP, arguments).get("time");
+	}
+
+	/** Every sample byThread saw, which is before the thread and kind filters. */
+	@SuppressWarnings("unchecked")
+	private static int observed(Map<String, Object> time) {
+		int samples = 0;
+		for (Map<String, Object> thread : (List<Map<String, Object>>) time.get("byThread")) {
+			samples += ((Number) thread.get("execution")).intValue() + ((Number) thread.get("native")).intValue();
+		}
+		return samples;
 	}
 
 	private static final String MESSAGE = "thrown by the flight recording test";

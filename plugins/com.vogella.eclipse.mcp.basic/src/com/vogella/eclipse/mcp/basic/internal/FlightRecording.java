@@ -64,7 +64,7 @@ final class FlightRecording {
 
 	private static final String[] NO_FRAMES = {};
 
-	private static final String TIME_NOTE = "Samples are not time. The JVM takes few native samples per tick across ALL threads, so a thread's native count falls when others sit in native code, and a short period gives fewer samples than it asks for; compare perSecond under sampling with the period. A thread filter selects samples and cannot add any."; //$NON-NLS-1$
+	private static final String TIME_NOTE = "Samples are not time. The JVM takes few native samples per tick across ALL threads, so a thread's native count falls when others sit in native code, and a short period gives fewer samples than it asks for; compare perSecond under sampling with the period. A thread filter selects samples and cannot add any. eventsOutsideWindow and eventsOnOtherThreads count samples, not other events."; //$NON-NLS-1$
 
 	private static final Map<String, Recording> RECORDINGS = new ConcurrentHashMap<>();
 
@@ -216,6 +216,8 @@ final class FlightRecording {
 		int read = 0;
 		int serverDropped = 0;
 		int serverElided = 0;
+		int allExecution = 0;
+		int allNative = 0;
 		boolean truncated = false;
 
 		try (RecordingFile recordingFile = new RecordingFile(file)) {
@@ -231,6 +233,12 @@ final class FlightRecording {
 				long start = nanos(event.getStartTime());
 				first = Math.min(first, start);
 				last = Math.max(last, nanos(event.getEndTime()));
+				// before the server's verdict: perSecond is the JVM's rate over every event's duration
+				if (EXECUTION_SAMPLE.equals(type)) {
+					allExecution++;
+				} else if (NATIVE_SAMPLE.equals(type)) {
+					allNative++;
+				}
 				if (ACTIVE_SETTING.equals(type)) {
 					activeSettings.add(new String[] { String.valueOf(event.getLong("id")), event.getString("name"), //$NON-NLS-1$ //$NON-NLS-2$
 							event.getString("value") }); //$NON-NLS-1$
@@ -289,8 +297,6 @@ final class FlightRecording {
 		int outsideWindow = 0;
 		int otherThreads = 0;
 		int otherKind = 0;
-		int allExecution = 0;
-		int allNative = 0;
 		long gcCount = 0;
 		long longestPauseNanos = 0;
 		long windowStart = options.fromSeconds() == null ? Long.MIN_VALUE : first + nanos(options.fromSeconds());
@@ -298,13 +304,10 @@ final class FlightRecording {
 		for (Seen event : seen) {
 			boolean sample = isSample(event.type());
 			boolean execution = EXECUTION_SAMPLE.equals(event.type());
-			if (execution) {
-				allExecution++;
-			} else if (sample) {
-				allNative++;
-			}
 			if (event.start() < windowStart || event.start() >= windowEnd) {
-				outsideWindow++;
+				if (sample) {
+					outsideWindow++;
+				}
 				continue;
 			}
 			// filter on the WHOLE stack and render afterwards: matching the rendered
@@ -322,7 +325,9 @@ final class FlightRecording {
 				time.observe(event.thread(), execution, event.frames());
 			}
 			if (!threadSelected(event.thread(), options.threadNames(), threadFiltersUsed)) {
-				otherThreads++;
+				if (sample) {
+					otherThreads++;
+				}
 				continue;
 			}
 			matched++;

@@ -10,10 +10,13 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import com.vogella.eclipse.mcp.basic.internal.FlightTracePage;
 import com.vogella.eclipse.mcp.basic.internal.ThrownEvents;
 import com.vogella.eclipse.mcp.basic.internal.TimeProfile;
 import com.vogella.eclipse.mcp.core.FlameGraph;
 import com.vogella.eclipse.mcp.core.IdleFrames;
+import com.vogella.eclipse.mcp.core.TracePages;
+import com.vogella.eclipse.mcp.core.json.JsonObject;
 
 /**
  * The aggregation over plain stacks, so that the counts can be asserted exactly, which a real
@@ -30,6 +33,55 @@ class TimeProfileTest {
 
 	private static TimeProfile profile(boolean includeIdle, int topMethods, int topThreads, int maxTreeNodes) {
 		return new TimeProfile(new TimeProfile.Limits(includeIdle, topMethods, topThreads, 1, maxTreeNodes));
+	}
+
+	@Test
+	void anAllIdleRecordingSaysNothingWasBusyInsteadOfSuspectingTheFilters() throws Exception {
+		TimeProfile profile = profile(false, 10, 10, 50);
+		for (int i = 0; i < 3; i++) {
+			add(profile, "main", false, EVENT_LOOP);
+		}
+		String quiet = String.valueOf(TestFixture.parse(profile.toJson().toString()).get("nothingBusyNote"));
+		assertTrue(quiet.startsWith("Nothing was busy"), quiet);
+
+		Map<String, Object> idle = publishedTime(FlameGraph.builder().quiet(quiet));
+		assertNull(idle.get("traceUrl"), "got " + idle);
+		assertEquals(quiet, idle.get("traceNote"));
+
+		Map<String, Object> empty = publishedTime(FlameGraph.builder());
+		assertTrue(String.valueOf(empty.get("traceNote")).contains("the filters or the idle exclusion"), "got " + empty);
+	}
+
+	@Test
+	void aRecordingPageShowsIdleStacksFromTheStartOnlyWhenAsked() {
+		assertTrue(timePage(true).contains("data-idle=\"shown\""));
+		assertFalse(timePage(false).contains("data-idle=\"shown\""));
+	}
+
+	private static String timePage(boolean includeIdle) {
+		String[] page = new String[1];
+		TracePages.setPublisher((title, html) -> {
+			page[0] = html;
+			return "http://localhost/" + title;
+		});
+		try {
+			FlightTracePage.publishTime("r", "s", "", includeIdle, FlameGraph.builder().add(List.of("a"), 1, true), null,
+					new JsonObject(), false);
+		} finally {
+			TracePages.setPublisher(null);
+		}
+		return page[0];
+	}
+
+	private static Map<String, Object> publishedTime(FlameGraph.Builder flame) throws Exception {
+		JsonObject answer = new JsonObject();
+		TracePages.setPublisher((title, html) -> "http://localhost/" + title);
+		try {
+			FlightTracePage.publishTime("r", "s", "", false, flame, null, answer, false);
+		} finally {
+			TracePages.setPublisher(null);
+		}
+		return TestFixture.parse(answer.toString());
 	}
 
 	@Test

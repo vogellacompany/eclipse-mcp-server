@@ -92,6 +92,11 @@ public final class FlameGraph {
 			return this;
 		}
 
+		/** Why nothing was busy, or null when nobody said so. */
+		public String quiet() {
+			return quiet;
+		}
+
 		public boolean isEmpty() {
 			return total == 0;
 		}
@@ -191,7 +196,12 @@ public final class FlameGraph {
 
 	/** What the page says about itself, beside the graph. */
 	public record Spec(String title, String subtitle, String unit, Builder flame, List<Table> tables, String note,
-			List<Stat> stats, boolean rankByCaller, List<String> warnings, ProductFamily product) {
+			List<Stat> stats, boolean rankByCaller, List<String> warnings, ProductFamily product, boolean idleShown) {
+
+		public Spec(String title, String subtitle, String unit, Builder flame, List<Table> tables, String note,
+				List<Stat> stats, boolean rankByCaller, List<String> warnings, ProductFamily product) {
+			this(title, subtitle, unit, flame, tables, note, stats, rankByCaller, warnings, product, false);
+		}
 
 		public Spec(String title, String subtitle, String unit, Builder flame, List<Table> tables, String note) {
 			this(title, subtitle, unit, flame, tables, note, List.of());
@@ -263,6 +273,7 @@ public final class FlameGraph {
 		out.append("<!doctype html>\n<html lang=\"en\" data-unit=\""); //$NON-NLS-1$
 		escape(spec.unit(), out);
 		out.append(spec.rankByCaller() ? "\" data-rank=\"caller" : ""); //$NON-NLS-1$ //$NON-NLS-2$
+		out.append(spec.idleShown() ? "\" data-idle=\"shown" : ""); //$NON-NLS-1$ //$NON-NLS-2$
 		if (spec.product() != null) {
 			out.append("\" data-product=\""); //$NON-NLS-1$
 			escape(spec.product().toJson().toString(), out);
@@ -554,7 +565,7 @@ public final class FlameGraph {
 			  var legend = document.getElementById('legend');
 			  var find = document.getElementById('find');
 			  var NS = 'http://www.w3.org/2000/svg';
-			  var ROW = 20, focus = root, needle = '', exact = null, hidden = { idle: unit !== 'bytes' };
+			  var ROW = 20, focus = root, needle = '', exact = null, hidden = { idle: unit !== 'bytes' && document.documentElement.dataset.idle !== 'shown' };
 			  var THREAD = 'thread: ';
 			  // narrower than this a frame is unreadable, so its siblings of that size are drawn as one block
 			  var THIN = 6;
@@ -653,7 +664,7 @@ public final class FlameGraph {
 			  function isHit(n) { return !n.block && (exact ? n.n === exact : !!needle && n.n.toLowerCase().indexOf(needle) >= 0); }
 			  function contains(n) { return isHit(n) || (n.c || []).some(function (k) { return k.w > 0 && contains(k); }); }
 
-			  // a block's own frames can all be thin too, so inside one the floor drops and the widest half always gets out
+			  // a block's own frames can all be thin too, so inside one the floor drops and the widest half gets out; under half a pixel they stay undrawn
 			  function split(n, span) {
 			    var big = [], small = [], kids = n.c || [], floor = n.block ? 1 : THIN;
 			    for (var i = 0; i < kids.length; i++) {

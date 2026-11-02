@@ -22,7 +22,7 @@ final class StackAlignment {
 	}
 
 	/** The stacks after alignment, and how many of them JFR had cut. */
-	record Aligned(List<Stack> stacks, int truncated, int unaligned, List<String> anchors) {
+	record Aligned(List<Stack> stacks, int truncated, int unaligned) {
 	}
 
 	private StackAlignment() {
@@ -34,7 +34,6 @@ final class StackAlignment {
 			byThread.computeIfAbsent(String.valueOf(stack.thread()), unused -> new ArrayList<>()).add(stack);
 		}
 		List<Stack> aligned = new ArrayList<>(stacks.size());
-		List<String> anchors = new ArrayList<>();
 		int truncated = 0;
 		int unaligned = 0;
 		for (List<Stack> group : byThread.values()) {
@@ -46,12 +45,11 @@ final class StackAlignment {
 				aligned.addAll(group);
 				continue;
 			}
-			anchors.add(anchor);
 			for (Stack stack : group) {
 				aligned.add(trimAt(stack, anchor));
 			}
 		}
-		return new Aligned(aligned, truncated, unaligned, anchors);
+		return new Aligned(aligned, truncated, unaligned);
 	}
 
 	/** Adds the stacks to a flame graph, each thread a branch of its own; an allocation is never idle. */

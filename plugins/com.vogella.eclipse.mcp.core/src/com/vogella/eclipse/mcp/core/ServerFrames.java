@@ -49,14 +49,9 @@ public final class ServerFrames {
 		return name.startsWith("mcp-") || name.startsWith("mcp "); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
-	/** Classifies a whole stack given as the class name of each frame, innermost first. */
-	public static Verdict classify(String threadName, List<String> classNamesInnermostFirst) {
-		return classify(threadName, classNamesInnermostFirst, false);
-	}
-
 	/**
-	 * Classifies a stack that may have lost its outer frames, in which case its outermost frame
-	 * says nothing about who started the thread.
+	 * Classifies a stack given as the class name of each frame, innermost first. A truncated one has
+	 * lost its outer frames, so its outermost frame says nothing about who started the thread.
 	 */
 	public static Verdict classify(String threadName, List<String> classNamesInnermostFirst, boolean truncated) {
 		if (isServerThread(threadName)) {

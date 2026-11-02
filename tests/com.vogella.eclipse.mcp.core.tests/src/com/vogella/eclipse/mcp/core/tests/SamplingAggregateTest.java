@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
@@ -134,8 +135,8 @@ class SamplingAggregateTest {
 	}
 
 	/**
-	 * The session of the review, all threads on an idle DBeaver on Windows: 150 ticks, of which the
-	 * UI thread dispatched something on two and slept on the rest.
+	 * All threads of an idle IDE on Windows: 150 ticks, of which the UI thread dispatched something
+	 * on two and slept on the rest.
 	 */
 	private static List<Sample> idleIde() {
 		StackTraceElement[] poll = stack("sun.nio.ch.WEPoll.wait", "sun.nio.ch.WEPollSelectorImpl.doSelect");
@@ -181,7 +182,7 @@ class SamplingAggregateTest {
 	void theUiThreadKeepsItsWorkAndItsSleepIsCountedAsIdleNotAsTheServers() throws Exception {
 		Map<String, Object> answer = answer(session(idleIde(), 150), false);
 
-		// the review's 150 server samples were mcp-jetty's selector, not main: its wait did not count as idle on Windows
+		// mcp-jetty's parked selector is idle first, so it is not counted as the server's
 		assertEquals(0, number(answer, "serverSamplesExcluded"), "got " + answer);
 		Map<String, Object> main = thread(answer, "main");
 		assertEquals(150, number(main, "samples"));
@@ -209,6 +210,51 @@ class SamplingAggregateTest {
 		}
 		assertEquals(number(answer, "samples"), kept);
 		assertEquals(number(answer, "idleSamplesExcluded"), idle);
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void includingIdleStacksCountsOnlyThoseThatSurviveTheServerVerdict() throws Exception {
+		Map<String, Object> answer = TestFixture
+				.parse(SamplingRegistry.aggregate(session(idleIde(), 150), 10, 1, false, true, null, true, false).toString());
+
+		assertEquals(150, number(answer, "serverSamplesExcluded"), "mcp-jetty's parked selector, got " + answer);
+		assertEquals(750, number(answer, "samples"));
+		assertEquals(number(answer, "samples"), number(answer, "busySamples") + number(answer, "idleSamples"), "got " + answer);
+		assertEquals(748, number(answer, "idleSamples"));
+		assertEquals(150, number(answer, "idleByState"));
+		assertEquals(598, number(answer, "idleByFrame"));
+		assertEquals(0, number(answer, "idleSamplesExcluded"));
+		assertTrue(String.valueOf(answer.get("nothingBusyNote")).contains("748 were threads waiting"), "got " + answer);
+		assertEquals(300, number(((List<Map<String, Object>>) answer.get("idleFrames")).get(0), "samples"),
+				"only the dispatchers' polls, got " + answer);
+		for (Map<String, Object> thread : (List<Map<String, Object>>) answer.get("byThread")) {
+			assertEquals(number(thread, "samples"), number(thread, "kept") + number(thread, "idleExcluded") + number(thread, "serverExcluded"));
+		}
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void underAFilterByThreadStillCountsAllOfAThreadsSamples() throws Exception {
+		Map<String, Object> answer = TestFixture
+				.parse(SamplingRegistry.aggregate(session(idleIde(), 150), 10, 1, false, false, "DispatchMessage", true, false).toString());
+
+		Map<String, Object> main = thread(answer, "main");
+		assertEquals(150, number(main, "samples"));
+		assertEquals(2, number(main, "kept"));
+		assertEquals(0, number(main, "idleExcluded"));
+		assertEquals(0, number(main, "serverExcluded"));
+		int missing = 0;
+		for (Map<String, Object> thread : (List<Map<String, Object>>) answer.get("byThread")) {
+			missing += number(thread, "samples") - number(thread, "kept") - number(thread, "idleExcluded") - number(thread, "serverExcluded");
+		}
+		assertEquals(number(answer, "samplesWithoutTheFilteredFrame"), missing, "got " + answer);
+	}
+
+	@Test
+	void aPageShowsIdleStacksFromTheStartOnlyWhenTheyWereAskedFor() {
+		assertTrue(page(session(idleIde(), 150), true, null).contains("data-idle=\"shown\""));
+		assertFalse(page(session(idleIde(), 150), false, null).contains("data-idle=\"shown\""));
 	}
 
 	@Test
@@ -322,7 +368,9 @@ class SamplingAggregateTest {
 			Thread.sleep(200);
 			long[] ids = { polling.threadId(), sleeping.threadId() };
 			SamplingRegistry.Session session = SamplingRegistry.getInstance().start(mx -> ids, 10, 10, 80);
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
 			while (session.running()) {
+				assertTrue(System.nanoTime() < deadline, "a session of 10 ticks at 10 ms was still running after 30 s");
 				Thread.sleep(10);
 			}
 			sleeping.interrupt();

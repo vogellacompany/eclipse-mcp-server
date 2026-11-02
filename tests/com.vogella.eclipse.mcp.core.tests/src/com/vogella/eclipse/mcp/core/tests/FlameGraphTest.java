@@ -200,6 +200,16 @@ class FlameGraphTest {
 	}
 
 	@Test
+	void onlyAPageThatAsksShowsIdleStacksFromTheStart() {
+		FlameGraph.Builder builder = FlameGraph.builder().add(List.of("a"), 1, true);
+
+		assertTrue(FlameGraph.page(new FlameGraph.Spec("t", "s", "samples", builder, List.of(), null, List.of(), false,
+				List.of(), null, true)).contains("data-idle=\"shown\""));
+		assertFalse(FlameGraph.page(new FlameGraph.Spec("t", "s", "samples", builder, List.of(), null))
+				.contains("data-idle=\"shown\""));
+	}
+
+	@Test
 	void pooledThreadsShareOneBranch() {
 		assertEquals("Worker-N", FlameGraph.threadBranch("Worker-19: Indexing"));
 		assertEquals("Start Level", FlameGraph.threadBranch("Start Level: Equinox Container: 49d75ff2"));

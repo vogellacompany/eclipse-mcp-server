@@ -41,7 +41,7 @@ public final class TracePage {
 
 		String note = "The width of a frame is how many samples had it on the stack, so it is time spent below that frame rather than in it. " //$NON-NLS-1$
 				+ "Click a frame to zoom into it and Reset zoom to come back. " //$NON-NLS-1$
-				+ (includeIdle ? "Parked and waiting stacks are INCLUDED and hidden until the Idle chip is clicked." //$NON-NLS-1$
+				+ (includeIdle ? "Parked and waiting stacks are INCLUDED, as asked; the Idle chip hides them." //$NON-NLS-1$
 						: "Parked and waiting threads are excluded, which is the default; a freeze is usually parked, so re-read with includeIdleThreads to see it.") //$NON-NLS-1$
 				+ " Sampling perturbs what it measures, so treat small differences as noise."; //$NON-NLS-1$
 
@@ -54,7 +54,7 @@ public final class TracePage {
 		String warning = session.intervalWarning();
 		String url = TracePages.publish(title,
 				FlameGraph.page(new FlameGraph.Spec(title, subtitle, "samples", flame, tables, note, stats, false, //$NON-NLS-1$
-						warning == null ? List.of() : List.of(warning), product)));
+						warning == null ? List.of() : List.of(warning), product, includeIdle)));
 		aggregate.put("traceUrl", url); //$NON-NLS-1$
 		if (open) {
 			String failed = TracePages.open(url);

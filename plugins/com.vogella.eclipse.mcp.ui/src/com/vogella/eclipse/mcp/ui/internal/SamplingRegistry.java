@@ -283,6 +283,15 @@ public final class SamplingRegistry {
 		for (Sample sample : all) {
 			Long thread = Long.valueOf(sample.threadId());
 			String wait = waitOf(sample);
+			// a sample left out as idle never gets a verdict, so byThread adds up; one to be kept needs it
+			// first, or it counts as idle without being in the tree or on the page
+			ServerFrames.Verdict verdict = includeServer || (wait != null && !includeIdle) ? ServerFrames.Verdict.KEEP
+					: serverVerdict(sample, session.maxDepth());
+			if (verdict == ServerFrames.Verdict.DROP) {
+				serverDropped++;
+				fates.server.merge(thread, Integer.valueOf(1), Integer::sum);
+				continue;
+			}
 			if (wait != null) {
 				if (isWaitingState(sample.state())) {
 					idleByState++;
@@ -295,26 +304,12 @@ public final class SamplingRegistry {
 					continue;
 				}
 			}
-			// after the idle split, so what is excluded here plus samples adds up to what would be reported
 			Sample kept = sample;
-			if (!includeServer) {
-				List<String> classes = new ArrayList<>(sample.stack().length);
-				for (StackTraceElement element : sample.stack()) {
-					classes.add(element.getClassName());
-				}
-				boolean cut = sample.stack().length >= session.maxDepth();
-				ServerFrames.Verdict verdict = ServerFrames.classify(sample.threadName(), classes, cut);
-				if (verdict == ServerFrames.Verdict.DROP) {
-					serverDropped++;
-					fates.server.merge(thread, Integer.valueOf(1), Integer::sum);
-					continue;
-				}
-				if (verdict == ServerFrames.Verdict.ELIDE) {
-					serverElided++;
-					kept = new Sample(sample.threadId(), sample.threadName(), sample.state(),
-							Arrays.stream(sample.stack()).filter(e -> !ServerFrames.isOwn(e.getClassName()))
-									.toArray(StackTraceElement[]::new));
-				}
+			if (verdict == ServerFrames.Verdict.ELIDE) {
+				serverElided++;
+				kept = new Sample(sample.threadId(), sample.threadName(), sample.state(),
+						Arrays.stream(sample.stack()).filter(e -> !ServerFrames.isOwn(e.getClassName()))
+								.toArray(StackTraceElement[]::new));
 			}
 			samples.add(kept);
 			fates.kept.merge(thread, Integer.valueOf(1), Integer::sum);
@@ -324,6 +319,14 @@ public final class SamplingRegistry {
 		}
 		return new Selection(everything, samples, idleByState + idleByFrame, idleByState, idleByFrame, waits, busy,
 				filtered, serverDropped, serverElided, fates);
+	}
+
+	private static ServerFrames.Verdict serverVerdict(Sample sample, int maxDepth) {
+		List<String> classes = new ArrayList<>(sample.stack().length);
+		for (StackTraceElement element : sample.stack()) {
+			classes.add(element.getClassName());
+		}
+		return ServerFrames.classify(sample.threadName(), classes, sample.stack().length >= maxDepth);
 	}
 
 	/** Per thread, where its samples went, so that byThread adds up to the tree beside it. */
