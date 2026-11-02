@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.LongFunction;
 
 import com.vogella.eclipse.mcp.core.FlameGraph;
+import com.vogella.eclipse.mcp.core.ProductFamily;
 import com.vogella.eclipse.mcp.core.TracePages;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
@@ -23,7 +24,7 @@ final class FlightTracePage {
 
 	/** Publishes the bytes page and records the URL, or why there is none, in {@code answer}. */
 	static void publishAllocation(String name, String source, String filters, FlameGraph.Builder flame,
-			JsonObject answer, boolean open) {
+			ProductFamily product, JsonObject answer, boolean open) {
 		answer.put("traceWeight", "estimated allocated bytes"); //$NON-NLS-1$ //$NON-NLS-2$
 		if (unavailable(flame, answer,
 				"No allocation stacks were recorded, so there was nothing to draw. The allocation sampler only fires on sampled allocations, so a short or quiet recording often has none.")) { //$NON-NLS-1$
@@ -42,12 +43,12 @@ final class FlightTracePage {
 				table("Allocated below the frame", "Estimated bytes", flame.topTotal(15), FlameGraph::bytes)); //$NON-NLS-1$ //$NON-NLS-2$
 		publish("Allocation " + name, //$NON-NLS-1$
 				"%s, allocation stacks WEIGHTED BY ESTIMATED BYTES%s".formatted(source, filters), //$NON-NLS-1$
-				"bytes", flame, tables, note, stats, answer, open); //$NON-NLS-1$
+				"bytes", flame, tables, note, stats, product, answer, open); //$NON-NLS-1$
 	}
 
 	/** Publishes the time page and records the URL, or why there is none, in {@code answer}. */
 	static void publishTime(String name, String source, String filters, boolean includeIdle, FlameGraph.Builder flame,
-			JsonObject answer, boolean open) {
+			ProductFamily product, JsonObject answer, boolean open) {
 		answer.put("traceWeight", "time samples"); //$NON-NLS-1$ //$NON-NLS-2$
 		if (unavailable(flame, answer,
 				"No execution or native samples are left to draw. Check the time block of this answer: the filters or the idle exclusion may have removed them, or the recording's settings did not enable the samplers.")) { //$NON-NLS-1$
@@ -65,7 +66,7 @@ final class FlightTracePage {
 				table("Where the time was spent", "Samples", flame.topSelf(15), String::valueOf), //$NON-NLS-1$ //$NON-NLS-2$
 				table("Most often on the stack", "Samples", flame.topTotal(15), String::valueOf)); //$NON-NLS-1$ //$NON-NLS-2$
 		publish("Time " + name, "%s, stacks WEIGHTED BY TIME SAMPLES%s".formatted(source, filters), //$NON-NLS-1$ //$NON-NLS-2$
-				"samples", flame, tables, note, stats, answer, open); //$NON-NLS-1$
+				"samples", flame, tables, note, stats, product, answer, open); //$NON-NLS-1$
 	}
 
 	private static boolean unavailable(FlameGraph.Builder flame, JsonObject answer, String empty) {
@@ -81,9 +82,10 @@ final class FlightTracePage {
 	}
 
 	private static void publish(String title, String subtitle, String unit, FlameGraph.Builder flame,
-			List<FlameGraph.Table> tables, String note, List<FlameGraph.Stat> stats, JsonObject answer, boolean open) {
-		String url = TracePages.publish(title,
-				FlameGraph.page(new FlameGraph.Spec(title, subtitle, unit, flame, tables, note, stats, true)));
+			List<FlameGraph.Table> tables, String note, List<FlameGraph.Stat> stats, ProductFamily product,
+			JsonObject answer, boolean open) {
+		String url = TracePages.publish(title, FlameGraph.page(
+				new FlameGraph.Spec(title, subtitle, unit, flame, tables, note, stats, true, List.of(), product)));
 		answer.put("traceUrl", url); //$NON-NLS-1$
 		if (open) {
 			String failed = TracePages.open(url);

@@ -32,6 +32,9 @@ public final class FlameGraph {
 
 		private long value;
 
+		/** The part of the value from stacks parked in a wait. */
+		private long idle;
+
 		Node(String frame) {
 			this.frame = frame;
 		}
@@ -50,6 +53,8 @@ public final class FlameGraph {
 
 		private int stacks;
 
+		private String quiet;
+
 		/**
 		 * Adds one stack and its weight.
 		 *
@@ -57,17 +62,33 @@ public final class FlameGraph {
 		 *                        them upwards
 		 */
 		public Builder add(List<String> framesRootFirst, long weight) {
+			return add(framesRootFirst, weight, false);
+		}
+
+		/**
+		 * Adds one stack with the verdict of the answer beside the page, so that the two count
+		 * the same stacks as idle.
+		 */
+		public Builder add(List<String> framesRootFirst, long weight, boolean idle) {
 			if (framesRootFirst == null || framesRootFirst.isEmpty() || weight <= 0) {
 				return this;
 			}
 			stacks++;
 			total += weight;
 			root.value += weight;
+			root.idle += idle ? weight : 0;
 			Node current = root;
 			for (String frame : framesRootFirst) {
 				current = current.child(frame);
 				current.value += weight;
+				current.idle += idle ? weight : 0;
 			}
+			return this;
+		}
+
+		/** Says that nothing was busy and why, which the page then leads with instead of naming a frame. */
+		public Builder quiet(String why) {
+			quiet = why;
 			return this;
 		}
 
@@ -146,6 +167,9 @@ public final class FlameGraph {
 			out.append("{\"n\":"); //$NON-NLS-1$
 			quote(node.frame, out);
 			out.append(",\"v\":").append(node.value); //$NON-NLS-1$
+			if (node.idle > 0) {
+				out.append(",\"i\":").append(node.idle); //$NON-NLS-1$
+			}
 			if (!node.children.isEmpty()) {
 				out.append(",\"c\":["); //$NON-NLS-1$
 				boolean first = true;
@@ -167,7 +191,7 @@ public final class FlameGraph {
 
 	/** What the page says about itself, beside the graph. */
 	public record Spec(String title, String subtitle, String unit, Builder flame, List<Table> tables, String note,
-			List<Stat> stats, boolean rankByCaller) {
+			List<Stat> stats, boolean rankByCaller, List<String> warnings, ProductFamily product) {
 
 		public Spec(String title, String subtitle, String unit, Builder flame, List<Table> tables, String note) {
 			this(title, subtitle, unit, flame, tables, note, List.of());
@@ -176,6 +200,11 @@ public final class FlameGraph {
 		public Spec(String title, String subtitle, String unit, Builder flame, List<Table> tables, String note,
 				List<Stat> stats) {
 			this(title, subtitle, unit, flame, tables, note, stats, false);
+		}
+
+		public Spec(String title, String subtitle, String unit, Builder flame, List<Table> tables, String note,
+				List<Stat> stats, boolean rankByCaller) {
+			this(title, subtitle, unit, flame, tables, note, stats, rankByCaller, List.of(), null);
 		}
 	}
 
@@ -234,6 +263,10 @@ public final class FlameGraph {
 		out.append("<!doctype html>\n<html lang=\"en\" data-unit=\""); //$NON-NLS-1$
 		escape(spec.unit(), out);
 		out.append(spec.rankByCaller() ? "\" data-rank=\"caller" : ""); //$NON-NLS-1$ //$NON-NLS-2$
+		if (spec.product() != null) {
+			out.append("\" data-product=\""); //$NON-NLS-1$
+			escape(spec.product().toJson().toString(), out);
+		}
 		out.append("\">\n<head>\n<meta charset=\"utf-8\">\n"); //$NON-NLS-1$
 		out.append("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>"); //$NON-NLS-1$
 		escape(spec.title(), out);
@@ -244,6 +277,13 @@ public final class FlameGraph {
 		out.append("</h1><p class=\"sub\">"); //$NON-NLS-1$
 		escape(spec.subtitle(), out);
 		out.append("</p>"); //$NON-NLS-1$
+		if (spec.warnings() != null) {
+			for (String warning : spec.warnings()) {
+				out.append("<p class=\"warn\">"); //$NON-NLS-1$
+				escape(warning, out);
+				out.append("</p>"); //$NON-NLS-1$
+			}
+		}
 		if (spec.stats() != null && !spec.stats().isEmpty()) {
 			// a line of facts rather than tiles: none of them says where the cost is
 			out.append("<p class=\"facts\">"); //$NON-NLS-1$
@@ -259,15 +299,34 @@ public final class FlameGraph {
 		out.append("</header>\n"); //$NON-NLS-1$
 
 		if (spec.flame() == null || spec.flame().isEmpty()) {
-			out.append("<div class=\"empty\">No stacks were recorded, so there is nothing to draw. " //$NON-NLS-1$
-					+ "A profile with no samples usually means the recording was too short, or that every sample was filtered out.</div>\n"); //$NON-NLS-1$
+			if (spec.flame() != null && spec.flame().quiet != null) {
+				out.append("<p id=\"hot\">"); //$NON-NLS-1$
+				escape(spec.flame().quiet, out);
+				out.append("</p>\n"); //$NON-NLS-1$
+			} else {
+				out.append("<div class=\"empty\">No stacks were recorded, so there is nothing to draw. " //$NON-NLS-1$
+						+ "A profile with no samples usually means the recording was too short, or that every sample was filtered out.</div>\n"); //$NON-NLS-1$
+			}
 		} else {
-			out.append("<p id=\"hot\" aria-live=\"polite\"></p>\n"); //$NON-NLS-1$
+			out.append("<p id=\"hot\" aria-live=\"polite\""); //$NON-NLS-1$
+			if (spec.flame().quiet != null) {
+				out.append(" data-quiet=\""); //$NON-NLS-1$
+				escape(spec.flame().quiet, out);
+				out.append('"');
+			}
+			out.append("></p>\n"); //$NON-NLS-1$
 			out.append("<div class=\"stage\">\n<aside id=\"rail\" aria-label=\"Where the time sits\"><h2 id=\"railTitle\"></h2><ol id=\"hottest\"></ol></aside>\n"); //$NON-NLS-1$
 			out.append("<section class=\"panel\">\n"); //$NON-NLS-1$
 			out.append("<div class=\"head\">"); //$NON-NLS-1$
 			out.append("<input id=\"find\" type=\"search\" placeholder=\"Highlight frames by name, press / to search\" spellcheck=\"false\">"); //$NON-NLS-1$
 			out.append("<button id=\"reset\" type=\"button\" title=\"Escape\">Reset zoom</button>"); //$NON-NLS-1$
+			if (spec.product() != null) {
+				out.append("<button id=\"only\" type=\"button\" aria-pressed=\"false\" title=\"Only the stacks with a frame of "); //$NON-NLS-1$
+				escape(String.join(", ", spec.product().prefixes()), out); //$NON-NLS-1$
+				out.append("\">Only "); //$NON-NLS-1$
+				escape(spec.product().label(), out);
+				out.append("</button>"); //$NON-NLS-1$
+			}
 			out.append("<span id=\"status\"></span>"); //$NON-NLS-1$
 			out.append("</div>\n<div class=\"bar\"><nav id=\"crumbs\" aria-label=\"Zoom path\"></nav><div id=\"legend\"></div></div>\n"); //$NON-NLS-1$
 			out.append("<div id=\"flame\" role=\"img\" aria-label=\"Flame graph of the recorded stacks\"></div>\n"); //$NON-NLS-1$
@@ -314,21 +373,10 @@ public final class FlameGraph {
 			out.append("<script id=\"profile\" type=\"application/json\">"); //$NON-NLS-1$
 			// inside a script element, so only the closing tag has to be broken up
 			out.append(spec.flame().toJson().replace("</", "<\\/")); //$NON-NLS-1$ //$NON-NLS-2$
-			out.append("</script>\n<script>\n").append(SCRIPT.replace(IDLE_PLACEHOLDER, idleFrames())).append("\n</script>\n"); //$NON-NLS-1$ //$NON-NLS-2$
+			out.append("</script>\n<script>\n").append(SCRIPT).append("\n</script>\n"); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		out.append("</body>\n</html>\n"); //$NON-NLS-1$
 		return out.toString();
-	}
-
-	private static String idleFrames() {
-		StringBuilder list = new StringBuilder("["); //$NON-NLS-1$
-		for (String frame : IdleFrames.frames()) {
-			if (list.length() > 1) {
-				list.append(", "); //$NON-NLS-1$
-			}
-			quote(frame, list);
-		}
-		return list.append(']').toString();
 	}
 
 	private static void quote(String value, StringBuilder out) {
@@ -370,8 +418,6 @@ public final class FlameGraph {
 		}
 	}
 
-	private static final String IDLE_PLACEHOLDER = "/*IDLE_FRAMES*/"; //$NON-NLS-1$
-
 	private static final String STYLE = """
 			:root {
 			  color-scheme: dark;
@@ -393,6 +439,7 @@ public final class FlameGraph {
 			header { padding: 26px 0 14px; }
 			h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
 			.sub { margin: 4px 0 0; color: var(--dim); }
+			.warn { margin: 8px 0 0; padding: 6px 12px; color: var(--text); background: var(--heat-soft); border-radius: 6px; font-size: 13px; max-width: 110ch; }
 			.facts { margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 4px 22px; color: var(--dim); font-size: 13px; }
 			.facts b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 
@@ -434,6 +481,9 @@ public final class FlameGraph {
 			button { cursor: pointer; }
 			#reset { padding: 7px 12px; background: var(--raise); border: 1px solid var(--line); border-radius: 7px; }
 			#reset:hover { border-color: var(--dim); }
+			#only { padding: 7px 12px; background: var(--raise); border: 1px solid var(--line); border-radius: 7px; max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+			#only:hover { border-color: var(--dim); }
+			#only[aria-pressed=true] { background: var(--heat-soft); border-color: var(--heat); }
 			#status { color: var(--dim); font-size: 13px; font-variant-numeric: tabular-nums; margin-left: auto; }
 
 			.bar {
@@ -474,6 +524,7 @@ public final class FlameGraph {
 			#tip .tg { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; margin-top: 8px; }
 			#tip .tg span { color: var(--dim); }
 			#tip .tg b { font-weight: 600; font-variant-numeric: tabular-nums; }
+			#tip .tl { margin-top: 8px; color: var(--dim); font-family: var(--mono); font-size: 11.5px; }
 			[hidden] { display: none !important; }
 
 			.tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; margin: 22px 0 0; }
@@ -505,10 +556,16 @@ public final class FlameGraph {
 			  var NS = 'http://www.w3.org/2000/svg';
 			  var ROW = 20, focus = root, needle = '', exact = null, hidden = { idle: unit !== 'bytes' };
 			  var THREAD = 'thread: ';
+			  // narrower than this a frame is unreadable, so its siblings of that size are drawn as one block
+			  var THIN = 6;
+			  var QUIET = document.getElementById('hot').dataset.quiet;
+			  var PRODUCT = document.documentElement.dataset.product ? JSON.parse(document.documentElement.dataset.product) : null;
+			  var only = false;
 
 			  // families by package, so a colour says where the code lives instead of being noise
 			  var FAMILIES = [
 			    { key: 'thread', label: 'Threads', hue: 250, s: 18, l: 58, test: function (n) { return n.indexOf(THREAD) === 0; } },
+			    { key: 'product', label: PRODUCT ? PRODUCT.label : '', hue: 0, s: 82, l: 66, prefix: PRODUCT ? PRODUCT.prefixes : [] },
 			    { key: 'self', label: 'This server', hue: 262, s: 62, l: 66, prefix: ['com.vogella.'] },
 			    { key: 'jdt', label: 'JDT', hue: 28, s: 72, l: 60, prefix: ['org.eclipse.jdt.'] },
 			    { key: 'swt', label: 'SWT', hue: 190, s: 58, l: 52, prefix: ['org.eclipse.swt.'] },
@@ -518,8 +575,6 @@ public final class FlameGraph {
 			    { key: 'jdk', label: 'JDK', hue: 40, s: 22, l: 58, prefix: ['java.', 'javax.', 'jdk.', 'sun.', 'com.sun.'] },
 			    { key: 'other', label: 'Libraries', hue: 330, s: 45, l: 64, test: function () { return true; } }
 			  ];
-			  // waits a thread sits in while doing nothing, drawn grey so the work stands out: IdleFrames, matched as it does
-			  var IDLE = /*IDLE_FRAMES*/;
 			  var BY_CALLER = document.documentElement.dataset.rank === 'caller';
 
 			  function family(name) {
@@ -529,27 +584,19 @@ public final class FlameGraph {
 			    }
 			    return FAMILIES[FAMILIES.length - 1];
 			  }
-			  function isIdle(name) {
-			    var body = name.replace(/:\\d+$/, ''), dot = body.lastIndexOf('.'), method = body.slice(dot + 1);
-			    var type = dot < 0 ? '' : body.slice(0, dot);
-			    type = type.slice(Math.max(type.lastIndexOf('.'), type.lastIndexOf('$')) + 1);
-			    for (var i = 0; i < IDLE.length; i++) {
-			      var at = IDLE[i].indexOf('.');
-			      if (at < 0 ? method.indexOf(IDLE[i]) === 0
-			        : type === IDLE[i].slice(0, at) && method.indexOf(IDLE[i].slice(at + 1)) === 0) return true;
-			    }
-			    return false;
-			  }
-			  // decorate once: parent links, family, idle, self weight
-			  (function prep(n, parent, idle) {
+			  // decorate once: parent links, family, whether under a product frame, idle, self weight
+			  // idle comes from the server, per stack: a frame is grey only when every stack through it waits
+			  (function prep(n, parent) {
 			    n.p = parent;
 			    n.f = family(n.n);
-			    // an allocation is never idle, whatever the frame it happened in
-			    n.idle = unit !== 'bytes' && (idle || isIdle(n.n));
-			    var below = 0, kids = n.c || [];
-			    for (var i = 0; i < kids.length; i++) { prep(kids[i], n, n.idle); below += kids[i].v; }
+			    n.u = n.f.key === 'product' || (parent !== null && parent.u);
+			    n.i = n.i || 0;
+			    n.idle = n.i > 0 && n.i === n.v;
+			    var below = 0, belowIdle = 0, kids = n.c || [];
+			    for (var i = 0; i < kids.length; i++) { prep(kids[i], n); below += kids[i].v; belowIdle += kids[i].i; }
 			    n.s = Math.max(n.v - below, 0);
-			  })(root, null, false);
+			    n.si = n.s > 0 && n.i > belowIdle;
+			  })(root, null);
 
 			  // pkg.Outer$Inner.method:12 -> Outer$Inner.method:12, which is the part that tells frames apart
 			  function short(name) {
@@ -574,6 +621,7 @@ public final class FlameGraph {
 			  }
 			  function fill(n) {
 			    if (n === root) return 'hsl(248 22% 36%)';
+			    if (n.block) return 'hsl(248 16% 46%)';
 			    if (n.idle) return 'hsl(248 14% ' + (30 + hash(n.n) % 6) + '%)';
 			    var f = n.f, h = hash(n.n);
 			    // a little lightness and hue jitter per class, so neighbours of one family stay apart
@@ -591,45 +639,66 @@ public final class FlameGraph {
 			  }
 			  function pct(v, of) { return of ? (v * 100 / of).toFixed(v * 1000 < of ? 2 : 1) + '%' : '0%'; }
 			  function base() { return root.w || root.v; }
-			  function visible(n) { return !(n.idle && hidden.idle) && !hidden[n.f.key]; }
+			  function selfWeight(n) { return (hidden.idle && n.si) || (only && !n.u) ? 0 : n.s; }
 			  function weight(n) {
-			    if (!visible(n) && n.f.key !== 'thread' && n !== root) return 0;
-			    if (!n.c) return n.v;
-			    var w = n.s;
-			    for (var i = 0; i < n.c.length; i++) w += weight(n.c[i]);
+			    if (n !== root && hidden[n.f.key]) return 0;
+			    var w = selfWeight(n), kids = n.c || [];
+			    for (var i = 0; i < kids.length; i++) w += weight(kids[i]);
 			    return w;
-			  }
-
-			  function depth(n, span, total) {
-			    if (span < 0.5) return 0;
-			    var d = 1, kids = n.c || [];
-			    for (var i = 0; i < kids.length; i++) {
-			      var w = kids[i].w;
-			      if (w > 0) d = Math.max(d, 1 + depth(kids[i], span * w / total, w));
-			    }
-			    return d;
 			  }
 			  function measure(n) {
 			    n.w = weight(n);
 			    (n.c || []).forEach(measure);
 			  }
+			  function isHit(n) { return !n.block && (exact ? n.n === exact : !!needle && n.n.toLowerCase().indexOf(needle) >= 0); }
+			  function contains(n) { return isHit(n) || (n.c || []).some(function (k) { return k.w > 0 && contains(k); }); }
+
+			  // a block's own frames can all be thin too, so inside one the floor drops and the widest half always gets out
+			  function split(n, span) {
+			    var big = [], small = [], kids = n.c || [], floor = n.block ? 1 : THIN;
+			    for (var i = 0; i < kids.length; i++) {
+			      if (kids[i].w > 0) (span * kids[i].w / n.w < floor ? small : big).push(kids[i]);
+			    }
+			    if (n.block && !big.length) big = small.splice(0, Math.ceil(small.length / 2));
+			    return { big: big, small: small };
+			  }
+			  function blockOf(parent, frames) {
+			    var block = parent.more || (parent.more = { block: true, p: parent, s: 0, i: 0, f: { key: 'block', label: 'Smaller frames, drawn as one' } });
+			    block.c = frames;
+			    block.v = block.w = frames.reduce(function (sum, k) { return sum + k.w; }, 0);
+			    block.n = frames.length + ' smaller';
+			    return block;
+			  }
+			  function depth(n, span) {
+			    if (span < 0.5) return 0;
+			    var d = 1, parts = split(n, span);
+			    for (var i = 0; i < parts.big.length; i++) d = Math.max(d, 1 + depth(parts.big[i], span * parts.big[i].w / n.w));
+			    return parts.small.length ? Math.max(d, 2) : d;
+			  }
 
 			  function draw() {
 			    measure(root);
+			    if (focus.block) blockOf(focus.p, focus.c);
+			    if (focus !== root && !focus.w) focus = root;
 			    var width = Math.max(host.clientWidth - 16 || 900, 320);
-			    var total = focus.w || 1;
-			    var levels = Math.max(depth(focus, width, total), 1);
+			    var levels = Math.max(depth(focus, width), 1);
 			    var height = levels * ROW + 2;
 			    var svg = document.createElementNS(NS, 'svg');
 			    svg.setAttribute('width', width);
 			    svg.setAttribute('height', height);
 			    svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
 			    var matches = 0, matched = 0;
+			    // over the whole tree rather than what is drawn, or a search misses what sits in a block
+			    (function scan(n, inside) {
+			      if (!(n.w > 0)) return;
+			      var hit = isHit(n);
+			      if (hit) { matches++; if (!inside) matched += n.w; }
+			      (n.c || []).forEach(function (k) { scan(k, inside || hit); });
+			    })(focus, false);
 
-			    (function place(node, x, level, span) {
-			      if (span < 0.5) return;
-			      var hit = exact ? node.n === exact : needle && node.n.toLowerCase().indexOf(needle) >= 0;
-			      if (hit) { matches++; matched += node.w; }
+			    (function place(node, x, level, span, alone) {
+			      if (span < 0.5 && !node.block) return;
+			      var hit = node.block ? (needle || exact) && contains(node) : isHit(node);
 			      var g = document.createElementNS(NS, 'g');
 			      var r = document.createElementNS(NS, 'rect');
 			      r.setAttribute('x', x.toFixed(2));
@@ -642,7 +711,7 @@ public final class FlameGraph {
 			      r.setAttribute('fill', marking ? (hit ? '#ffb347' : 'hsl(248 18% 24%)') : fill(node));
 			      g.appendChild(r);
 			      // the heat stripe: how much of this frame's width is spent in the frame itself
-			      var own = node.idle || node === root || node.f.key === 'thread' ? 0 : span * node.s / node.w;
+			      var own = node.si || node === root || node.f.key === 'thread' ? 0 : span * selfWeight(node) / node.w;
 			      if (!marking && own >= 1) {
 			        var h = document.createElementNS(NS, 'rect');
 			        h.setAttribute('class', 'heat');
@@ -666,12 +735,17 @@ public final class FlameGraph {
 			      g.addEventListener('mouseleave', function () { tip.hidden = true; });
 			      g.addEventListener('click', function () { zoom(node); });
 			      svg.appendChild(g);
-			      var kids = node.c || [], at = x;
-			      for (var i = 0; i < kids.length; i++) {
-			        if (kids[i].w <= 0) continue;
-			        var w = span * kids[i].w / node.w;
-			        place(kids[i], at, level + 1, w);
+			      if (alone) return;
+			      var parts = split(node, span), at = x;
+			      for (var i = 0; i < parts.big.length; i++) {
+			        var w = span * parts.big[i].w / node.w;
+			        place(parts.big[i], at, level + 1, w);
 			        at += w;
+			      }
+			      if (parts.small.length === 1) place(parts.small[0], at, level + 1, span * parts.small[0].w / node.w, true);
+			      else if (parts.small.length) {
+			        var block = blockOf(node, parts.small);
+			        place(block, at, level + 1, span * block.w / node.w, true);
 			      }
 			    })(focus, 0, 0, width);
 
@@ -689,17 +763,18 @@ public final class FlameGraph {
 			    head.className = 'tn';
 			    head.textContent = node === root ? 'all' : short(node.n);
 			    tip.append(head);
-			    var where = pkg(node.n);
+			    var where = node.block ? '' : pkg(node.n);
 			    if (where) {
 			      var p = document.createElement('div');
 			      p.className = 'tp';
 			      p.textContent = where;
 			      tip.append(p);
 			    }
-			    var rows = [['Total', fmt(node.v) + ', ' + pct(node.v, base())],
-			      ['Self', fmt(node.s) + ', ' + pct(node.s, base())]];
+			    var rows = [['Total', fmt(node.v) + ', ' + pct(node.v, base())]];
+			    if (!node.block) rows.push(['Self', fmt(node.s) + ', ' + pct(node.s, base())]);
 			    if (node.p) rows.push(['Of parent', pct(node.v, node.p.v)]);
 			    rows.push(['Kind', node.idle ? 'idle or waiting' : node.f.label]);
+			    if (node.i > 0 && !node.idle) rows.push(['Of it waiting', pct(node.i, node.v)]);
 			    var grid = document.createElement('div');
 			    grid.className = 'tg';
 			    rows.forEach(function (row) {
@@ -709,6 +784,13 @@ public final class FlameGraph {
 			      grid.append(k, v);
 			    });
 			    tip.append(grid);
+			    if (node.block) {
+			      var list = document.createElement('div');
+			      list.className = 'tl';
+			      list.textContent = node.c.slice(0, 5).map(function (k) { return short(k.n); }).join(', ')
+			        + (node.c.length > 5 ? ' and ' + (node.c.length - 5) + ' more. ' : '. ') + 'Click to open.';
+			      tip.append(list);
+			    }
 			    var pad = 14;
 			    var left = Math.min(e.clientX + pad, window.innerWidth - tip.offsetWidth - 8);
 			    var top = e.clientY + pad + tip.offsetHeight > window.innerHeight ? e.clientY - tip.offsetHeight - pad : e.clientY + pad;
@@ -743,7 +825,7 @@ public final class FlameGraph {
 			    var sums = {}, idle = 0;
 			    (function walk(n) {
 			      if (n !== root) {
-			        if (n.idle) idle += n.s; else sums[n.f.key] = (sums[n.f.key] || 0) + n.s;
+			        if (n.si) idle += n.s; else sums[n.f.key] = (sums[n.f.key] || 0) + n.s;
 			      }
 			      (n.c || []).forEach(walk);
 			    })(root);
@@ -782,6 +864,14 @@ public final class FlameGraph {
 			  document.getElementById('railTitle').textContent = BY_CALLER
 			    ? (unit === 'bytes' ? 'Nearest non-JDK allocator' : 'Nearest non-JDK frame')
 			    : (unit === 'bytes' ? 'Where the bytes are allocated' : 'Where the time sits');
+			  if (QUIET) document.getElementById('railTitle').textContent = 'What little ran';
+			  var onlyButton = document.getElementById('only');
+			  if (onlyButton) onlyButton.addEventListener('click', function () {
+			    only = !only;
+			    onlyButton.setAttribute('aria-pressed', String(only));
+			    draw();
+			    summarise();
+			  });
 
 			  // the frame a weight is credited to: JDK leaves such as Arrays.copyOf name no culprit
 			  function credited(node) {
@@ -791,10 +881,12 @@ public final class FlameGraph {
 			  }
 			  // the widest frame that is not trunk: dispatch plumbing names nothing, and the launcher path runs to about half of a startup
 			  var PLUMBING = /^(java\\.lang\\.invoke\\.|java\\.lang\\.reflect\\.|jdk\\.internal\\.reflect\\.)|\\.0x|SafeRunner\\.run/;
+			  // a frame handing nine tenths of its weight to one child decided nothing, whatever it is called
+			  function passesOn(n) { return (n.c || []).some(function (k) { return k.w * 10 >= n.w * 9; }); }
 			  function widest(total) {
 			    var below = {}, onStack = {};
 			    (function walk(n) {
-			      var fresh = n !== root && n.f.key !== 'thread' && !n.idle && !onStack[n.n] && !PLUMBING.test(n.n);
+			      var fresh = n !== root && n.f.key !== 'thread' && !n.idle && !onStack[n.n] && !PLUMBING.test(n.n) && !passesOn(n);
 			      if (fresh) { below[n.n] = (below[n.n] || 0) + n.w; onStack[n.n] = true; }
 			      (n.c || []).forEach(function (kid) { if (kid.w > 0) walk(kid); });
 			      if (fresh) delete onStack[n.n];
@@ -823,8 +915,10 @@ public final class FlameGraph {
 			      path.push(n);
 			    }
 			    hot.replaceChildren();
-			    var wide = BY_CALLER && total ? widest(total) : null;
-			    if (wide) {
+			    var wide = !QUIET && BY_CALLER && total ? widest(total) : null;
+			    if (QUIET) {
+			      hot.textContent = QUIET;
+			    } else if (wide) {
 			      var wideLead = document.createElement('b');
 			      wideLead.textContent = pct(wide.w, total);
 			      var wideName = document.createElement('code');
@@ -834,7 +928,7 @@ public final class FlameGraph {
 			      mark.textContent = 'Highlight it';
 			      mark.addEventListener('click', function () { select(wide.name); });
 			      hot.append(wideLead, (unit === 'bytes' ? ' of the estimated bytes are allocated below ' : ' of the ' + (hidden.idle ? 'busy ' : '') + 'samples run below '),
-			        wideName, ', the widest frame under 40% of the total. ', mark);
+			        wideName, ', the widest branching frame under 40% of the total. ', mark);
 			    } else if (path.length && total) {
 			      var thread = path[0].f.key === 'thread' ? short(path[0].n) : null;
 			      var end = path[path.length - 1];
@@ -857,7 +951,8 @@ public final class FlameGraph {
 
 			    var self = {};
 			    (function walk(node) {
-			      if (node !== root && !node.idle && node.f.key !== 'thread' && visible(node) && node.s > 0) {
+			      if (!(node.w > 0) || (node !== root && hidden[node.f.key])) return;
+			      if (node !== root && !node.si && node.f.key !== 'thread' && selfWeight(node) > 0) {
 			        var to = credited(node).n;
 			        self[to] = (self[to] || 0) + node.s;
 			      }

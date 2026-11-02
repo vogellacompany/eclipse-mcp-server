@@ -13,6 +13,7 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import com.vogella.eclipse.mcp.core.ClientSessions;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
+import com.vogella.eclipse.mcp.core.ProductFamily;
 import com.vogella.eclipse.mcp.core.ToolArguments;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
@@ -115,7 +116,7 @@ public final class SamplingTools {
 
 		@Override
 		public String getDescription() {
-			return "Stops a sampling session and returns the aggregated result: the frames where the time was actually spent, the frames most often present on the stack, and the samples merged into one call tree. Frames present on every sample are listed once under onEveryStack rather than in topByPresence, since they are the trunk and not a finding. In the tree, a run of frames that each have one child with the same count is folded into 'chain' on the first of them, so the launcher and event loop boilerplate is one line rather than forty nested objects. Samples deeper than maxDepth lose their outermost frames; the tree is then rooted at the outermost frame the truncated samples still share and says so under truncatedNote. The raw samples are not returned unless asked for, because a hundred samples of seventy frames is seven thousand lines. byThread lists only the threads that contributed a sample the answer is about, with threadsSampled, threadsListed and threadsOmitted beside it; pass includeThreads for all of them. Threads that were parked or waiting are excluded by default and counted in idleSamplesExcluded, and the answer says so if sampling stopped early because its tick budget ran out."; //$NON-NLS-1$
+			return "Stops a sampling session and returns the aggregated result: the frames where the time was actually spent, the frames most often present on the stack, and the samples merged into one call tree. Frames present on every sample are listed once under onEveryStack rather than in topByPresence, since they are the trunk and not a finding. In the tree, a run of frames that each have one child with the same count is folded into 'chain' on the first of them, so the launcher and event loop boilerplate is one line rather than forty nested objects. Samples deeper than maxDepth lose their outermost frames; the tree is then rooted at the outermost frame the truncated samples still share and says so under truncatedNote. The raw samples are not returned unless asked for, because a hundred samples of seventy frames is seven thousand lines. byThread lists only the threads that contributed a sample the answer is about, with threadsSampled, threadsListed and threadsOmitted beside it; pass includeThreads for all of them. Each byThread entry adds up: samples is kept, which is what the tree holds, plus idleExcluded, serverExcluded and any without the filtered frame. Threads that were parked or waiting are excluded by default and counted in idleSamplesExcluded, split into idleByState (WAITING or TIMED_WAITING) and idleByFrame (RUNNABLE but in a wait, such as a native event loop), with the waits under idleFrames. nothingBusy is true when under one thread in twenty was working on average, and nothingBusyNote then says so, in which case topBySelfTime holds crumbs and names no culprit. The answer says so if sampling stopped early because its tick budget ran out."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -133,6 +134,7 @@ public final class SamplingTools {
 					    "includeThreads": {"type":"boolean","default":false,"description":"List every thread that was sampled in byThread, including the parked pool threads. Off by default because on an IDE with seventy threads their state counts are most of the answer and say nothing about where the time went; the totals are reported either way."},
 					    "includeMcpFrames":   {"type":"boolean","default":false,"description":"Keep what this MCP server itself contributed. Off by default: stacks on the server's own threads, stacks whose running code is the server's, and stacks carrying its request machinery are left out and counted in serverSamplesExcluded, and the server frames that only dispatched the application's work, such as a tool running a menu entry on the UI thread, are removed from otherwise kept stacks and counted in serverFramesElidedFrom. Turn it ON to profile the server itself."},
 					    "keepRunning": {"type":"boolean","default":false,"description":"Report the aggregate so far without stopping. With frameFilter this is how one session is read from several angles."},
+					    "productPrefixes":    {"type":"array","items":{"type":"string"},"description":"Package prefixes of the application under test, such as org.jkiss and com.dbeaver, drawn on the show page as a family of their own that it can filter to. Added to what the running product names, reported as productFamily; an Eclipse product names none."},
 					    "show":        {"type":"boolean","default":false,"description":"Also render the samples as a flame graph on a page this IDE serves, and return its URL under traceUrl. The page is dark themed, self contained and held in memory only."},
 					    "open":        {"type":"boolean","default":false,"description":"Open that page in the machine's browser. Implies show. VISIBLE TO WHOEVER IS AT THE IDE, since a browser window appears."}
 					  },
@@ -163,10 +165,12 @@ public final class SamplingTools {
 					args.getInt("minSamples", 2, 1, 1000), //$NON-NLS-1$
 					args.getBoolean("includeRawSamples", false), includeIdle, frameFilter, //$NON-NLS-1$
 					args.getBoolean("includeThreads", false), args.getBoolean("includeMcpFrames", false)); //$NON-NLS-1$ //$NON-NLS-2$
+			ProductFamily product = ProductFamily.of(arguments, true);
+			result.put("productFamily", product == null ? null : product.toJson()); //$NON-NLS-1$
 			boolean open = args.getBoolean("open", false); //$NON-NLS-1$
 			if (open || args.getBoolean("show", false)) { //$NON-NLS-1$
 				TracePage.publishSampling(session, includeIdle, frameFilter, args.getBoolean("includeMcpFrames", false), //$NON-NLS-1$
-						result, open);
+						product, result, open);
 			}
 			return McpToolResult.of(result.toString());
 		}

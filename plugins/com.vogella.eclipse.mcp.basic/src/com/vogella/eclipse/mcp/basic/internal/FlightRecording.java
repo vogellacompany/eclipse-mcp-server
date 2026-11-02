@@ -243,7 +243,7 @@ final class FlightRecording {
 					for (RecordedFrame frame : frames) {
 						classes.add(frame.getMethod() == null ? null : frame.getMethod().getType().getName());
 					}
-					switch (ServerFrames.classify(thread, classes)) {
+					switch (ServerFrames.classify(thread, classes, stackTrace.isTruncated())) {
 					case DROP -> {
 						serverDropped++;
 						continue;
@@ -351,7 +351,10 @@ final class FlightRecording {
 
 		if (flame != null) {
 			StackAlignment.draw(StackAlignment.align(options.timeFlame() ? time.stacks() : allocationStacks).stacks(),
-					flame);
+					flame, options.timeFlame());
+			if (options.timeFlame()) {
+				flame.quiet(time.quiet());
+			}
 		}
 
 		JsonObject result = new JsonObject().put("eventsRead", Integer.valueOf(read)) //$NON-NLS-1$

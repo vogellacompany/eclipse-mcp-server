@@ -55,6 +55,37 @@ class ServerFramesTest {
 	}
 
 	@Test
+	void anApplicationThatUsesJacksonItselfKeepsItsWorkOnTheUiThread() {
+		// a tool pressing a button whose handler parses JSON, which is nothing of the server's
+		assertEquals(Verdict.ELIDE, ServerFrames.classify("main",
+				List.of("com.fasterxml.jackson.core.JsonParser", "org.jkiss.dbeaver.Handler",
+						"com.vogella.eclipse.mcp.ui.internal.PressWidgetTool$$Lambda", "org.eclipse.swt.widgets.Synchronizer",
+						"org.eclipse.swt.widgets.Display", "org.eclipse.equinox.launcher.Main")));
+	}
+
+	@Test
+	void theServerInOneOfItsLibrariesIsStillTheServer() {
+		assertEquals(Verdict.DROP, ServerFrames.classify("main",
+				List.of("java.lang.String", "tools.jackson.databind.ObjectMapper",
+						"com.vogella.eclipse.mcp.server.internal.McpToolAdapter", "org.eclipse.swt.widgets.Display")));
+	}
+
+	@Test
+	void aStackCutAtAServerFrameIsNotTakenForAThreadOfTheServer() {
+		List<String> cut = List.of("org.example.Deep", "org.example.Recursion",
+				"com.vogella.eclipse.mcp.ui.internal.PressWidgetTool$$Lambda");
+		assertEquals(Verdict.ELIDE, ServerFrames.classify("main", cut, true));
+		assertEquals(Verdict.DROP, ServerFrames.classify("main", cut, false));
+	}
+
+	@Test
+	void theEventLoopOfTheUiThreadIsNotTheServers() {
+		assertEquals(Verdict.KEEP, ServerFrames.classify("main",
+				List.of("org.eclipse.swt.internal.win32.OS", "org.eclipse.swt.widgets.Display",
+						"org.jkiss.dbeaver.ui.app.standalone.DBeaverApplication", "org.eclipse.equinox.launcher.Main")));
+	}
+
+	@Test
 	void theRequestMachineryCountsOnlyBesideTheServer() {
 		assertEquals(Verdict.KEEP, ServerFrames.classify("qtp-1",
 				List.of("org.example.Servlet", "org.eclipse.jetty.server.Server", "java.lang.Thread")));

@@ -7,6 +7,7 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import com.vogella.eclipse.mcp.core.ClientSessions;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
+import com.vogella.eclipse.mcp.core.ProductFamily;
 import com.vogella.eclipse.mcp.core.ToolArguments;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
@@ -35,6 +36,7 @@ public final class ShowTraceTool implements IMcpTool {
 				    "frameFilter":        {"type":"string","description":"Draw only the stacks containing this text in a frame, e.g. a package prefix. Applied when reading, so one session can be drawn from several angles."},
 				    "includeIdleThreads": {"type":"boolean","default":false,"description":"Include threads parked or waiting, including an event loop sleeping in Display.sleep and accept or poll loops. Off by default, because the pooled threads of an idle IDE otherwise dominate the picture. Turn it ON to look at a FREEZE, whose threads are usually parked."},
 				    "includeMcpFrames":   {"type":"boolean","default":false,"description":"Keep what this MCP server itself contributed. Off by default: stacks on the server's own threads, stacks whose running code is the server's, and stacks carrying its request machinery are left out and counted in serverSamplesExcluded, and the server frames that only dispatched the application's work, such as a tool running a menu entry on the UI thread, are removed from otherwise kept stacks and counted in serverFramesElidedFrom. Turn it ON to profile the server itself."},
+				    "productPrefixes":    {"type":"array","items":{"type":"string"},"description":"Package prefixes of the application under test, such as org.jkiss and com.dbeaver, drawn as a family of their own that the page can filter to. Added to what the running product names, reported as productFamily; an Eclipse product names none."},
 				    "open":               {"type":"boolean","default":false,"description":"Open the page in the machine's browser. VISIBLE TO WHOEVER IS AT THE IDE, since a browser window appears."}
 				  },
 				  "additionalProperties": false
@@ -65,7 +67,9 @@ public final class ShowTraceTool implements IMcpTool {
 		boolean includeServer = args.getBoolean("includeMcpFrames", false); //$NON-NLS-1$
 		// the same counts eclipse_stop_sampling reports, so the two answers can be compared
 		SamplingRegistry.counts(session, includeIdle, frameFilter, includeServer, answer);
-		TracePage.publishSampling(session, includeIdle, frameFilter, includeServer, answer,
+		ProductFamily product = ProductFamily.of(arguments, true);
+		answer.put("productFamily", product == null ? null : product.toJson()); //$NON-NLS-1$
+		TracePage.publishSampling(session, includeIdle, frameFilter, includeServer, product, answer,
 				args.getBoolean("open", false)); //$NON-NLS-1$
 		return McpToolResult.of(answer.toString());
 	}

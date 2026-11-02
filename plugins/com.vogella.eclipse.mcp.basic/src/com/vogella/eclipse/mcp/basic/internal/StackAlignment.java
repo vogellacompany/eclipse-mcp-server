@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.vogella.eclipse.mcp.core.FlameGraph;
+import com.vogella.eclipse.mcp.core.IdleFrames;
 
 /**
  * Lines up stacks JFR cut at its stack depth, so that they merge under one root: per thread
@@ -53,8 +54,8 @@ final class StackAlignment {
 		return new Aligned(aligned, truncated, unaligned, anchors);
 	}
 
-	/** Adds the stacks to a flame graph, each thread a branch of its own. */
-	static void draw(List<Stack> stacks, FlameGraph.Builder into) {
+	/** Adds the stacks to a flame graph, each thread a branch of its own; an allocation is never idle. */
+	static void draw(List<Stack> stacks, FlameGraph.Builder into, boolean markIdle) {
 		for (Stack stack : stacks) {
 			if (stack.frames().length == 0) {
 				continue;
@@ -64,7 +65,7 @@ final class StackAlignment {
 			for (int i = stack.frames().length - 1; i >= 0; i--) {
 				rootFirst.add(stack.frames()[i]);
 			}
-			into.add(rootFirst, stack.weight());
+			into.add(rootFirst, stack.weight(), markIdle && IdleFrames.idleFrame(Arrays.asList(stack.frames())) != null);
 		}
 	}
 

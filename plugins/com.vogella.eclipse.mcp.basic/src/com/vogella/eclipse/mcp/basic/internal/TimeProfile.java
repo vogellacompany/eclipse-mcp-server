@@ -28,7 +28,12 @@ public final class TimeProfile {
 	private static final int IDLE_FRAMES = 5;
 
 	/** What to report and how much of it. */
-	public record Limits(boolean includeIdle, int topMethods, int topThreads, int minSamples, int maxTreeNodes) {
+	public record Limits(boolean includeIdle, int topMethods, int topThreads, int minSamples, int maxTreeNodes,
+			boolean frameFiltered) {
+
+		public Limits(boolean includeIdle, int topMethods, int topThreads, int minSamples, int maxTreeNodes) {
+			this(includeIdle, topMethods, topThreads, minSamples, maxTreeNodes, false);
+		}
 	}
 
 	private final Limits limits;
@@ -102,13 +107,36 @@ public final class TimeProfile {
 		return execution + nativeSamples;
 	}
 
+	/**
+	 * Says that nothing was busy, or null when something was. Measured against all samples, since
+	 * unlike a tick of the stack sampler a JFR sample does not visit every parked thread, and not
+	 * under a frame filter, which is a question of its own.
+	 */
+	String quiet() {
+		int busy = samples() - (limits.includeIdle() ? idle : 0);
+		if (limits.frameFiltered() || idle == 0 || !IdleFrames.nothingBusy(busy, busy + idle)) {
+			return null;
+		}
+		List<String> waits = idleFrames.entrySet().stream()
+				.sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry::getKey)).limit(3)
+				.map(entry -> IdleFrames.brief(entry.getKey())).toList();
+		return "Nothing was busy. %d of %d samples were working and the rest were threads waiting, mostly in %s. So no frame is named as a culprit.%s" //$NON-NLS-1$
+				.formatted(Integer.valueOf(busy), Integer.valueOf(busy + idle), String.join(", ", waits), //$NON-NLS-1$
+						limits.includeIdle() ? "" : " To look at a stall, whose threads are parked, include the idle samples."); //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
 	public JsonObject toJson() {
 		int samples = samples();
+		String quiet = quiet();
 		JsonObject result = new JsonObject().put("samples", Integer.valueOf(samples)) //$NON-NLS-1$
 				.put("execution", Integer.valueOf(execution)) //$NON-NLS-1$
 				.put("native", Integer.valueOf(nativeSamples)) //$NON-NLS-1$
 				.put("idleSamples", Integer.valueOf(idle)) //$NON-NLS-1$
-				.put("idleExcluded", Integer.valueOf(limits.includeIdle() ? 0 : idle)); //$NON-NLS-1$
+				.put("idleExcluded", Integer.valueOf(limits.includeIdle() ? 0 : idle)) //$NON-NLS-1$
+				.put("nothingBusy", Boolean.valueOf(quiet != null)); //$NON-NLS-1$
+		if (quiet != null) {
+			result.put("nothingBusyNote", quiet); //$NON-NLS-1$
+		}
 		JsonArray waits = new JsonArray();
 		idleFrames.entrySet().stream()
 				.sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry::getKey))

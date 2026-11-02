@@ -75,6 +75,32 @@ class TimeProfileTest {
 	}
 
 	@Test
+	void aRecordingOfAnIdleProcessSaysSo() throws Exception {
+		TimeProfile profile = profile(false, 10, 10, 50);
+		add(profile, "main", true, WORK);
+		for (int i = 0; i < 40; i++) {
+			add(profile, "main", false, EVENT_LOOP);
+		}
+
+		Map<String, Object> answer = TestFixture.parse(profile.toJson().toString());
+
+		assertEquals(Boolean.TRUE, answer.get("nothingBusy"), "got " + answer);
+		assertTrue(String.valueOf(answer.get("nothingBusyNote")).contains("OS.WaitMessage"), "got " + answer);
+	}
+
+	@Test
+	void aBusyRecordingAndAFilteredOneMakeNoSuchClaim() throws Exception {
+		TimeProfile busy = profile(false, 10, 10, 50);
+		add(busy, "main", true, WORK);
+		add(busy, "main", false, EVENT_LOOP);
+		assertEquals(Boolean.FALSE, TestFixture.parse(busy.toJson().toString()).get("nothingBusy"));
+
+		TimeProfile filtered = new TimeProfile(new TimeProfile.Limits(false, 10, 10, 1, 50, true));
+		add(filtered, "main", false, EVENT_LOOP);
+		assertEquals(Boolean.FALSE, TestFixture.parse(filtered.toJson().toString()).get("nothingBusy"));
+	}
+
+	@Test
 	void everyListReportsItsTotalAndWhatTheLimitCut() throws Exception {
 		TimeProfile profile = profile(false, 1, 1, 2);
 		add(profile, "main", true, WORK);

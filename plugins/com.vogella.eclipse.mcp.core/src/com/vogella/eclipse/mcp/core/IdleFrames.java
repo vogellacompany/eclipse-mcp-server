@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * The frames a thread sits in while doing nothing, the one definition behind the
- * flight recording answer and the flame graph page.
+ * sampling and flight recording answers and the flame graph pages.
  * <p>
  * An entry is {@code Class.method} with a simple class name, or a bare {@code method}, and
  * matches a method starting with it, so {@code Object.wait} also covers {@code Object.wait0}.
@@ -19,14 +19,12 @@ public final class IdleFrames {
 			"ReferenceQueue.remove", "SocketDispatcher.read"); //$NON-NLS-1$ //$NON-NLS-2$
 
 	/** How far from the innermost frame a wait counts: below that a native callback is running real work. */
-	private static final int STACK_REACH = 4;
+	public static final int STACK_REACH = 4;
+
+	/** Busy below one part in this of what could have been busy is a profile with no finding. */
+	private static final int QUIET_RATIO = 20;
 
 	private IdleFrames() {
-	}
-
-	/** The entries, which the page's script matches the same way {@link #isIdle(String)} does. */
-	public static List<String> frames() {
-		return FRAMES;
 	}
 
 	/** Whether a frame such as {@code pkg.Outer$Inner.method:12} is a wait. */
@@ -58,5 +56,22 @@ public final class IdleFrames {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Whether so little ran that naming a hot frame would mislead. {@code opportunities} is what
+	 * busy is measured against: ticks for a sampler that visits every thread, since a share of
+	 * all stacks would call one saturated thread among seventy parked ones idle.
+	 */
+	public static boolean nothingBusy(long busy, long opportunities) {
+		return opportunities > 0 && busy * QUIET_RATIO < opportunities;
+	}
+
+	/** {@code Class.method} of a frame, for a sentence a person reads. */
+	public static String brief(String frame) {
+		int colon = frame.lastIndexOf(':');
+		String body = colon > 0 ? frame.substring(0, colon) : frame;
+		int dot = body.lastIndexOf('.');
+		return body.substring(dot <= 0 ? 0 : body.lastIndexOf('.', dot - 1) + 1);
 	}
 }

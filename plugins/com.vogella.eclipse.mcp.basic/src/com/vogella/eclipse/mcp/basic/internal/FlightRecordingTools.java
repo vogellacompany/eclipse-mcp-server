@@ -12,6 +12,7 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import com.vogella.eclipse.mcp.core.FlameGraph;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
+import com.vogella.eclipse.mcp.core.ProductFamily;
 import com.vogella.eclipse.mcp.core.ToolArguments;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
@@ -107,7 +108,7 @@ public final class FlightRecordingTools {
 
 		@Override
 		public String getDescription() {
-			return "Dumps a recording and returns it aggregated: which classes the bytes went into, which call chains allocated them, where the time was spent, what was thrown, and what the collector did. The raw file is not returned unless outputPath is given, because a recording is megabytes of binary and the aggregate is the answer. READ THE BYTES AS AN ESTIMATE: the allocation sampler is throttled and reports a weight per sample, so the figures rank allocators correctly and do not add up to what the process allocated. allocationByStack is the field that names a culprit, because a class such as Path or byte[] says nothing on its own. WHERE THE TIME WENT is under time: execution and native samples told apart, with parked stacks left out and counted in idleExcluded, topBySelfTime, topByPresence (frames anywhere on the stack; those on every stack are under onEveryStack), a merged call tree with a branch per thread (a run of equal counts folded into chain), byThread for the names threadNames can select, and the achieved rate under sampling. hotMethods is only the innermost frame of execution samples, which on a flat profile such as a startup says little; prefer topByPresence and tree. thrown groups jdk.JavaErrorThrow and jdk.JavaExceptionThrow by class, message and nearest non-JDK frame. threadNames, fromSeconds and toSeconds select what every part of the answer is about, and one file is read once per call, so splitting startup from idle and shutdown is one call per phase. Pass keepRunning to read a recording several times without ending it."; //$NON-NLS-1$
+			return "Dumps a recording and returns it aggregated: which classes the bytes went into, which call chains allocated them, where the time was spent, what was thrown, and what the collector did. The raw file is not returned unless outputPath is given, because a recording is megabytes of binary and the aggregate is the answer. READ THE BYTES AS AN ESTIMATE: the allocation sampler is throttled and reports a weight per sample, so the figures rank allocators correctly and do not add up to what the process allocated. allocationByStack is the field that names a culprit, because a class such as Path or byte[] says nothing on its own. WHERE THE TIME WENT is under time: execution and native samples told apart, with parked stacks left out and counted in idleExcluded, nothingBusy with nothingBusyNote when under one sample in twenty was working so that the frames below name no culprit, topBySelfTime, topByPresence (frames anywhere on the stack; those on every stack are under onEveryStack), a merged call tree with a branch per thread (a run of equal counts folded into chain), byThread for the names threadNames can select, and the achieved rate under sampling. hotMethods is only the innermost frame of execution samples, which on a flat profile such as a startup says little; prefer topByPresence and tree. thrown groups jdk.JavaErrorThrow and jdk.JavaExceptionThrow by class, message and nearest non-JDK frame. threadNames, fromSeconds and toSeconds select what every part of the answer is about, and one file is read once per call, so splitting startup from idle and shutdown is one call per phase. Pass keepRunning to read a recording several times without ending it."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -135,6 +136,7 @@ public final class FlightRecordingTools {
 					    "maxTreeNodes": {"type":"integer","default":80,"minimum":1,"maximum":5000,"description":"How many frames time.tree holds, the widest first, so it stays small enough to read; time.treeNodesTotal and time.treeTruncated report what the limit cut."},
 					    "outputPath":   {"type":"string","description":"Keep the .jfr file at this absolute path, for opening it in JDK Mission Control. Omit to delete it after reading."},
 					    "includeMcpFrames": {"type":"boolean","default":false,"description":"Keep what this MCP server itself contributed. Off by default: events on the server's own threads, events whose running code is the server's, and events carrying its request machinery are left out and counted in serverEventsExcluded, and server frames that only dispatched the application's work are removed from otherwise kept stacks and counted in serverFramesElidedFrom. Turn it ON to profile the server itself. A .jfr file from another JVM has no server frames, so nothing is removed there."},
+					    "productPrefixes": {"type":"array","items":{"type":"string"},"description":"Package prefixes of the application recorded, such as org.jkiss and com.dbeaver, drawn on the show page as a family of their own that it can filter to, and reported as productFamily. A recording of this IDE adds them to what its product names, which is nothing for an Eclipse product; a .jfr from another JVM has no running product to read, so with file these are the only way to get a family."},
 					    "show":         {"type":"boolean","default":false,"description":"Also render a flame graph on a page this IDE serves and return its URL under traceUrl, with traceWeight naming what its width means. flameWeight picks the weight, every filter here applies to it, and each thread is a branch. Dark themed, self contained, held in memory only."},
 					    "flameWeight":  {"type":"string","enum":["allocation","time"],"default":"allocation","description":"What a frame's width means on the show page. allocation is the estimated bytes allocated below it, time is the execution and native samples below it, idle ones left out unless includeIdle."},
 					    "open":         {"type":"boolean","default":false,"description":"Open that page in the machine's browser. Implies show. VISIBLE TO WHOEVER IS AT THE IDE, since a browser window appears."}
@@ -181,14 +183,17 @@ public final class FlightRecordingTools {
 					new TimeProfile.Limits(includeIdle, args.getInt("topMethods", 10, 1, 200), //$NON-NLS-1$
 							args.getInt("topThreads", 10, 1, 200), //$NON-NLS-1$
 							args.getInt("minSamples", 0, 0, 1_000_000), //$NON-NLS-1$
-							args.getInt("maxTreeNodes", 80, 1, 5000)), //$NON-NLS-1$
+							args.getInt("maxTreeNodes", 80, 1, 5000), //$NON-NLS-1$
+							args.getString("frameFilter") != null), //$NON-NLS-1$
 					"time".equals(flameWeight)); //$NON-NLS-1$
 			boolean open = args.getBoolean("open", false); //$NON-NLS-1$
 			boolean show = open || args.getBoolean("show", false); //$NON-NLS-1$
 			String existing = args.getString("file"); //$NON-NLS-1$
 			if (existing != null) {
-				return read(Path.of(existing), options, show, open);
+				// another JVM's recording, which this IDE's product says nothing about
+				return read(Path.of(existing), options, ProductFamily.of(arguments, false), show, open);
 			}
+			ProductFamily product = ProductFamily.of(arguments, true);
 			try {
 				String id = args.getString("recordingId", FlightRecording.mostRecentId()); //$NON-NLS-1$
 				if (id == null) {
@@ -203,14 +208,15 @@ public final class FlightRecordingTools {
 					JsonObject result = FlightRecording.aggregate(file, options, flame)
 							.put("recordingId", id) //$NON-NLS-1$
 							.put("stillRunning", Boolean.valueOf(keepRunning)) //$NON-NLS-1$
-							.put("recordingBytes", Long.valueOf(size)); //$NON-NLS-1$
+							.put("recordingBytes", Long.valueOf(size)) //$NON-NLS-1$
+							.put("productFamily", product == null ? null : product.toJson()); //$NON-NLS-1$
 					if (outputPath != null) {
 						result.put("file", file.toString()); //$NON-NLS-1$
 					}
 					result.put("note", //$NON-NLS-1$
 							"The byte figures are the allocation sampler's weights, so they rank allocators rather than adding up to everything allocated. allocationByStack is what names a caller; a class on its own rarely does."); //$NON-NLS-1$
 					if (flame != null) {
-						publish(options, id, "%s recorded".formatted(FlameGraph.bytes(size)), flame, result, open); //$NON-NLS-1$
+						publish(options, id, "%s recorded".formatted(FlameGraph.bytes(size)), flame, product, result, open); //$NON-NLS-1$
 					}
 					return McpToolResult.of(result.toString());
 				} finally {
@@ -235,7 +241,7 @@ public final class FlightRecordingTools {
 		}
 
 		private static void publish(FlightRecording.Aggregation options, String name, String source,
-				FlameGraph.Builder flame, JsonObject result, boolean open) {
+				FlameGraph.Builder flame, ProductFamily product, JsonObject result, boolean open) {
 			StringBuilder filters = new StringBuilder();
 			if (options.threadNames() != null) {
 				filters.append(", threads ").append(String.join(", ", options.threadNames())); //$NON-NLS-1$ //$NON-NLS-2$
@@ -251,15 +257,16 @@ public final class FlightRecordingTools {
 				if (options.sampleKind() != null) {
 					filters.append(", only ").append(options.sampleKind()).append(" samples"); //$NON-NLS-1$ //$NON-NLS-2$
 				}
-				FlightTracePage.publishTime(name, source, filters.toString(), options.time().includeIdle(), flame, result,
-						open);
+				FlightTracePage.publishTime(name, source, filters.toString(), options.time().includeIdle(), flame, product,
+						result, open);
 			} else {
-				FlightTracePage.publishAllocation(name, source, filters.toString(), flame, result, open);
+				FlightTracePage.publishAllocation(name, source, filters.toString(), flame, product, result, open);
 			}
 		}
 
 		/** A recording somebody else wrote, most likely a launched program's own. */
-		private static McpToolResult read(Path file, FlightRecording.Aggregation options, boolean show, boolean open) {
+		private static McpToolResult read(Path file, FlightRecording.Aggregation options, ProductFamily product,
+				boolean show, boolean open) {
 			if (!Files.isReadable(file)) {
 				return McpToolResult.error(
 						"There is no readable file at '%s'. A launch that records itself writes the file when the JVM EXITS, so it is absent while the program still runs and stays absent if the program was killed rather than ended." //$NON-NLS-1$
@@ -275,11 +282,13 @@ public final class FlightRecordingTools {
 				JsonObject result = FlightRecording.aggregate(file, options, flame).put("file", file.toString()) //$NON-NLS-1$
 						.put("recordingBytes", Long.valueOf(size)) //$NON-NLS-1$
 						.put("of", "another JVM, read from its file; nothing of this IDE was recorded or stopped") //$NON-NLS-1$ //$NON-NLS-2$
+						.put("productFamily", product == null ? null : product.toJson()) //$NON-NLS-1$
 						.put("note", //$NON-NLS-1$
 								"The byte figures are the allocation sampler's weights, so they rank allocators rather than adding up to everything allocated. allocationByStack is what names a caller; a class on its own rarely does."); //$NON-NLS-1$
 				if (flame != null) {
 					publish(options, String.valueOf(file.getFileName()),
-							"%s read from %s".formatted(FlameGraph.bytes(size), file.getFileName()), flame, result, open); //$NON-NLS-1$
+							"%s read from %s".formatted(FlameGraph.bytes(size), file.getFileName()), flame, product, result, //$NON-NLS-1$
+							open);
 				}
 				return McpToolResult.of(result.toString());
 			} catch (LinkageError e) {

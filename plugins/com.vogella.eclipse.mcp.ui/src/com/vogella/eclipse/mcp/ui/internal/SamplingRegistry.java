@@ -6,6 +6,7 @@ import java.lang.management.ThreadMXBean;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -17,6 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 import com.vogella.eclipse.mcp.core.FlameGraph;
+import com.vogella.eclipse.mcp.core.IdleFrames;
 import com.vogella.eclipse.mcp.core.ServerFrames;
 import com.vogella.eclipse.mcp.core.json.JsonArray;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
@@ -31,6 +33,9 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
 public final class SamplingRegistry {
 
 	private static final SamplingRegistry INSTANCE = new SamplingRegistry();
+
+	/** How many of the waits idle samples sat in are listed. */
+	private static final int IDLE_FRAMES = 5;
 
 	private final AtomicLong ids = new AtomicLong();
 
@@ -80,6 +85,19 @@ public final class SamplingRegistry {
 			this.intervalMillis = intervalMillis;
 			this.maxSamples = maxSamples;
 			this.maxDepth = maxDepth;
+		}
+
+		/** A finished session over samples already taken, one tick each {@code achievedMillis} apart. */
+		public static Session of(String id, List<Sample> taken, int ticks, int intervalMillis, long achievedMillis,
+				int maxDepth) {
+			Session session = new Session(id, null, intervalMillis, ticks, maxDepth);
+			session.samples.addAll(taken);
+			session.ticks = ticks;
+			session.firstTickAt = session.startedAt;
+			session.lastTickAt = session.startedAt + achievedMillis * Math.max(ticks - 1, 0);
+			session.running = false;
+			session.endedAt = session.lastTickAt;
+			return session;
 		}
 
 		public String id() {
@@ -189,6 +207,14 @@ public final class SamplingRegistry {
 				return rounds < 2 ? intervalMillis : Math.round((lastTickAt - firstTickAt) / (double) (rounds - 1));
 			}
 		}
+
+		/** What to tell a reader whose conclusions rest on the clock when it drifted, or null when it held. */
+		String intervalWarning() {
+			long achieved = achievedIntervalMillis();
+			return achieved <= intervalMillis * 1.2 ? null
+					: "Sampling could not keep the requested %d ms interval and achieved %d ms. Sample fewer threads or ask for a longer interval; note also that sampling itself slows the work being measured, measurably so at short intervals across many threads." //$NON-NLS-1$
+							.formatted(Integer.valueOf(intervalMillis), Long.valueOf(achieved));
+		}
 	}
 
 	public synchronized Session start(Function<ThreadMXBean, long[]> threadIds, int intervalMillis, int maxSamples, int maxDepth) {
@@ -248,44 +274,67 @@ public final class SamplingRegistry {
 			filtered = all.size() - matching.size();
 			all = matching;
 		}
-		int idle = 0;
+		Fates fates = new Fates();
+		int busy = 0;
+		int idleByState = 0;
+		int idleByFrame = 0;
+		Map<String, Integer> waits = new HashMap<>();
 		List<Sample> samples = new ArrayList<>();
 		for (Sample sample : all) {
-			if (isIdle(sample.stack())) {
-				idle++;
-				if (includeIdle) {
-					samples.add(sample);
+			Long thread = Long.valueOf(sample.threadId());
+			String wait = waitOf(sample);
+			if (wait != null) {
+				if (isWaitingState(sample.state())) {
+					idleByState++;
+				} else {
+					idleByFrame++;
 				}
-			} else {
-				samples.add(sample);
+				waits.merge(wait, Integer.valueOf(1), Integer::sum);
+				if (!includeIdle) {
+					fates.idle.merge(thread, Integer.valueOf(1), Integer::sum);
+					continue;
+				}
 			}
-		}
-		// after the idle split, so what is excluded here plus samples adds up to what would be reported
-		if (!includeServer) {
-			List<Sample> kept = new ArrayList<>(samples.size());
-			for (Sample sample : samples) {
+			// after the idle split, so what is excluded here plus samples adds up to what would be reported
+			Sample kept = sample;
+			if (!includeServer) {
 				List<String> classes = new ArrayList<>(sample.stack().length);
 				for (StackTraceElement element : sample.stack()) {
 					classes.add(element.getClassName());
 				}
-				switch (ServerFrames.classify(sample.threadName(), classes)) {
-				case DROP -> serverDropped++;
-				case ELIDE -> {
-					serverElided++;
-					kept.add(new Sample(sample.threadId(), sample.threadName(), sample.state(),
-							Arrays.stream(sample.stack()).filter(e -> !ServerFrames.isOwn(e.getClassName()))
-									.toArray(StackTraceElement[]::new)));
+				boolean cut = sample.stack().length >= session.maxDepth();
+				ServerFrames.Verdict verdict = ServerFrames.classify(sample.threadName(), classes, cut);
+				if (verdict == ServerFrames.Verdict.DROP) {
+					serverDropped++;
+					fates.server.merge(thread, Integer.valueOf(1), Integer::sum);
+					continue;
 				}
-				case KEEP -> kept.add(sample);
+				if (verdict == ServerFrames.Verdict.ELIDE) {
+					serverElided++;
+					kept = new Sample(sample.threadId(), sample.threadName(), sample.state(),
+							Arrays.stream(sample.stack()).filter(e -> !ServerFrames.isOwn(e.getClassName()))
+									.toArray(StackTraceElement[]::new));
 				}
 			}
-			samples = kept;
+			samples.add(kept);
+			fates.kept.merge(thread, Integer.valueOf(1), Integer::sum);
+			if (wait == null) {
+				busy++;
+			}
 		}
-		return new Selection(everything, samples, idle, filtered, serverDropped, serverElided);
+		return new Selection(everything, samples, idleByState + idleByFrame, idleByState, idleByFrame, waits, busy,
+				filtered, serverDropped, serverElided, fates);
 	}
 
-	private record Selection(List<Sample> everything, List<Sample> samples, int idle, int filtered, int serverDropped,
-			int serverElided) {
+	/** Per thread, where its samples went, so that byThread adds up to the tree beside it. */
+	private static final class Fates {
+		final Map<Long, Integer> kept = new HashMap<>();
+		final Map<Long, Integer> idle = new HashMap<>();
+		final Map<Long, Integer> server = new HashMap<>();
+	}
+
+	private record Selection(List<Sample> everything, List<Sample> samples, int idle, int idleByState, int idleByFrame,
+			Map<String, Integer> waits, int busy, int filtered, int serverDropped, int serverElided, Fates fates) {
 	}
 
 	/**
@@ -296,8 +345,8 @@ public final class SamplingRegistry {
 	public static FlameGraph.Builder flame(Session session, boolean includeIdle, String frameFilter,
 			boolean includeServer) {
 		FlameGraph.Builder builder = FlameGraph.builder();
-		for (Sample sample : align(select(session, includeIdle, frameFilter, includeServer).samples(), session.maxDepth())
-				.samples()) {
+		Selection selection = select(session, includeIdle, frameFilter, includeServer);
+		for (Sample sample : align(selection.samples(), session.maxDepth()).samples()) {
 			StackTraceElement[] stack = sample.stack();
 			List<String> frames = new ArrayList<>(stack.length + 1);
 			// the thread first, so each thread is a branch of its own rather than merged at Thread.run
@@ -306,17 +355,58 @@ public final class SamplingRegistry {
 			for (int i = stack.length - 1; i >= 0; i--) {
 				frames.add(frame(stack[i]));
 			}
-			builder.add(frames, 1);
+			builder.add(frames, 1, waitOf(sample) != null);
 		}
-		return builder;
+		return builder.quiet(quiet(session, selection, includeIdle, frameFilter));
+	}
+
+	/**
+	 * Says that nothing was busy, or null when something was. Measured per tick, since a tick
+	 * visits every thread, and not under a frame filter, which is a question of its own.
+	 */
+	private static String quiet(Session session, Selection selection, boolean includeIdle, String frameFilter) {
+		if (frameFilter != null || selection.idle() == 0
+				|| !IdleFrames.nothingBusy(selection.busy(), session.ticks())) {
+			return null;
+		}
+		List<String> waits = selection.waits().entrySet().stream()
+				.sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry::getKey)).limit(3)
+				.map(entry -> IdleFrames.brief(entry.getKey())).toList();
+		return "Nothing was busy. %d stacks over %d ticks were working, on average %s threads, and %d were threads waiting, mostly in %s. So no frame is named as a culprit.%s" //$NON-NLS-1$
+				.formatted(Integer.valueOf(selection.busy()), Integer.valueOf(session.ticks()),
+						String.format(Locale.ROOT, "%.2f", Double.valueOf(selection.busy() / (double) session.ticks())), //$NON-NLS-1$
+						Integer.valueOf(selection.idle()), String.join(", ", waits), //$NON-NLS-1$
+						includeIdle ? "" : " To look at a stall, whose threads are parked, include the idle threads."); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	/** The counts of a selection, for an answer that draws the samples rather than aggregating them. */
 	public static void counts(Session session, boolean includeIdle, String frameFilter, boolean includeServer,
 			JsonObject into) {
 		Selection selection = select(session, includeIdle, frameFilter, includeServer);
-		into.put("samples", Integer.valueOf(selection.samples().size())) //$NON-NLS-1$
-				.put("idleSamplesExcluded", Integer.valueOf(includeIdle ? 0 : selection.idle())); //$NON-NLS-1$
+		counts(session, selection, includeIdle, frameFilter, includeServer, into);
+		into.put("samples", Integer.valueOf(selection.samples().size())); //$NON-NLS-1$
+	}
+
+	private static void counts(Session session, Selection selection, boolean includeIdle, String frameFilter,
+			boolean includeServer, JsonObject into) {
+		into.put("busySamples", Integer.valueOf(selection.busy())) //$NON-NLS-1$
+				.put("idleSamples", Integer.valueOf(selection.idle())) //$NON-NLS-1$
+				.put("idleSamplesExcluded", Integer.valueOf(includeIdle ? 0 : selection.idle())) //$NON-NLS-1$
+				.put("idleByState", Integer.valueOf(selection.idleByState())) //$NON-NLS-1$
+				.put("idleByFrame", Integer.valueOf(selection.idleByFrame())); //$NON-NLS-1$
+		JsonArray waits = new JsonArray();
+		selection.waits().entrySet().stream()
+				.sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry::getKey))
+				.limit(IDLE_FRAMES).forEach(entry -> waits.add(new JsonObject().put("frame", entry.getKey()) //$NON-NLS-1$
+						.put("samples", entry.getValue()))); //$NON-NLS-1$
+		into.put("idleFrames", waits) //$NON-NLS-1$
+				.put("idleFramesTotal", Integer.valueOf(selection.waits().size())) //$NON-NLS-1$
+				.put("idleFramesTruncated", Boolean.valueOf(selection.waits().size() > IDLE_FRAMES)); //$NON-NLS-1$
+		String quiet = quiet(session, selection, includeIdle, frameFilter);
+		into.put("nothingBusy", Boolean.valueOf(quiet != null)); //$NON-NLS-1$
+		if (quiet != null) {
+			into.put("nothingBusyNote", quiet); //$NON-NLS-1$
+		}
 		if (!includeServer) {
 			into.put("serverSamplesExcluded", Integer.valueOf(selection.serverDropped())) //$NON-NLS-1$
 					.put("serverFramesElidedFrom", Integer.valueOf(selection.serverElided())); //$NON-NLS-1$
@@ -341,15 +431,14 @@ public final class SamplingRegistry {
 		Selection selection = select(session, includeIdle, frameFilter, includeServer);
 		List<Sample> everything = selection.everything();
 		List<Sample> samples = selection.samples();
-		int filtered = selection.filtered();
 		int idle = selection.idle();
-		JsonArray threads = byThread(everything, contributing(samples), session, includeAllThreads);
+		JsonArray threads = byThread(everything, selection.fates(), session, includeAllThreads);
 		JsonObject result = new JsonObject().put("sessionId", session.id()) //$NON-NLS-1$
 				.put("running", session.running()) //$NON-NLS-1$
 				.put("ticks", session.ticks()) //$NON-NLS-1$
-				.put("samples", samples.size()) //$NON-NLS-1$
-				.put("idleSamplesExcluded", includeIdle ? 0 : idle) //$NON-NLS-1$
-				.put("intervalMillis", session.intervalMillis()) //$NON-NLS-1$
+				.put("samples", samples.size()); //$NON-NLS-1$
+		counts(session, selection, includeIdle, frameFilter, includeServer, result);
+		result.put("intervalMillis", session.intervalMillis()) //$NON-NLS-1$
 				.put("achievedIntervalMillis", Long.valueOf(session.achievedIntervalMillis())) //$NON-NLS-1$
 				.put("elapsedMillis", session.elapsedMillis()) //$NON-NLS-1$
 				.put("byThread", threads); //$NON-NLS-1$
@@ -363,20 +452,12 @@ public final class SamplingRegistry {
 					"byThread lists only the threads that contributed a sample this answer is about; %d parked or filtered ones are counted above and left out, because their state counts were most of the answer and said nothing about where the time went. Pass includeThreads true for all of them." //$NON-NLS-1$
 							.formatted(Integer.valueOf(sampled - listed)));
 		}
-		long achieved = session.achievedIntervalMillis();
-		if (achieved > session.intervalMillis() * 1.2) {
-			// the caller must know the clock drifted, and that sampling perturbs what it measures
-			result.put("intervalWarning", //$NON-NLS-1$
-					"Sampling could not keep the requested %d ms interval and achieved %d ms. Sample fewer threads or ask for a longer interval; note also that sampling itself slows the work being measured, measurably so at short intervals across many threads." //$NON-NLS-1$
-							.formatted(Integer.valueOf(session.intervalMillis()), Long.valueOf(achieved)));
-		}
-		if (!includeServer) {
-			result.put("serverSamplesExcluded", Integer.valueOf(selection.serverDropped())) //$NON-NLS-1$
-					.put("serverFramesElidedFrom", Integer.valueOf(selection.serverElided())); //$NON-NLS-1$
+		String intervalWarning = session.intervalWarning();
+		if (intervalWarning != null) {
+			result.put("intervalWarning", intervalWarning); //$NON-NLS-1$
 		}
 		if (frameFilter != null) {
-			result.put("frameFilter", frameFilter) //$NON-NLS-1$
-					.put("samplesWithoutTheFilteredFrame", Integer.valueOf(filtered)); //$NON-NLS-1$
+			result.put("frameFilter", frameFilter); //$NON-NLS-1$
 		}
 		if (session.stoppedByBudget()) {
 			result.put("note", //$NON-NLS-1$
@@ -425,9 +506,9 @@ public final class SamplingRegistry {
 		return result;
 	}
 
-	/** The threads that contributed a sample the answer is actually about. */
-	private static java.util.Set<Long> contributing(List<Sample> samples) {
-		java.util.Set<Long> ids = new java.util.HashSet<>();
+	/** The threads in the samples. */
+	private static Set<Long> contributing(List<Sample> samples) {
+		Set<Long> ids = new HashSet<>();
 		for (Sample sample : samples) {
 			ids.add(Long.valueOf(sample.threadId()));
 		}
@@ -435,15 +516,15 @@ public final class SamplingRegistry {
 	}
 
 	/**
-	 * Per thread, with its states and the CPU time it actually burned.
+	 * Per thread, with its states, the CPU time it actually burned and where its samples went:
+	 * {@code samples} is {@code kept}, which the tree holds, plus what was left out and why.
 	 * <p>
 	 * Without this two workers collapse into one entry, so a saturated thread and
 	 * two half-busy ones look identical, and a 24 second stall cannot be told to
 	 * have been the UI thread. The states answer the other half: blocked on a lock
 	 * and burning CPU are the same number of samples and opposite diagnoses.
 	 */
-	private static JsonArray byThread(List<Sample> samples, java.util.Set<Long> contributing, Session session,
-			boolean includeAll) {
+	private static JsonArray byThread(List<Sample> samples, Fates fates, Session session, boolean includeAll) {
 		Map<Long, String> names = new LinkedHashMap<>();
 		Map<Long, Integer> counts = new LinkedHashMap<>();
 		Map<Long, Map<String, Integer>> states = new LinkedHashMap<>();
@@ -456,12 +537,13 @@ public final class SamplingRegistry {
 		}
 		Map<Long, long[]> cpu = session.cpuRanges();
 		List<Map.Entry<Long, Integer>> sorted = new ArrayList<>(counts.entrySet());
-		sorted.sort(Map.Entry.<Long, Integer>comparingByValue().reversed());
+		Comparator<Map.Entry<Long, Integer>> byKept = Comparator.comparingInt(entry -> fates.kept.getOrDefault(entry.getKey(), 0));
+		sorted.sort(byKept.thenComparing(Map.Entry.comparingByValue()).reversed());
 		JsonArray array = new JsonArray();
 		for (Map.Entry<Long, Integer> entry : sorted) {
 			// an IDE parks seventy threads in pools, and their state counts were most
 			// of the answer while saying nothing about where the time went
-			if (!includeAll && !contributing.contains(entry.getKey())) {
+			if (!includeAll && !fates.kept.containsKey(entry.getKey())) {
 				continue;
 			}
 			JsonObject states0 = new JsonObject();
@@ -470,6 +552,9 @@ public final class SamplingRegistry {
 			array.add(new JsonObject().put("thread", names.get(entry.getKey())) //$NON-NLS-1$
 					.put("threadId", entry.getKey()) //$NON-NLS-1$
 					.put("samples", entry.getValue()) //$NON-NLS-1$
+					.put("kept", fates.kept.getOrDefault(entry.getKey(), 0)) //$NON-NLS-1$
+					.put("idleExcluded", fates.idle.getOrDefault(entry.getKey(), 0)) //$NON-NLS-1$
+					.put("serverExcluded", fates.server.getOrDefault(entry.getKey(), 0)) //$NON-NLS-1$
 					.put("states", states0) //$NON-NLS-1$
 					// wall clock samples cannot separate "slow" from "waited"; this can
 					.put("cpuMillis", range == null || range[0] < 0 ? null //$NON-NLS-1$
@@ -479,33 +564,19 @@ public final class SamplingRegistry {
 	}
 
 	/**
-	 * A stack parked in a pool is not where time is going. Without this, threads:all
-	 * on an IDE with seventy pooled threads reports Unsafe.park as the hot frame.
+	 * The frame a sample is waiting in, or null when it is working. A parked thread says so by
+	 * its state; a loop waiting in native code, such as SWT's or AWT's, is RUNNABLE and only
+	 * {@link IdleFrames} can tell, which is the definition the flight recording tools use too.
 	 */
-	private static boolean isIdle(StackTraceElement[] sample) {
-		String innermost = sample[0].getClassName() + '.' + sample[0].getMethodName();
-		return innermost.equals("jdk.internal.misc.Unsafe.park") //$NON-NLS-1$
-				|| innermost.equals("java.lang.Object.wait0") //$NON-NLS-1$
-				|| innermost.equals("java.lang.Object.wait") //$NON-NLS-1$
-				|| innermost.equals("java.lang.Thread.sleep0") //$NON-NLS-1$
-				|| innermost.equals("java.lang.Thread.sleep") //$NON-NLS-1$
-				|| innermost.startsWith("sun.nio.ch.EPoll.wait") //$NON-NLS-1$
-				|| innermost.startsWith("sun.nio.ch.Net.poll") //$NON-NLS-1$
-				|| innermost.startsWith("sun.nio.ch.Net.accept") //$NON-NLS-1$
-				|| innermost.equals("java.lang.ref.Reference.waitForReferencePendingList") //$NON-NLS-1$
-				|| innermost.equals("sun.awt.X11.XToolkit.waitForEvents") //$NON-NLS-1$
-				|| sleepingEventLoop(sample);
+	private static String waitOf(Sample sample) {
+		List<String> frames = Arrays.stream(sample.stack()).limit(IdleFrames.STACK_REACH).map(SamplingRegistry::frame)
+				.toList();
+		String wait = IdleFrames.idleFrame(frames);
+		return wait == null && isWaitingState(sample.state()) && !frames.isEmpty() ? frames.get(0) : wait;
 	}
 
-	/** An SWT event loop waiting for input is RUNNABLE in native code, and still idle. */
-	private static boolean sleepingEventLoop(StackTraceElement[] sample) {
-		for (int i = 0; i < Math.min(sample.length, 4); i++) {
-			if ("org.eclipse.swt.widgets.Display".equals(sample[i].getClassName()) //$NON-NLS-1$
-					&& "sleep".equals(sample[i].getMethodName())) { //$NON-NLS-1$
-				return true;
-			}
-		}
-		return false;
+	private static boolean isWaitingState(Thread.State state) {
+		return state == Thread.State.WAITING || state == Thread.State.TIMED_WAITING;
 	}
 
 	private static JsonArray top(Map<String, Integer> counts, int limit, int samples) {
