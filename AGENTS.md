@@ -120,6 +120,11 @@ Read what the answer needs off a widget before the action that may dispose it, a
 Never put a Java element's `toString()` into a message; use `getElementName()`, `getFullyQualifiedName()` or `JavaModelSupport.describe`.
 Build a lookup key in one helper, as `FindReferencesTool.locationOf` does; two spellings silently match nothing.
 
+**Startup timing is observed, never reconstructed.**
+The platform keeps no record of its startup phases, so `StartupCaptureComponent` (basic) and `StartupUiCapture` (ui, started by `McpUiComponent`) write them into core's `StartupTimeline` as they happen, and `eclipse_get_startup_timing` answers a phase nobody saw as null with a reason, never an estimate.
+`StartupCaptureComponent.activate` runs nested in SCR like `McpServerComponent` and touches only the OSGi API and core's `StartupTimeline`, which holds no OSGi or Platform reference; basic does not require the `osgi.component` extender, because without SCR it loses only this capture, since its tools come from the extension point.
+Never load SWT off the UI thread to watch for the Display or an earlier shell: `Device`'s static initializer loads `Display`, so it races the main thread's own initialization and can hang the IDE on start.
+
 **"The most recent" is ambiguous with more than one client.**
 The build, test run, sampling and provisioning registries are per IDE, so those tools consult `ClientSessions` and refuse the implicit default when a second client is connected.
 `ActiveSessions` counts `Mcp-Session-Id` headers and drops a session on its DELETE; with no provider (headless, tests) the count is one.

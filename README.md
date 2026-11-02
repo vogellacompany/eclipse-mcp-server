@@ -165,6 +165,7 @@ Tools marked ✎ change something; the rest are read-only.
 | ✎ `eclipse_build`, `eclipse_cancel_build`, `eclipse_get_build_status` | Run builders as a job and poll the result |
 | `eclipse_wait_until_quiet`, `eclipse_pause` | Wait for builds and refreshes, or for a fixed time |
 | `eclipse_get_log_entries`, `eclipse_mark_log` | Read the Error Log, optionally from a marker |
+| `eclipse_get_startup_timing` | When the process, framework, application and main window started and what each bundle activation took, each measured or null with a reason |
 | ✎ `eclipse_clear_log`, `eclipse_log_status` | Empty the Error Log, write an entry into it |
 | `eclipse_get_preferences`, ✎ `eclipse_set_preference` | Read and write preferences, with the scope each value comes from |
 | ✎ `eclipse_run_command`, `eclipse_get_command_output` | Run a shell command in a named directory and poll its output |

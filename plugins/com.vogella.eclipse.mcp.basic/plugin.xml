@@ -8,6 +8,7 @@
       <tool class="com.vogella.eclipse.mcp.basic.internal.GetCommandOutputTool"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.GetProblemsTool"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.GetLogEntriesTool"/>
+      <tool class="com.vogella.eclipse.mcp.basic.internal.GetStartupTimingTool"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.GetPreferencesTool"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.BuildTool"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.CancelBuildTool"/>
