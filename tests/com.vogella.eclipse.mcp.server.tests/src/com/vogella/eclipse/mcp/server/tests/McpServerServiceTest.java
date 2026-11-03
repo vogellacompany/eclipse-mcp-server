@@ -47,6 +47,7 @@ import com.vogella.eclipse.mcp.core.McpToolRegistry;
 import com.vogella.eclipse.mcp.server.McpEndpoint;
 import com.vogella.eclipse.mcp.server.McpPreferences;
 import com.vogella.eclipse.mcp.server.McpServerException;
+import com.vogella.eclipse.mcp.server.McpServerLifecycle;
 import com.vogella.eclipse.mcp.server.McpServerService;
 
 import io.modelcontextprotocol.client.McpClient;
@@ -211,6 +212,10 @@ class McpServerServiceTest {
 				assertNotNull(client.initialize());
 				assertFalse(client.listTools().tools().isEmpty());
 			}
+
+			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putBoolean(McpPreferences.KEY_ENABLED, true);
+			McpServerLifecycle.reconcile().join();
+			assertEquals(actualPort, service.getPort(), "Applying the preferences must not move an ephemeral port");
 		} finally {
 			service.stop();
 			if (previousProperty == null) {
@@ -218,6 +223,7 @@ class McpServerServiceTest {
 			} else {
 				System.setProperty(EPHEMERAL_PORT_PROPERTY, previousProperty);
 			}
+			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).remove(McpPreferences.KEY_ENABLED);
 			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putInt(McpPreferences.KEY_PORT, configuredPort);
 			service.start();
 		}

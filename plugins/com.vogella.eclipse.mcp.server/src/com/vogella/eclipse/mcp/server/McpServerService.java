@@ -86,6 +86,8 @@ public final class McpServerService {
 
 	private int runningPort = -1;
 
+	private boolean portEphemeral;
+
 	private String lastError;
 	private boolean lastErrorIsPort;
 
@@ -103,6 +105,11 @@ public final class McpServerService {
 	/** The port the server is listening on, or {@code -1} while it is stopped. */
 	public synchronized int getPort() {
 		return runningPort;
+	}
+
+	/** Whether the running server took a port from the operating system instead of the preference. */
+	public synchronized boolean isPortEphemeral() {
+		return portEphemeral;
 	}
 
 	/** The endpoint clients have to talk to, or {@code null} while the server is stopped. */
@@ -136,7 +143,7 @@ public final class McpServerService {
 	/**
 	 * The first port after {@code taken} that can be bound on the loopback interface, or
 	 * {@code -1} when none of the next {@value #PORT_SEARCH_RANGE} is free. Only a
-	 * suggestion for the user; the server never moves on its own.
+	 * suggestion for the user; the server never moves to it on its own.
 	 */
 	public static int findFreePort(int taken) {
 		for (int port = taken + 1; port <= Math.min(taken + PORT_SEARCH_RANGE, 65535); port++) {
@@ -230,10 +237,11 @@ public final class McpServerService {
 		} catch (Exception e) {
 			stopQuietly();
 			lastErrorIsPort = isBindFailure(e);
-			lastError = "Could not listen on %s:%d. %s".formatted(LOOPBACK, port, //$NON-NLS-1$
+			String address = ephemeralPort ? LOOPBACK + " on a port the system picks" : LOOPBACK + ":" + port; //$NON-NLS-1$ //$NON-NLS-2$
+			lastError = "Could not listen on %s. %s".formatted(address, //$NON-NLS-1$
 					e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
 			EndpointFile.markFailed(lastError);
-			throw new McpServerException("Could not start the MCP server on %s:%d".formatted(LOOPBACK, port), e); //$NON-NLS-1$
+			throw new McpServerException("Could not start the MCP server on %s".formatted(address), e); //$NON-NLS-1$
 		}
 		int listeningPort = ephemeralPort ? ((ServerConnector) jetty.getConnectors()[0]).getLocalPort() : port;
 
@@ -255,6 +263,7 @@ public final class McpServerService {
 					.capabilities(ServerCapabilities.builder().tools(false).build()).jsonMapper(jsonMapper)
 					.jsonSchemaValidator(new BundleJsonSchemaValidator()).tools(specifications).build();
 			runningPort = listeningPort;
+			portEphemeral = ephemeralPort;
 			endpoint = new McpEndpoint("http://%s:%d%s".formatted(LOOPBACK, listeningPort, ENDPOINT_PATH), token); //$NON-NLS-1$
 			ClientSessions.setProvider(ActiveSessions::count);
 			TracePages.setPublisher((title, html) -> "http://%s:%d%s/%s".formatted(LOOPBACK, Integer.valueOf(listeningPort), //$NON-NLS-1$

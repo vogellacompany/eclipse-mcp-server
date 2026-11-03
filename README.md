@@ -49,7 +49,7 @@ Every push to `main` publishes to the update site; pushing a `v<version>` tag ad
 Changes apply immediately.
 The page also shows the URL, the bearer token and the discovery file, and can regenerate the token.
 By default, if the configured port is taken, the server stays down and the page says why.
-To let the operating system choose an available port at each start, add `-Dcom.vogella.eclipse.mcp.server.ephemeralPort=true` after `-vmargs` in `eclipse.ini`.
+To let the operating system choose an available port at each start, add `-Dcom.vogella.eclipse.mcp.server.ephemeralPort=true` after `-vmargs` in `eclipse.ini`; the port preference is then ignored.
 The selected port is written to the workspace discovery file; clients must rediscover that endpoint after every restart.
 
 ### In an RCP application
@@ -100,7 +100,7 @@ claude mcp add --transport http eclipse http://127.0.0.1:8642/mcp \
 
 The transport is Streamable HTTP and every request carries `Authorization: Bearer <token>`; anything else gets a `401`.
 The token lives in `~/.eclipse/com.vogella.eclipse.mcp.server/token` with owner-only permissions, and survives restarts, updates and workspace switches, so a client is configured once.
-With two IDEs open, the first one owns the port; `workspace` in the discovery file tells which one a client reached.
+With two IDEs open on the fixed port, the first one owns it; `workspace` in the discovery file tells which one a client reached.
 After `eclipse_restart`, compare `startedAt` to know the new server is up; some clients need a manual reconnect, in Claude Code through `/mcp`.
 
 Several clients can share one server.
