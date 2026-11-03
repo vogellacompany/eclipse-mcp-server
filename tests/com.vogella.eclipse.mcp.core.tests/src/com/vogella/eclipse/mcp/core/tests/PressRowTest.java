@@ -1,7 +1,9 @@
 package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -11,6 +13,7 @@ import java.util.List;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.SWTError;
 import org.eclipse.swt.SWTException;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Button;
@@ -26,7 +29,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.vogella.eclipse.mcp.core.json.JsonObject;
+import com.vogella.eclipse.mcp.ui.internal.FocusCalls;
 import com.vogella.eclipse.mcp.ui.internal.PressWidgetTool;
+import com.vogella.eclipse.mcp.ui.internal.SyntheticInput;
 
 /**
  * Selecting a Tree or Table row through eclipse_press_widget, on a real shell.
@@ -132,6 +138,82 @@ class PressRowTest {
 		assumeTrue(button.isDisposed(), result);
 		assertTrue(result.contains("\"widgetDisposed\": true"), result);
 		assertTrue(result.contains("\"pressed\": false"), result);
+		assertFalse(result.contains("\"focusNote\""), result);
+	}
+
+	@Test
+	void theSwtFocusBugOnADisposedButtonAnswersFalse() {
+		assertFalse(FocusCalls.force(failingFocus(swtBug(), true)));
+	}
+
+	@Test
+	void anyOtherFocusFailureSurfaces() {
+		NullPointerException listeners = new NullPointerException();
+		assertSame(listeners, assertThrows(NullPointerException.class,
+				() -> FocusCalls.force(failingFocus(listeners, true))));
+
+		NullPointerException alive = swtBug();
+		assertSame(alive, assertThrows(NullPointerException.class, () -> FocusCalls.force(failingFocus(alive, false))));
+	}
+
+	@Test
+	void aClickStopsWhenFocusDisposedTheButton() {
+		Button button = new Button(shell, SWT.PUSH) {
+			@Override
+			protected void checkSubclass() {
+				// a test double that fails on focus the way a listener makes it
+			}
+
+			@Override
+			public boolean setFocus() {
+				dispose();
+				throw swtBug();
+			}
+		};
+		JsonObject result = new JsonObject();
+
+		SyntheticInput.click(button, new Point(1, 1), 1, result);
+
+		assertTrue(button.isDisposed());
+		assertTrue(result.toString().contains("\"focused\": false"), result.toString());
+		assertTrue(result.toString().contains("\"widgetDisposed\": true"), result.toString());
+	}
+
+	@Test
+	void aPressWhoseFocusHitsTheSwtBugGivesAStructuredAnswer() {
+		// after opening, since open gives a child the focus
+		shell.open();
+		Button button = failingFocus(swtBug(), true);
+
+		String result = PressWidgetTool.pressButton(button, "0", new PressWidgetTool.Focus(shell)).toString();
+
+		assertTrue(result.contains("\"widgetDisposed\": true"), result);
+		assertFalse(result.contains("\"focusNote\""), result);
+	}
+
+	private Button failingFocus(NullPointerException failure, boolean dispose) {
+		return new Button(shell, SWT.PUSH) {
+			@Override
+			protected void checkSubclass() {
+				// a test double that fails on focus the way SWT on win32 does
+			}
+
+			@Override
+			public boolean forceFocus() {
+				if (dispose) {
+					dispose();
+				}
+				throw failure;
+			}
+		};
+	}
+
+	private static NullPointerException swtBug() {
+		NullPointerException e = new NullPointerException();
+		e.setStackTrace(new StackTraceElement[] {
+				new StackTraceElement("org.eclipse.swt.widgets.Control", "menuShell", "Control.java", 1),
+				new StackTraceElement("org.eclipse.swt.widgets.Button", "WM_SETFOCUS", "Button.java", 1) });
+		return e;
 	}
 
 	@Test

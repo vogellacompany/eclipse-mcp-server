@@ -184,13 +184,13 @@ public final class WidgetTools {
 	 * the title bar above the client area {@code Display.map} answers in.
 	 */
 	public static Rectangle mapToCapture(Display display, Control from, Control target, Rectangle rectangle) {
-		Rectangle mapped = display.map(from, target, rectangle);
 		if (target instanceof Shell shell) {
-			Point inset = clientInset(shell);
-			mapped.x += inset.x;
-			mapped.y += inset.y;
+			// through the screen: adding clientInset to a mapped rectangle rounds twice on a fractional zoom
+			Rectangle onScreen = display.map(from, null, rectangle);
+			Rectangle bounds = shell.getBounds();
+			return new Rectangle(onScreen.x - bounds.x, onScreen.y - bounds.y, onScreen.width, onScreen.height);
 		}
-		return mapped;
+		return display.map(from, target, rectangle);
 	}
 
 	/** Where the shell's client area starts inside its bounds: the title bar on Cocoa, nothing where the bounds exclude the decorations. */

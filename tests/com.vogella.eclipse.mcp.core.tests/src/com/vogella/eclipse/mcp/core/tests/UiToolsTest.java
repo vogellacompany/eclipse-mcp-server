@@ -319,7 +319,9 @@ class UiToolsTest {
 			visible.open();
 			assertEquals(visible, Shells.select(display, "CSS Probe"));
 			visible.setVisible(false);
-			assertEquals(hidden, Shells.select(display, "CSS Probe"));
+			// both are hidden now, and Display.getShells has no stable order on win32
+			Shell chosen = Shells.select(display, "CSS Probe");
+			assertTrue(chosen == hidden || chosen == visible, String.valueOf(chosen));
 		} finally {
 			display.dispose();
 		}
