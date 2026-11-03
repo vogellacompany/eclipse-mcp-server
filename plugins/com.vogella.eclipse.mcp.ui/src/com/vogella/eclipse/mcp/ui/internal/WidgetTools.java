@@ -480,7 +480,10 @@ public final class WidgetTools {
 									Overlays.describe(rowBounds)) //$NON-NLS-1$
 							.put("boundsInShell", Overlays.describe(inShell)) //$NON-NLS-1$
 							.put("boundsInDisplay", Overlays.describe(table.getDisplay().map(table, null, rowBounds))); //$NON-NLS-1$
-					row.put("cells", cellsOf(rows[i])); //$NON-NLS-1$
+					JsonArray cells = cellsOf(rows[i]);
+					if (cells != null) {
+						row.put("cells", cells); //$NON-NLS-1$
+					}
 					if (node) {
 						row.put("childCount", Integer.valueOf(children)) //$NON-NLS-1$
 								.put("expanded", Boolean.valueOf(expanded)); //$NON-NLS-1$

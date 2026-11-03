@@ -543,13 +543,13 @@ public final class CommandTools {
 					.put("id", wanted) //$NON-NLS-1$
 					.put("dialogOpen", Boolean.TRUE) //$NON-NLS-1$
 					.put("dialog", title) //$NON-NLS-1$
-					.put("nativeDialog", dialog.nativeDialog() //$NON-NLS-1$
-							? "A native dialog, so the widget tools cannot see inside it: eclipse_list_ui_targets reports its buttons under nativeDialogs and eclipse_dismiss_dialog closes it or presses one." //$NON-NLS-1$
-							: null)
+					.put("nativeDialog", Boolean.valueOf(dialog.nativeDialog())) //$NON-NLS-1$
 					.put("waitedMillis", Long.valueOf(waitedMillis)) //$NON-NLS-1$
 					.put("note", //$NON-NLS-1$
-							"The dialog '%s' opened while the handler was running and the handler has not returned, so it is most likely waiting inside that dialog for an answer. Read it with eclipse_get_widget_tree and shellTitle, answer it with eclipse_dismiss_dialog or by pressing its buttons; what the command does after that is written to the Error Log." //$NON-NLS-1$
-									.formatted(title)));
+							"The dialog '%s' opened while the handler was running and the handler has not returned, so it is most likely waiting inside that dialog for an answer. %s; what the command does after that is written to the Error Log." //$NON-NLS-1$
+									.formatted(title, dialog.nativeDialog()
+											? "It is a native dialog, so the widget tools cannot see inside it: eclipse_list_ui_targets reports its buttons under nativeDialogs, and eclipse_dismiss_dialog closes it or presses one" //$NON-NLS-1$
+											: "Read it with eclipse_get_widget_tree and shellTitle, answer it with eclipse_dismiss_dialog or by pressing its buttons"))); //$NON-NLS-1$
 		}
 
 		private static JsonObject timedOut(String wanted, long timeoutSeconds, ExecutionRecorder recorder) {

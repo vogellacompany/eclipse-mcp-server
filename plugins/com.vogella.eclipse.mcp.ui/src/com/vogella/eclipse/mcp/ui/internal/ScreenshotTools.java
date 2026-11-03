@@ -116,7 +116,7 @@ public final class ScreenshotTools {
 
 		@Override
 		public String getDescription() {
-			return "Lists what the UI tools can address: every open shell with its title, whether it is modal and its bounds, and every workbench part with its id, title and whether it is currently visible. With includeAvailableViews it also lists the views that are registered but not open, which is where eclipse_show_view gets its ids. Also the answer to 'which dialog is open right now', which nothing else here can tell you."; //$NON-NLS-1$
+			return "On Windows nativeDialogs also lists a native file picker or message box, which has no shell and is otherwise invisible to the widget tools; elsewhere such a dialog is not detected. Lists what the UI tools can address: every open shell with its title, whether it is modal and its bounds, and every workbench part with its id, title and whether it is currently visible. With includeAvailableViews it also lists the views that are registered but not open, which is where eclipse_show_view gets its ids. Also the answer to 'which dialog is open right now', which nothing else here can tell you."; //$NON-NLS-1$
 		}
 
 		@Override
