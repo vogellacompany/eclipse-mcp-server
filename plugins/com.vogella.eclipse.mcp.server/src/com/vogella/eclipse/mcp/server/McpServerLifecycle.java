@@ -52,7 +52,8 @@ public final class McpServerLifecycle {
 					service.stop();
 					return Status.OK_STATUS;
 				}
-				if (service.isRunning() && service.getPort() == port) {
+				// an ephemeral port never equals the preference, and moving it would drop every client
+				if (service.isRunning() && (service.isPortEphemeral() || service.getPort() == port)) {
 					return Status.OK_STATUS;
 				}
 				service.stop();
