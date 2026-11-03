@@ -1,5 +1,6 @@
 package com.vogella.eclipse.mcp.ui.internal;
 
+import java.util.Locale;
 import java.util.Map;
 
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -68,6 +69,12 @@ public final class DismissDialogTool implements IMcpTool {
 
 	/** Reports or closes the dialog that {@code shellSpec}, else {@code shellTitle}, else the state of the IDE names. */
 	public static JsonObject dismiss(Display display, String shellSpec, String shellTitle, String button, boolean dryRun) {
+		if (shellSpec == null) {
+			JsonObject answered = dismissNative(display, shellTitle, button, dryRun);
+			if (answered != null) {
+				return answered;
+			}
+		}
 		Shell shell = shellSpec != null ? Shells.select(display, shellSpec) : find(display, shellTitle);
 		String named = shellSpec != null ? shellSpec : shellTitle;
 		if (shell != null && !shell.isVisible()) {
@@ -113,6 +120,35 @@ public final class DismissDialogTool implements IMcpTool {
 		press(target);
 		return result.put("dismissed", Boolean.TRUE).put("action", "pressed " + pressed) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				.put("shellClosed", Boolean.valueOf(shell.isDisposed())); //$NON-NLS-1$
+	}
+
+	/** Answers for a native dialog, which is modal and so comes first, or {@code null} when none matches. */
+	private static JsonObject dismissNative(Display display, String title, String button, boolean dryRun) {
+		for (NativeDialogs.Dialog dialog : NativeDialogs.list(display)) {
+			if (title != null && !dialog.title().toLowerCase(Locale.ROOT).contains(title.toLowerCase(Locale.ROOT))) {
+				continue;
+			}
+			JsonObject result = dialog.describe();
+			if (dryRun) {
+				return result.put("dismissed", Boolean.FALSE).put("note", //$NON-NLS-1$ //$NON-NLS-2$
+						"Nothing was touched. Pass dryRun false, with a button to press it or without one to ask the dialog to close, which cancels it."); //$NON-NLS-1$
+			}
+			if (button == null) {
+				return result.put("dismissed", Boolean.valueOf(NativeDialogs.close(dialog))) //$NON-NLS-1$
+						.put("action", "asked to close") //$NON-NLS-1$ //$NON-NLS-2$
+						.put("note", "The request is posted and the dialog reacts after this answer, and a message box without a Cancel button ignores it, so check nativeDialogs in eclipse_list_ui_targets."); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+			String wanted = button.replace("&", "").strip(); //$NON-NLS-1$ //$NON-NLS-2$
+			for (var entry : dialog.buttons().entrySet()) {
+				if (entry.getKey().equalsIgnoreCase(wanted)) {
+					return result.put("dismissed", Boolean.valueOf(NativeDialogs.press(dialog, entry.getValue().longValue()))) //$NON-NLS-1$
+							.put("action", "pressed " + entry.getKey()); //$NON-NLS-1$ //$NON-NLS-2$
+				}
+			}
+			return result.put("dismissed", Boolean.FALSE) //$NON-NLS-1$
+					.put("reason", "No button labelled '%s' on this dialog.".formatted(button)); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		return null;
 	}
 
 	/** Sends the selection event a real click sends to the dialog's listeners. */

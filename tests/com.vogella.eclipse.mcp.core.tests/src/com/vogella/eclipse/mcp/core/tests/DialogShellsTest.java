@@ -14,22 +14,35 @@ import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.SWTError;
 import org.eclipse.swt.SWTException;
+import org.eclipse.swt.accessibility.AccessibleAdapter;
+import org.eclipse.swt.accessibility.AccessibleEvent;
+import org.eclipse.swt.custom.CTabFolder;
+import org.eclipse.swt.custom.CTabItem;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.FileDialog;
+import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.Sash;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
+import org.eclipse.swt.widgets.Tree;
+import org.eclipse.swt.widgets.TreeColumn;
+import org.eclipse.swt.widgets.TreeItem;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.vogella.eclipse.mcp.core.json.JsonObject;
+import com.vogella.eclipse.mcp.ui.internal.AccessibleNames;
+import com.vogella.eclipse.mcp.ui.internal.ClipboardTool;
 import com.vogella.eclipse.mcp.ui.internal.CloseWatch;
 import com.vogella.eclipse.mcp.ui.internal.DismissDialogTool;
 import com.vogella.eclipse.mcp.ui.internal.DragTool;
+import com.vogella.eclipse.mcp.ui.internal.NativeDialogs;
 import com.vogella.eclipse.mcp.ui.internal.Shells;
 import com.vogella.eclipse.mcp.ui.internal.WidgetStyle;
 import com.vogella.eclipse.mcp.ui.internal.WidgetTools;
@@ -238,6 +251,92 @@ class DialogShellsTest {
 		assertTrue(WidgetTools.Click.whatIsThere(display, inside, null, new JsonObject()).contains("in front of this IDE's window"));
 		assertTrue(WidgetTools.Click.whatIsThere(display, new Point(-50_000, -50_000), null, new JsonObject())
 				.contains("check the coordinates"));
+	}
+
+	@Test
+	void aNativeMessageBoxIsFoundAndAnsweredByItsButton() {
+		assumeTrue(SWT.getPlatform().equals("win32"), "native dialogs are only looked for on Windows");
+		shell.open();
+		// Cancel lets the safety timer end a box the press did not reach, instead of the test blocking on it
+		MessageBox box = new MessageBox(shell, SWT.YES | SWT.NO | SWT.CANCEL | SWT.APPLICATION_MODAL);
+		box.setText("Native Question");
+		box.setMessage("Answered by the test");
+		List<String> titles = new ArrayList<>();
+		List<String> answers = new ArrayList<>();
+		display.timerExec(500, () -> {
+			try {
+				NativeDialogs.list(display).forEach(dialog -> titles.add(dialog.title()));
+				answers.add(DismissDialogTool.dismiss(display, null, "native question", null, true).toString());
+				// the labels follow the language of Windows, the order does not
+				String no = List.copyOf(NativeDialogs.list(display).get(0).buttons().keySet()).get(1);
+				answers.add(DismissDialogTool.dismiss(display, null, null, "&" + no, false).toString());
+			} catch (RuntimeException e) {
+				answers.add(e.toString());
+			}
+		});
+		display.timerExec(5000, () -> NativeDialogs.list(display).forEach(NativeDialogs::close));
+		assertEquals(SWT.NO, box.open(), answers::toString);
+		assertEquals(List.of("Native Question"), titles);
+		assertTrue(answers.get(0).contains("\"native\""), answers.toString());
+		assertTrue(NativeDialogs.list(display).isEmpty());
+	}
+
+	@Test
+	void aNativeFilePickerIsFoundAndClosed() {
+		assumeTrue(SWT.getPlatform().equals("win32"), "native dialogs are only looked for on Windows");
+		shell.open();
+		FileDialog picker = new FileDialog(shell, SWT.OPEN);
+		picker.setText("Native Picker");
+		List<String> titles = new ArrayList<>();
+		display.timerExec(1500, () -> {
+			NativeDialogs.list(display).forEach(dialog -> {
+				titles.add(dialog.title());
+				NativeDialogs.close(dialog);
+			});
+		});
+		assertNull(picker.open());
+		assertEquals(List.of("Native Picker"), titles);
+	}
+
+	@Test
+	void aCustomControlIsNamedThroughItsAccessibilityListener() {
+		Canvas canvas = new Canvas(shell, SWT.NONE);
+		assertNull(AccessibleNames.of(canvas));
+		canvas.getAccessible().addAccessibleListener(new AccessibleAdapter() {
+			@Override
+			public void getName(AccessibleEvent e) {
+				e.result = "Balls to the Wall";
+			}
+		});
+		assertEquals("Balls to the Wall", AccessibleNames.of(canvas));
+	}
+
+	@Test
+	void aTreeRowReportsEveryColumn() {
+		Tree tree = new Tree(shell, SWT.NONE);
+		new TreeColumn(tree, SWT.NONE);
+		new TreeColumn(tree, SWT.NONE);
+		TreeItem row = new TreeItem(tree, SWT.NONE);
+		row.setText(new String[] { "Name", "VARCHAR" });
+		assertEquals("[\"Name\",\"VARCHAR\"]", WidgetTools.cellsOf(row).toString().replaceAll("\\s", ""));
+		assertNull(WidgetTools.cellsOf(new TreeItem(new Tree(shell, SWT.NONE), SWT.NONE)));
+	}
+
+	@Test
+	void aTabWhoseListenerDisposesTheItemStillAnswers() {
+		CTabFolder folder = new CTabFolder(shell, SWT.NONE);
+		new CTabItem(folder, SWT.NONE).setText("First");
+		CTabItem diagram = new CTabItem(folder, SWT.NONE);
+		diagram.setText("Diagram");
+		folder.addListener(SWT.Selection, event -> diagram.dispose());
+		String answer = WidgetTools.SelectTab.apply(folder, diagram, true).toString();
+		assertTrue(answer.contains("Diagram"), answer);
+		assertTrue(answer.contains("\"selected\""), answer);
+	}
+
+	@Test
+	void theClipboardIsReadWithoutFailing() {
+		assertTrue(ClipboardTool.read(display, 10).toString().contains("hasText"));
 	}
 
 	@Test

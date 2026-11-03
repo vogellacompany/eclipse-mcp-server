@@ -247,7 +247,7 @@ public final class CommandTools {
 			long deadline = started + timeoutSeconds * 1000L;
 			try {
 				if (returnOnDialog && !UiThread.onUiThread()) {
-					String dialog = awaitDialog(pending, before, deadline);
+					ModalShell dialog = awaitDialog(pending, before, deadline);
 					if (dialog != null) {
 						pending.whenComplete((text, error) -> logLateCompletion(wanted, text, error));
 						return McpToolResult.of(dialogOpen(wanted, dialog, System.currentTimeMillis() - started, recorder)
@@ -490,10 +490,10 @@ public final class CommandTools {
 		 * while the handler is still inside {@code execute}; a handler that is merely busy
 		 * leaves the probe queued and is waited for as before.
 		 */
-		private static String awaitDialog(CompletableFuture<String> pending, AtomicReference<Set<Shell>> before,
+		private static ModalShell awaitDialog(CompletableFuture<String> pending, AtomicReference<Set<Shell>> before,
 				long deadline) throws InterruptedException {
 			CompletableFuture<ModalShell> probe = null;
-			Shell candidate = null;
+			Object candidate = null;
 			while (!pending.isDone()) {
 				long left = deadline - System.currentTimeMillis();
 				if (left <= 0) {
@@ -509,10 +509,10 @@ public final class CommandTools {
 				}
 				if (probe == null || probe.isDone()) {
 					ModalShell found = probe == null ? null : probe.getNow(null);
-					if (found != null && found.shell() == candidate) {
-						return found.title();
+					if (found != null && found.key().equals(candidate)) {
+						return found;
 					}
-					candidate = found == null ? null : found.shell();
+					candidate = found == null ? null : found.key();
 					CompletableFuture<ModalShell> next = new CompletableFuture<>();
 					Workbenches.display().asyncExec(() -> next.complete(newDialog(before.get())));
 					probe = next;
@@ -521,7 +521,7 @@ public final class CommandTools {
 			return null;
 		}
 
-		private record ModalShell(Shell shell, String title) {
+		private record ModalShell(Object key, String title, boolean nativeDialog) {
 		}
 
 		/** A dialog that was not open before the command. */
@@ -530,14 +530,22 @@ public final class CommandTools {
 				return null;
 			}
 			Shell shell = Shells.newDialog(Workbenches.display(), before);
-			return shell == null ? null : new ModalShell(shell, shell.getText());
+			if (shell != null) {
+				return new ModalShell(shell, shell.getText(), false);
+			}
+			return NativeDialogs.list(Workbenches.display()).stream().findFirst()
+					.map(dialog -> new ModalShell(Long.valueOf(dialog.handle()), dialog.title(), true)).orElse(null);
 		}
 
-		private static JsonObject dialogOpen(String wanted, String title, long waitedMillis, ExecutionRecorder recorder) {
+		private static JsonObject dialogOpen(String wanted, ModalShell dialog, long waitedMillis, ExecutionRecorder recorder) {
+			String title = dialog.title();
 			return recorder.reportInto(new JsonObject().put("executed", Boolean.TRUE).put("timedOut", Boolean.FALSE) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("id", wanted) //$NON-NLS-1$
 					.put("dialogOpen", Boolean.TRUE) //$NON-NLS-1$
 					.put("dialog", title) //$NON-NLS-1$
+					.put("nativeDialog", dialog.nativeDialog() //$NON-NLS-1$
+							? "A native dialog, so the widget tools cannot see inside it: eclipse_list_ui_targets reports its buttons under nativeDialogs and eclipse_dismiss_dialog closes it or presses one." //$NON-NLS-1$
+							: null)
 					.put("waitedMillis", Long.valueOf(waitedMillis)) //$NON-NLS-1$
 					.put("note", //$NON-NLS-1$
 							"The dialog '%s' opened while the handler was running and the handler has not returned, so it is most likely waiting inside that dialog for an answer. Read it with eclipse_get_widget_tree and shellTitle, answer it with eclipse_dismiss_dialog or by pressing its buttons; what the command does after that is written to the Error Log." //$NON-NLS-1$

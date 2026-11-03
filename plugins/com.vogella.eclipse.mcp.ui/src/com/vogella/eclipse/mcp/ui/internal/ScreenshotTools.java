@@ -192,6 +192,11 @@ public final class ScreenshotTools {
 				}
 			}
 			JsonObject result = new JsonObject().put("shells", shells).put("parts", parts); //$NON-NLS-1$ //$NON-NLS-2$
+			JsonArray nativeDialogs = new JsonArray();
+			NativeDialogs.list(display).forEach(dialog -> nativeDialogs.add(dialog.describe()));
+			if (nativeDialogs.size() > 0) {
+				result.put("nativeDialogs", nativeDialogs); //$NON-NLS-1$
+			}
 			if (includeAvailableViews && Workbenches.ide()) {
 				addAvailableViews(result, filter, maxResults);
 			}

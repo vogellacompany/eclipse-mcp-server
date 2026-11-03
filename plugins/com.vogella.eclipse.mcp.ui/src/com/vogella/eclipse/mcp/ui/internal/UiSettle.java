@@ -130,7 +130,7 @@ final class UiSettle {
 				.put("reason", reason) //$NON-NLS-1$
 				.put("clamped", clamped) //$NON-NLS-1$
 				.put("cannotSee", //$NON-NLS-1$
-						"Any plain background thread other than a text editor's reconciler, and work that has not been scheduled yet. The reconcilers ARE checked, through internal fields that can change in any release, and an unreadable one counts as busy rather than idle; see the reconcilers block above. THIS IS STILL A HEURISTIC: assert what you actually need rather than trusting it.");
+						"A native dialog holding a handler, such as a file picker, which eclipse_list_ui_targets reports under nativeDialogs. Any plain background thread other than a text editor's reconciler, and work that has not been scheduled yet. The reconcilers ARE checked, through internal fields that can change in any release, and an unreadable one counts as busy rather than idle; see the reconcilers block above. THIS IS STILL A HEURISTIC: assert what you actually need rather than trusting it.");
 	}
 
 	/** What one fence came back with: how long it waited, and what it saw while there. */
