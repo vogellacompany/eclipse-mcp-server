@@ -32,7 +32,7 @@ public final class DismissDialogTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Closes an open dialog, or presses one of its buttons. PRESSING A BUTTON DOES WHATEVER THAT BUTTON DOES, which may be destructive, so this reports the dialog and its buttons and changes nothing unless dryRun is set to false. With no button named it closes the dialog, which for a JFace dialog is the same as cancelling; that is the safe way to unblock an IDE waiting on a prompt nobody meant to answer. With no shellTitle it closes the active modal dialog, or, when none is open, a transient popup such as the content assist proposal list, which has no title and cannot be matched by name. Use eclipse_list_ui_targets first to see what is open."; //$NON-NLS-1$
+		return "Closes an open dialog, or presses one of its buttons. PRESSING A BUTTON DOES WHATEVER THAT BUTTON DOES, which may be destructive, so this reports the dialog and its buttons and changes nothing unless dryRun is set to false. With no button named it closes the dialog, which for a JFace dialog is the same as cancelling; that is the safe way to unblock an IDE waiting on a prompt nobody meant to answer. With neither shell nor shellTitle it closes the active modal dialog, or, when none is open, a transient popup such as the content assist proposal list, which has no title and cannot be matched by name, or else a non-modal dialog. Use eclipse_list_ui_targets first to see what is open. A workbench window is refused, since closing one is not dismissing a dialog."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -41,7 +41,8 @@ public final class DismissDialogTool implements IMcpTool {
 				{
 				  "type": "object",
 				  "properties": {
-				    "shellTitle": {"type":"string","description":"Title of the dialog, or a substring. Omit for the active modal dialog."},
+				    "shell":      {"type":"string","description":"The dialog independent of title: 'popup', an index from eclipse_list_ui_targets, or its bounds. Wins over shellTitle."},
+				    "shellTitle": {"type":"string","description":"Title of the dialog, or a substring. Omit both for the active modal dialog."},
 				    "button":     {"type":"string","description":"Label of the button to press, mnemonics ignored, case insensitive. Omit to close the dialog, which cancels it."},
 				    "dryRun":     {"type":"boolean","default":true,"description":"Report the dialog and its buttons without touching it."}
 				  },
@@ -55,27 +56,34 @@ public final class DismissDialogTool implements IMcpTool {
 			return McpToolResult.error("There is no running workbench."); //$NON-NLS-1$
 		}
 		ToolArguments args = ToolArguments.of(arguments);
+		String shellSpec = args.getString("shell"); //$NON-NLS-1$
 		String shellTitle = args.getString("shellTitle"); //$NON-NLS-1$
 		String button = args.getString("button"); //$NON-NLS-1$
 		boolean dryRun = args.getBoolean("dryRun", true); //$NON-NLS-1$
 
 		// a modal runs a nested event loop, so queued runnables still execute
-		return UiThread.call(UI_TIMEOUT_SECONDS, () -> dismiss(shellTitle, button, dryRun));
+		return UiThread.call(UI_TIMEOUT_SECONDS,
+				() -> dismiss(Workbenches.display(), shellSpec, shellTitle, button, dryRun));
 	}
 
-	private static JsonObject dismiss(String shellTitle, String button, boolean dryRun) {
-		Display display = Workbenches.display();
-		Shell shell = find(display, shellTitle);
-		if (shell == null) {
+	/** Reports or closes the dialog that {@code shellSpec}, else {@code shellTitle}, else the state of the IDE names. */
+	public static JsonObject dismiss(Display display, String shellSpec, String shellTitle, String button, boolean dryRun) {
+		Shell shell = shellSpec != null ? Shells.select(display, shellSpec) : find(display, shellTitle);
+		String named = shellSpec != null ? shellSpec : shellTitle;
+		if (shell == null || !shell.isVisible()) {
 			return new JsonObject().put("dismissed", Boolean.FALSE) //$NON-NLS-1$
-					.put("reason", shellTitle == null ? "No modal dialog is open." //$NON-NLS-1$ //$NON-NLS-2$
-							: "No dialog matching '%s' is open.".formatted(shellTitle)); //$NON-NLS-1$
+					.put("reason", named == null ? "No modal dialog is open." //$NON-NLS-1$ //$NON-NLS-2$
+							: "No dialog matching '%s' is open.".formatted(named)); //$NON-NLS-1$
+		}
+		if (Shells.isWorkbench(shell)) {
+			return new JsonObject().put("dismissed", Boolean.FALSE) //$NON-NLS-1$
+					.put("reason", "'%s' is a workbench window, not a dialog; use eclipse_manage_window or eclipse_exit for those.".formatted(named)); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		JsonArray buttons = new JsonArray();
 		collectButtons(shell, buttons);
 		JsonObject result = new JsonObject().put("title", shell.getText()) //$NON-NLS-1$
-				.put("modal", isModal(shell)) //$NON-NLS-1$
-				.put("kind", isModal(shell) ? "dialog" : "popup") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				.put("modal", Shells.isModal(shell)) //$NON-NLS-1$
+				.put("kind", Shells.kind(shell)) //$NON-NLS-1$
 				.put("buttons", buttons); //$NON-NLS-1$
 		if (dryRun) {
 			return result.put("dismissed", Boolean.FALSE) //$NON-NLS-1$
@@ -98,26 +106,35 @@ public final class DismissDialogTool implements IMcpTool {
 		}
 		// read the label before pressing: the press may dispose the button along with the shell
 		String pressed = label(target);
+		press(target);
+		return result.put("dismissed", Boolean.TRUE).put("action", "pressed " + pressed) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				.put("shellClosed", Boolean.valueOf(shell.isDisposed())); //$NON-NLS-1$
+	}
+
+	/** Sends the selection event a real click sends to the dialog's listeners. */
+	static void press(Button target) {
 		if ((target.getStyle() & SWT.CHECK) != 0) {
 			target.setSelection(!target.getSelection());
 		}
-		// a selection event, which is what a real click sends to the dialog's listeners
 		target.notifyListeners(SWT.Selection, new Event());
-		return result.put("dismissed", Boolean.TRUE).put("action", "pressed " + pressed) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-				.put("shellClosed", Boolean.valueOf(shell.isDisposed())); //$NON-NLS-1$
 	}
 
 	private static Shell find(Display display, String title) {
 		if (title == null) {
 			// a modal shell is what blocks the IDE, so it wins; the active shell is not guaranteed to be getShells()[0]
 			for (Shell shell : display.getShells()) {
-				if (shell.isVisible() && isModal(shell)) {
+				if (shell.isVisible() && Shells.isModal(shell)) {
 					return shell;
 				}
 			}
 			// otherwise a transient popup such as content assist; its Table tells it from a tooltip
 			for (Shell shell : display.getShells()) {
-				if (shell.isVisible() && !isModal(shell) && !Workbenches.windowShells().contains(shell) && hasTable(shell)) {
+				if (shell.isVisible() && !Shells.isDialog(shell) && !Shells.isWorkbench(shell) && hasTable(shell)) {
+					return shell;
+				}
+			}
+			for (Shell shell : display.getShells()) {
+				if (shell.isVisible() && Shells.isDialog(shell) && !Shells.isWorkbench(shell)) {
 					return shell;
 				}
 			}
@@ -144,11 +161,7 @@ public final class DismissDialogTool implements IMcpTool {
 		return false;
 	}
 
-	private static boolean isModal(Shell shell) {
-		return (shell.getStyle() & (SWT.APPLICATION_MODAL | SWT.PRIMARY_MODAL | SWT.SYSTEM_MODAL)) != 0;
-	}
-
-	private static void collectButtons(Composite parent, JsonArray into) {
+	static void collectButtons(Composite parent, JsonArray into) {
 		for (Control child : parent.getChildren()) {
 			if (child instanceof Button candidate && !label(candidate).isEmpty()) {
 				into.add(new JsonObject().put("label", label(candidate)) //$NON-NLS-1$
@@ -161,7 +174,7 @@ public final class DismissDialogTool implements IMcpTool {
 		}
 	}
 
-	private static Button findButton(Composite parent, String label) {
+	static Button findButton(Composite parent, String label) {
 		for (Control child : parent.getChildren()) {
 			if (child instanceof Button candidate && label(candidate).equalsIgnoreCase(label.trim())) {
 				return candidate;
@@ -177,7 +190,7 @@ public final class DismissDialogTool implements IMcpTool {
 	}
 
 	/** The visible label, with the mnemonic ampersand removed. */
-	private static String label(Button button) {
+	static String label(Button button) {
 		String text = button.getText();
 		return text == null ? "" : text.replace("&", "").trim(); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 	}
