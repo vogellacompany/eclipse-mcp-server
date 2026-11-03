@@ -94,6 +94,7 @@ public final class ExitTool implements IMcpTool {
 		JsonObject cleared = RestartTool.clearTheWayForShutdown();
 		Display display = Workbenches.display();
 		lastFailure = null;
+		closing = true;
 		display.timerExec(EXIT_DELAY_MILLIS, () -> performExit(force));
 		JsonObject result = new JsonObject().put("exiting", Boolean.TRUE) //$NON-NLS-1$
 				.put("inMillis", Integer.valueOf(EXIT_DELAY_MILLIS)) //$NON-NLS-1$
@@ -117,7 +118,6 @@ public final class ExitTool implements IMcpTool {
 	private static void performExit(boolean force) {
 		boolean closed = false;
 		Throwable failure = null;
-		closing = true;
 		CloseWatch watch = CloseWatch.start(Workbenches.display(), force, "exit", held -> lastFailure = held); //$NON-NLS-1$
 		try {
 			closed = PlatformUI.getWorkbench().close();

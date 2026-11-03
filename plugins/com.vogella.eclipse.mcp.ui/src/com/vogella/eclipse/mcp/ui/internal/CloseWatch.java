@@ -34,6 +34,7 @@ public final class CloseWatch {
 	private final Consumer<JsonObject> onHeld;
 	private final JsonArray answered = new JsonArray();
 	private Shell candidate;
+	private Shell pressed;
 	private boolean stopped;
 
 	private CloseWatch(Display display, boolean force, String action, Consumer<JsonObject> onHeld) {
@@ -65,6 +66,11 @@ public final class CloseWatch {
 			return;
 		}
 		display.timerExec(PROBE_MILLIS, this::probe);
+		// a press the dialog survives, such as a refused validation, leaves it holding the close
+		if (pressed != null && !pressed.isDisposed() && pressed.isVisible()) {
+			reportHeld(pressed);
+		}
+		pressed = null;
 		Shell found = Shells.newDialog(display, seen);
 		// seen on two probes in a row, so a dialog that closes itself is not reported
 		if (found != null && found == candidate) {
@@ -83,8 +89,14 @@ public final class CloseWatch {
 			answered.add(new JsonObject().put("dialog", title).put("pressed", label)); //$NON-NLS-1$ //$NON-NLS-2$
 			ILog.get().info("eclipse_%s force answered the dialog '%s' with %s.".formatted(action, title, label)); //$NON-NLS-1$
 			DismissDialogTool.press(affirmative);
+			pressed = dialog;
 			return;
 		}
+		reportHeld(dialog);
+	}
+
+	private void reportHeld(Shell dialog) {
+		String title = dialog.getText();
 		JsonArray buttons = new JsonArray();
 		DismissDialogTool.collectButtons(dialog, buttons);
 		String reason = "The dialog '%s' opened during the %s and is holding it, so the IDE stays up until it is answered; read it with eclipse_list_ui_targets and answer it with eclipse_dismiss_dialog." //$NON-NLS-1$

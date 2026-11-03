@@ -162,6 +162,22 @@ class DialogShellsTest {
 	}
 
 	@Test
+	void aDialogThatSurvivesTheForcedPressIsReported() {
+		List<JsonObject> held = new ArrayList<>();
+		CloseWatch watch = CloseWatch.start(display, true, "exit", held::add);
+		Shell dialog = new Shell(shell, SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL);
+		dialog.setText("Refuses");
+		new Button(dialog, SWT.PUSH).setText("&Yes");
+		dialog.pack();
+		dialog.open();
+		spinUntil(() -> !held.isEmpty());
+		watch.stop();
+		assertTrue(watch.answered().toString().contains("Refuses"), watch.answered().toString());
+		assertEquals(1, held.size(), held.toString());
+		assertTrue(held.get(0).toString().contains("Refuses"), held.toString());
+	}
+
+	@Test
 	void anUnforcedCloseReportsTheDialogAndLeavesItOpen() {
 		List<JsonObject> held = new ArrayList<>();
 		CloseWatch watch = CloseWatch.start(display, false, "exit", held::add);
