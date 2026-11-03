@@ -136,8 +136,6 @@ To run modified SWT or platform code, import the bundle's project into the IDE's
 For SWT, import the fragment for your platform, such as `binaries/org.eclipse.swt.gtk.linux.x86_64`, from a checkout whose native libraries match the Java code: a checkout without Git LFS has pointer files in their place, which the substitution refuses.
 `eclipse_hot_code_replace` redefines changed classes without a restart where the change allows it.
 
-[eclipse-harness](https://github.com/vogellacompany/eclipse-harness) builds on this: it starts a throwaway IDE, runs `eclipse_run_script` scenarios and compares the captures pixel by pixel with baselines.
-
 ## Tools
 
 Tools marked ✎ change something; the rest are read-only.
