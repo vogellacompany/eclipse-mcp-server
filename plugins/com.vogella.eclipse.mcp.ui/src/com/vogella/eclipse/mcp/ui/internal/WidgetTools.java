@@ -16,6 +16,7 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
+import org.eclipse.swt.widgets.Monitor;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Widget;
 import org.eclipse.ui.IWorkbenchPage;
@@ -768,7 +769,7 @@ public final class WidgetTools {
 
 		@Override
 		public String getDescription() {
-			return "Clicks a widget with a real mouse button: moves the pointer onto it and sends a press and a release through the X server's XTest extension on GTK, or Display.post elsewhere, so the event goes through the window system and SWT's own dispatch exactly like a person's click, including a right click opening a context menu through Control.showMenu. CHANGES WHAT THE IDE DOES, which is whatever that click does, and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path, including item paths such as a CTabItem (0/i2) and row paths (0/r3); the click lands on its centre, or at x and y inside it. displayX and displayY click an absolute screen point instead. Before pressing, the pointer is read back: when it did not arrive, or the control under it is not the addressed widget, nothing is pressed and the answer names what is there, so a covering window or popup is never clicked by mistake. The press is dispatched after this call returns, so verify the effect with eclipse_screenshot or eclipse_list_ui_targets. It works on an X11 display without a compositor, such as Xvfb. It refuses on native Wayland, which ignores pointer warps, and under XWayland on a compositing desktop such as GNOME, where the pointer moves but the compositor keeps the IDE window from being under it. A native menu is no SWT control, so a point over an open menu is refused; pick menu entries with eclipse_select_menu_item instead. button none only moves the pointer and presses nothing, which is how a tooltip or a hover highlight is moved off a capture; it is allowed over an open menu or another window, and the answer reports moved rather than clicked, and for a widget onTarget, whether the pointer is over it. No modifier keys and no double click; eclipse_double_click_text double-clicks inside a text editor, and eclipse_press_widget presses a Button or ToolItem without the pointer. delivery synthetic, or auto when the window system refuses, sends focus, MouseMove, MouseDown, MouseUp and for a right click MenuDetect to the widget through notifyListeners instead, which works while the IDE is inactive or the screen is locked; the answer says synthetic true, and only listeners see such a click."; //$NON-NLS-1$
+			return "Clicks a widget with a real mouse button: moves the pointer onto it and sends a press and a release through the X server's XTest extension on GTK, or Display.post elsewhere, so the event goes through the window system and SWT's own dispatch exactly like a person's click, including a right click opening a context menu through Control.showMenu. CHANGES WHAT THE IDE DOES, which is whatever that click does, and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path, including item paths such as a CTabItem (0/i2) and row paths (0/r3); the click lands on its centre, or at x and y inside it. displayX and displayY click an absolute screen point instead. Before pressing, the pointer is read back: when it did not arrive, or the control under it is not the addressed widget, nothing is pressed and the answer names what is there, so a covering window or popup is never clicked by mistake, with coveredBy naming another application's window where the platform can tell. pointerDisturbed says the pointer had left the point right after the press, as a physical mouse moving does on Windows, so the click may have landed elsewhere. The press is dispatched after this call returns, so verify the effect with eclipse_screenshot or eclipse_list_ui_targets. It works on an X11 display without a compositor, such as Xvfb. It refuses on native Wayland, which ignores pointer warps, and under XWayland on a compositing desktop such as GNOME, where the pointer moves but the compositor keeps the IDE window from being under it. A native menu is no SWT control, so a point over an open menu is refused; pick menu entries with eclipse_select_menu_item instead. button none only moves the pointer and presses nothing, which is how a tooltip or a hover highlight is moved off a capture; it is allowed over an open menu or another window, and the answer reports moved rather than clicked, and for a widget onTarget, whether the pointer is over it. No modifier keys and no double click; eclipse_double_click_text double-clicks inside a text editor, and eclipse_press_widget presses a Button or ToolItem without the pointer. delivery synthetic, or auto when the window system refuses, sends focus, MouseMove, MouseDown, MouseUp and for a right click MenuDetect to the widget through notifyListeners instead, which works while the IDE is inactive or the screen is locked; the answer says synthetic true, and only listeners see such a click."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -900,7 +901,8 @@ public final class WidgetTools {
 				}
 				if (under == null) {
 					return result.put("clicked", Boolean.FALSE) //$NON-NLS-1$
-							.put("reason", "The point is not over an SWT control of this IDE, so nothing was pressed: an open native menu, which is no control, another application covering it, the IDE not being on screen, or a compositing desktop running the IDE under XWayland keeping the pointer from reaching it. For a menu entry use eclipse_select_menu_item, which picks it by its labels without the pointer."); //$NON-NLS-1$ //$NON-NLS-2$
+							.put("reason", "The point is not over an SWT control of this IDE, so nothing was pressed: %s. For a menu entry use eclipse_select_menu_item, which picks it by its labels without the pointer." //$NON-NLS-1$ //$NON-NLS-2$
+									.formatted(whatIsThere(display, point, NativeForeground.otherWindowAtPointer(), result)));
 				}
 				if (owner != null && !isInside(under, owner)) {
 					return result.put("clicked", Boolean.FALSE) //$NON-NLS-1$
@@ -925,10 +927,34 @@ public final class WidgetTools {
 				if (failure != null) {
 					result.put("reason", failure); //$NON-NLS-1$
 				} else {
+					org.eclipse.swt.graphics.Point after = display.getCursorLocation();
+					boolean disturbed = DragTool.disturbed(point, after);
+					result.put("pointerDisturbed", Boolean.valueOf(disturbed)); //$NON-NLS-1$
+					if (disturbed) {
+						result.put("pointerAfterPress", after.x + "," + after.y); //$NON-NLS-1$ //$NON-NLS-2$
+					}
 					result.put("note", "The click is dispatched once this call returns. Verify what it did with eclipse_screenshot or eclipse_list_ui_targets."); //$NON-NLS-1$ //$NON-NLS-2$
 				}
 				return result;
 			});
+		}
+
+		/**
+		 * Says what is at a point that has no control of this IDE under it, and reports
+		 * {@code coveredBy} when another application's window there has a known title.
+		 */
+		public static String whatIsThere(Display display, org.eclipse.swt.graphics.Point point, String otherWindow,
+				JsonObject result) {
+			if (otherWindow != null) {
+				result.put("coveredBy", otherWindow); //$NON-NLS-1$
+				return "another application's window, '%s', is in front at that point".formatted(otherWindow); //$NON-NLS-1$
+			}
+			for (Shell shell : display.getShells()) {
+				if (shell.isVisible() && !shell.getMinimized() && shell.getBounds().contains(point)) {
+					return "something in front of this IDE's window covers that point: another application's window, an open native menu, which is no control, or on a compositing desktop running the IDE under XWayland, the compositor keeping the pointer from reaching it"; //$NON-NLS-1$
+				}
+			}
+			return "no window of this IDE is at that point, so check the coordinates and that the IDE is on screen"; //$NON-NLS-1$
 		}
 
 		/** Delivers the click at SWT level and reports it as such. */
@@ -943,18 +969,39 @@ public final class WidgetTools {
 		}
 
 		/** Where the pointer landed: the control under it, or why it did not arrive. */
-		record Warp(Control under, String failure) {
+		public record Warp(Control under, String failure) {
+		}
+
+		/** Why a display point cannot be reached because no monitor shows it, or {@code null} when one does. */
+		public static String offScreen(Display display, org.eclipse.swt.graphics.Point point) {
+			StringBuilder monitors = new StringBuilder();
+			for (Monitor monitor : display.getMonitors()) {
+				Rectangle bounds = monitor.getBounds();
+				if (bounds.contains(point)) {
+					return null;
+				}
+				monitors.append(monitors.isEmpty() ? "" : ", ").append(Overlays.describe(bounds)); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+			return monitors.isEmpty() ? null
+					: "%d,%d is on no monitor; the monitors are %s".formatted(Integer.valueOf(point.x), //$NON-NLS-1$
+							Integer.valueOf(point.y), monitors);
 		}
 
 		/**
 		 * Moves the pointer to a display point and reads it back, reporting point,
-		 * previousPointer, pointer, controlUnderPointer and moved.
+		 * previousPointer, pointer, controlUnderPointer and moved. A point on no monitor
+		 * is refused first, since the window system would clamp the pointer to an edge.
 		 */
-		static Warp warp(Display display, org.eclipse.swt.graphics.Point point, JsonObject result, String nothing,
+		public static Warp warp(Display display, org.eclipse.swt.graphics.Point point, JsonObject result, String nothing,
 				String action) {
 			org.eclipse.swt.graphics.Point previous = display.getCursorLocation();
 			result.put("point", point.x + "," + point.y) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("previousPointer", previous.x + "," + previous.y); //$NON-NLS-1$ //$NON-NLS-2$
+			String offScreen = offScreen(display, point);
+			if (offScreen != null) {
+				result.put("moved", Boolean.FALSE); //$NON-NLS-1$
+				return new Warp(null, "%s, so the pointer stayed where it was and %s.".formatted(offScreen, nothing)); //$NON-NLS-1$
+			}
 			Event move = new Event();
 			move.type = SWT.MouseMove;
 			move.x = point.x;
@@ -970,10 +1017,14 @@ public final class WidgetTools {
 					.put("controlUnderPointer", under == null ? null : under.getClass().getSimpleName()); //$NON-NLS-1$
 			if (Math.abs(arrived.x - point.x) > 1 || Math.abs(arrived.y - point.y) > 1) {
 				result.put("moved", Boolean.FALSE); //$NON-NLS-1$
-				return new Warp(under, ("cocoa".equals(SWT.getPlatform()) //$NON-NLS-1$
-						? "The pointer did not arrive, so %s. macOS drops posted pointer events unless the IDE's process has the Accessibility permission (System Settings, Privacy & Security, Accessibility); grant it, drive the pointer from outside the IDE, or pass delivery synthetic." //$NON-NLS-1$
-						: "The pointer did not arrive, so %s. Native Wayland ignores pointer warps; %s needs the IDE on an X11 display without a compositor, such as Xvfb.") //$NON-NLS-1$
-						.formatted(nothing, action));
+				return new Warp(under, switch (SWT.getPlatform()) {
+				case "cocoa" -> "The pointer did not arrive, so %s. macOS drops posted pointer events unless the IDE's process has the Accessibility permission (System Settings, Privacy & Security, Accessibility); grant it, drive the pointer from outside the IDE, or pass delivery synthetic." //$NON-NLS-1$ //$NON-NLS-2$
+						.formatted(nothing);
+				case "win32" -> "The pointer did not arrive, so %s. Windows ignores a posted move on a locked screen or while an elevated window has the input, and a physical mouse can move it at the same moment; retry, or pass delivery synthetic." //$NON-NLS-1$ //$NON-NLS-2$
+						.formatted(nothing);
+				default -> "The pointer did not arrive, so %s. Native Wayland ignores pointer warps; %s needs the IDE on an X11 display without a compositor, such as Xvfb." //$NON-NLS-1$
+						.formatted(nothing, action);
+				});
 			}
 			result.put("moved", Boolean.TRUE); //$NON-NLS-1$
 			return new Warp(under, null);
@@ -1012,7 +1063,7 @@ public final class WidgetTools {
 
 		@Override
 		public String getDescription() {
-			return "Reports one widget: its SWT class, the CSS element it maps to, its CSS id and classes, its bounds, its ancestor chain, and what the CSS engine resolved for each property asked about. Changes nothing. This is what turns a colour on screen into an explanation, and in particular it shows a '#token' reference that resolved to nothing, which otherwise only shows up as something rendering black or white. Address the widget with a path from eclipse_get_widget_tree, an i prefixed segment for an item. A ToolItem is reachable this way and only this way, which is what makes the pseudo parameter usable for a question like whether a toggle computes differently when checked. Read 'computed' together with 'declared': computed is the widget's live value, which the engine reads back from SWT and which therefore always answers something, so a colour there is no evidence that a rule set it; declared is what the matching rules set for this element, cssDeclaration is that whole merged declaration, and origin says 'css' or 'widget' per property. That is how a themed colour is told apart from the window system's default, and how an 'inherit' that resolved to the wrong parent is spotted. Which rule and which stylesheet it came from is still not reported: the engine keeps the merged declaration and not its source. A control that paints a background image reports backgroundImage, and on such a control nothing reported here is what is on screen: a CTabFolder handing its children a gradient clears their background first, so the computed colour is the window system's default rather than the theme's, and reading it as the colour under the image is the mistake this flag exists to prevent. Use eclipse_apply_css to test a rule against the running IDE and inspect again."; //$NON-NLS-1$
+			return "Reports one widget: its SWT class, its style bits by name under 'style' (only those its class gives a meaning to, since SWT reuses values across classes, with the raw value under 'styleBits'), the CSS element it maps to, its CSS id and classes, its bounds, its ancestor chain, and what the CSS engine resolved for each property asked about. Changes nothing. This is what turns a colour on screen into an explanation, and in particular it shows a '#token' reference that resolved to nothing, which otherwise only shows up as something rendering black or white. Address the widget with a path from eclipse_get_widget_tree, an i prefixed segment for an item. A ToolItem is reachable this way and only this way, which is what makes the pseudo parameter usable for a question like whether a toggle computes differently when checked. Read 'computed' together with 'declared': computed is the widget's live value, which the engine reads back from SWT and which therefore always answers something, so a colour there is no evidence that a rule set it; declared is what the matching rules set for this element, cssDeclaration is that whole merged declaration, and origin says 'css' or 'widget' per property. That is how a themed colour is told apart from the window system's default, and how an 'inherit' that resolved to the wrong parent is spotted. Which rule and which stylesheet it came from is still not reported: the engine keeps the merged declaration and not its source. A control that paints a background image reports backgroundImage, and on such a control nothing reported here is what is on screen: a CTabFolder handing its children a gradient clears their background first, so the computed colour is the window system's default rather than the theme's, and reading it as the colour under the image is the mistake this flag exists to prevent. Use eclipse_apply_css to test a rule against the running IDE and inspect again."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -1051,6 +1102,12 @@ public final class WidgetTools {
 					args.getBoolean("includeToolbar", false))); //$NON-NLS-1$
 		}
 
+		private static JsonArray styleNames(Widget widget) {
+			JsonArray names = new JsonArray();
+			WidgetStyle.names(widget).forEach(names::add);
+			return names;
+		}
+
 		private static JsonObject inspect(String partId, String shellTitle, String path, List<String> properties,
 				String pseudo, boolean includeToolbar) {
 			Control root = rootOf(partId, shellTitle, includeToolbar);
@@ -1074,6 +1131,8 @@ public final class WidgetTools {
 					.put("path", path == null || path.isBlank() ? "/" : path.strip()) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("kind", kindOf(control)) //$NON-NLS-1$
 					.put("class", control.getClass().getName()) //$NON-NLS-1$
+					.put("style", styleNames(control)) //$NON-NLS-1$
+					.put("styleBits", "0x" + Integer.toHexString(control.getStyle())) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("bounds", bounds(control)) //$NON-NLS-1$
 					.put("visible", control instanceof Control visible ? Boolean.valueOf(visible.isVisible()) : null) //$NON-NLS-1$
 					.put("pseudo", pseudo); //$NON-NLS-1$

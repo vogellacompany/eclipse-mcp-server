@@ -32,6 +32,9 @@ public final class ExitTool implements IMcpTool {
 	 */
 	private static volatile JsonObject lastFailure;
 
+	/** Whether a close is running, also behind a dialog holding it; only touched on the UI thread. */
+	private static boolean closing;
+
 	@Override
 	public String getName() {
 		return "eclipse_exit"; //$NON-NLS-1$
@@ -39,7 +42,7 @@ public final class ExitTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "SHUTS THE IDE DOWN. The process ends and this server ends with it, so nothing here can bring it back: starting it again is the caller's job, from outside, which is what makes this different from eclipse_restart. Use it to take down a throwaway IDE a harness started; do not use it on an IDE somebody is working in. THE ANSWER REPORTS WHAT WAS REQUESTED, NOT THE OUTCOME, because the server cannot outlive the shutdown it is reporting on: it answers first and closes a couple of seconds later, so a dropped connection right after a successful result is the expected outcome. Confirm the exit from outside, by watching the process or the port rather than by asking this server. Refuses when anything is unsaved or a modal dialog is open, naming which of the two fired, unless save or force is passed; the check covers every dirty part in every window, which is the set the platform itself would prompt for, not one page's editors. IWorkbench.close is a cancellable close that prompts for every dirty part, and a veto leaves the JVM up, so on an IDE nobody is watching an unguarded exit stalls in an invisible dialog rather than failing. force DISCARDS unsaved work outright, closing dirty editors without saving, so the platform has nothing left to prompt about. A blocking dialog is better cleared with eclipse_dismiss_dialog than forced past. Builds are cancelled and launches this server started are terminated first, the same way a restart clears them, because a launched JVM that outlives the IDE keeps its workspace lock with nobody left who knows where it came from. An exit the platform vetoes leaves the IDE running and is written to the Error Log, and reported as previousExitFailed by the next call if there is one."; //$NON-NLS-1$
+		return "SHUTS THE IDE DOWN. The process ends and this server ends with it, so nothing here can bring it back: starting it again is the caller's job, from outside, which is what makes this different from eclipse_restart. Use it to take down a throwaway IDE a harness started; do not use it on an IDE somebody is working in. THE ANSWER REPORTS WHAT WAS REQUESTED, NOT THE OUTCOME, because the server cannot outlive the shutdown it is reporting on: it answers first and closes a couple of seconds later, so a dropped connection right after a successful result is the expected outcome. Confirm the exit from outside, by watching the process or the port rather than by asking this server. Refuses when anything is unsaved or a modal dialog is open, naming which of the two fired, unless save or force is passed; the check covers every dirty part in every window, which is the set the platform itself would prompt for, not one page's editors. IWorkbench.close is a cancellable close that prompts for every dirty part, and a veto leaves the JVM up, so on an IDE nobody is watching an unguarded exit stalls in an invisible dialog rather than failing. force DISCARDS unsaved work outright, closing dirty editors without saving, so the platform has nothing left to prompt about; a dialog the product itself raises while closing, such as an exit confirmation, is answered with its Yes or OK button and the Error Log records it. Without force, or without such a button, that dialog holds the exit and the IDE stays up behind it, reported as previousExitFailed with heldByDialog by the next call and in the Error Log. A blocking dialog is better cleared with eclipse_dismiss_dialog than forced past. Builds are cancelled and launches this server started are terminated first, the same way a restart clears them, because a launched JVM that outlives the IDE keeps its workspace lock with nobody left who knows where it came from. An exit the platform vetoes leaves the IDE running and is written to the Error Log, and reported as previousExitFailed by the next call if there is one."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -49,7 +52,7 @@ public final class ExitTool implements IMcpTool {
 				  "type": "object",
 				  "properties": {
 				    "save":  {"type":"boolean","default":false,"description":"Save dirty editors first, then exit."},
-				    "force": {"type":"boolean","default":false,"description":"Exit even with unsaved changes or an open modal dialog. DISCARDS that work: dirty editors are closed without saving and dirty views are marked clean, so the platform has nothing left to prompt about."}
+				    "force": {"type":"boolean","default":false,"description":"Exit even with unsaved changes or an open modal dialog. DISCARDS that work: dirty editors are closed without saving and dirty views are marked clean, so the platform has nothing left to prompt about, and a dialog the product raises while closing is answered with its Yes or OK button."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -74,6 +77,13 @@ public final class ExitTool implements IMcpTool {
 	}
 
 	private static JsonObject prepare(boolean save, boolean force) {
+		if (closing) {
+			// a second close would nest inside the dialog that holds the first
+			JsonObject refusal = new JsonObject().put("exiting", Boolean.FALSE) //$NON-NLS-1$
+					.put("reason", "An exit is already in progress; answer whatever holds it with eclipse_dismiss_dialog."); //$NON-NLS-1$ //$NON-NLS-2$
+			addLastFailure(refusal);
+			return refusal;
+		}
 		RestartTool.CloseGuard guard = RestartTool.guard(save, force, "exiting", "exiting"); //$NON-NLS-1$ //$NON-NLS-2$
 		if (guard.refusal() != null) {
 			JsonObject refusal = guard.refusal().put("exiting", Boolean.FALSE); //$NON-NLS-1$
@@ -84,7 +94,8 @@ public final class ExitTool implements IMcpTool {
 		JsonObject cleared = RestartTool.clearTheWayForShutdown();
 		Display display = Workbenches.display();
 		lastFailure = null;
-		display.timerExec(EXIT_DELAY_MILLIS, ExitTool::performExit);
+		closing = true;
+		display.timerExec(EXIT_DELAY_MILLIS, () -> performExit(force));
 		JsonObject result = new JsonObject().put("exiting", Boolean.TRUE) //$NON-NLS-1$
 				.put("inMillis", Integer.valueOf(EXIT_DELAY_MILLIS)) //$NON-NLS-1$
 				.put("cleared", cleared) //$NON-NLS-1$
@@ -92,7 +103,7 @@ public final class ExitTool implements IMcpTool {
 				.put("savedEditors", Boolean.valueOf(save)) //$NON-NLS-1$
 				.put("workspace", RestartTool.workspaceLocationForAnswer()) //$NON-NLS-1$
 				.put("note", //$NON-NLS-1$
-						"REQUESTED, NOT YET DONE: this answer is sent BEFORE the shutdown, so it reports what was asked for and cannot report the outcome. The server keeps answering for a couple of seconds, so a reachability check right after this succeeds against the process that is about to die; watch the process or the port from outside instead. THIS SERVER CANNOT START THE IDE AGAIN, so whatever launched it has to. An exit the platform refuses leaves the IDE up and is written to the Error Log."); //$NON-NLS-1$
+						"REQUESTED, NOT YET DONE: this answer is sent BEFORE the shutdown, so it reports what was asked for and cannot report the outcome. The server keeps answering for a couple of seconds, so a reachability check right after this succeeds against the process that is about to die; watch the process or the port from outside instead. THIS SERVER CANNOT START THE IDE AGAIN, so whatever launched it has to. An exit the platform refuses, or a dialog the product raises while closing, leaves the IDE up and is written to the Error Log; the next call to this tool reports it as previousExitFailed."); //$NON-NLS-1$
 		addLastFailure(result);
 		return result;
 	}
@@ -104,13 +115,17 @@ public final class ExitTool implements IMcpTool {
 	 * running and the boolean is the only signal. There is nobody left to answer
 	 * afterwards, so the log is where this has to go.
 	 */
-	private static void performExit() {
+	private static void performExit(boolean force) {
 		boolean closed = false;
 		Throwable failure = null;
+		CloseWatch watch = CloseWatch.start(Workbenches.display(), force, "exit", held -> lastFailure = held); //$NON-NLS-1$
 		try {
 			closed = PlatformUI.getWorkbench().close();
 		} catch (Throwable e) {
 			failure = e;
+		} finally {
+			watch.stop();
+			closing = false;
 		}
 		if (closed) {
 			return;
@@ -119,6 +134,7 @@ public final class ExitTool implements IMcpTool {
 				: "the workbench refused to close, which a save prompt or a listener veto does; the IDE is still up"; //$NON-NLS-1$
 		lastFailure = new JsonObject().put("at", Instant.now().toString()) //$NON-NLS-1$
 				.put("reason", reason) //$NON-NLS-1$
+				.put("answeredDialogs", watch.answered().size() == 0 ? null : watch.answered()) //$NON-NLS-1$
 				.put("cause", failure == null ? null : String.valueOf(failure)); //$NON-NLS-1$
 		ILog.get().error("The exit did not take: " + reason, failure); //$NON-NLS-1$
 	}

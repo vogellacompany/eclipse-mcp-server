@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.ui.internal;
 
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -104,12 +105,12 @@ public final class Shells {
 		return Workbenches.activeWindowShell();
 	}
 
-	/** The topmost visible shell that is neither a workbench window nor modal. */
+	/** The topmost visible shell that is neither a workbench window nor a dialog. */
 	private static Shell popup(Display display) {
 		Shell withTable = null;
 		Shell any = null;
 		for (Shell shell : ordered(display)) {
-			if (!shell.isVisible() || isWorkbench(shell) || isModal(shell)) {
+			if (!shell.isVisible() || isWorkbench(shell) || isDialog(shell)) {
 				continue;
 			}
 			any = shell;
@@ -126,16 +127,33 @@ public final class Shells {
 		return (shell.getStyle() & (SWT.APPLICATION_MODAL | SWT.PRIMARY_MODAL | SWT.SYSTEM_MODAL)) != 0;
 	}
 
+	/** A dialog, modal or not: a JFace window with a title bar can block its opener without being modal. */
+	static boolean isDialog(Shell shell) {
+		return isModal(shell)
+				|| (shell.getStyle() & SWT.TITLE) != 0 && shell.getData() instanceof org.eclipse.jface.window.Window;
+	}
+
+	/** A visible dialog not among {@code before}, other than a progress dialog, or {@code null}. */
+	static Shell newDialog(Display display, Set<Shell> before) {
+		for (Shell shell : display.getShells()) {
+			if (!before.contains(shell) && !shell.isDisposed() && shell.isVisible() && !isWorkbench(shell) && isDialog(shell)
+					&& !(shell.getData() instanceof org.eclipse.jface.dialogs.ProgressMonitorDialog)) {
+				return shell;
+			}
+		}
+		return null;
+	}
+
 	static boolean isWorkbench(Shell shell) {
 		return Workbenches.windowShells().contains(shell);
 	}
 
 	/** workbench, dialog or popup, which is what tells the proposal popup apart. */
-	static String kind(Shell shell) {
+	public static String kind(Shell shell) {
 		if (isWorkbench(shell)) {
 			return "workbench"; //$NON-NLS-1$
 		}
-		return isModal(shell) ? "dialog" : "popup"; //$NON-NLS-1$ //$NON-NLS-2$
+		return isDialog(shell) ? "dialog" : "popup"; //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	/**

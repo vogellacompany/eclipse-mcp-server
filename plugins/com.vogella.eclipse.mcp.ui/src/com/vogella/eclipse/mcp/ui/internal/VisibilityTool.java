@@ -52,7 +52,7 @@ public final class VisibilityTool implements IMcpTool {
 				  "type": "object",
 				  "required": ["visible"],
 				  "properties": {
-				    "visible": {"type":"boolean","description":"False takes the IDE off the screen, true brings it back, unminimizes it and ASKS for focus. The window system may refuse the focus part, so the answer reports 'foreground' for what actually happened rather than promising it, and 'foregroundMethod' for how it was asked: on Windows a plain request is refused to a process that is not already in front, so the raise falls back to attaching to the foreground thread's input queue."},
+				    "visible": {"type":"boolean","description":"False takes the IDE off the screen, true brings it back, unminimizes it and ASKS for focus. The window system may refuse the focus part, so the answer reports 'foreground' for what actually happened rather than promising it, true only for that instant since another window can take the foreground back right after, so read 'foreground' from eclipse_screenshot again before relying on it, and 'foregroundMethod' for how it was asked: on Windows a plain request is refused to a process that is not already in front, so the raise falls back to attaching to the foreground thread's input queue."},
 				    "mode":    {"type":"string","enum":["hidden","minimized"],"default":"hidden","description":"How to take it off the screen. Ignored when visible is true."}
 				  },
 				  "additionalProperties": false

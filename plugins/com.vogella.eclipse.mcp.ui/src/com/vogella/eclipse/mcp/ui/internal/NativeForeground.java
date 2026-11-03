@@ -39,6 +39,8 @@ final class NativeForeground {
 
 	private static final String GTK = "org.eclipse.swt.internal.gtk.GTK"; //$NON-NLS-1$
 
+	private static final int GA_ROOT = 2;
+
 	private NativeForeground() {
 	}
 
@@ -172,6 +174,44 @@ final class NativeForeground {
 			os.getMethod("GetWindowThreadProcessId", long.class, int[].class) //$NON-NLS-1$
 					.invoke(null, Long.valueOf(owner), process);
 			return Boolean.valueOf(process[0] == ProcessHandle.current().pid());
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			return null;
+		}
+	}
+
+	/** The title of another process's top-level window under the pointer, or null where that cannot be told or it has none. */
+	static String otherWindowAtPointer() {
+		if (!isSupported()) {
+			return null;
+		}
+		try {
+			ClassLoader loader = Shell.class.getClassLoader();
+			Class<?> os = Class.forName(OS, true, loader);
+			Class<?> pointType = Class.forName("org.eclipse.swt.internal.win32.POINT", true, loader); //$NON-NLS-1$
+			Object point = pointType.getConstructor().newInstance();
+			if (!Boolean.TRUE.equals(os.getMethod("GetCursorPos", pointType).invoke(null, point))) { //$NON-NLS-1$
+				return null;
+			}
+			long window = (Long) os.getMethod("WindowFromPoint", pointType).invoke(null, point); //$NON-NLS-1$
+			if (window == 0) {
+				return null;
+			}
+			long root = (Long) os.getMethod("GetAncestor", long.class, int.class) //$NON-NLS-1$
+					.invoke(null, Long.valueOf(window), Integer.valueOf(GA_ROOT));
+			int[] process = new int[1];
+			os.getMethod("GetWindowThreadProcessId", long.class, int[].class) //$NON-NLS-1$
+					.invoke(null, Long.valueOf(root), process);
+			if (process[0] == ProcessHandle.current().pid()) {
+				return null;
+			}
+			int length = (Integer) os.getMethod("GetWindowTextLength", long.class).invoke(null, Long.valueOf(root)); //$NON-NLS-1$
+			if (length <= 0) {
+				return null;
+			}
+			char[] title = new char[length + 1];
+			int read = (Integer) os.getMethod("GetWindowText", long.class, char[].class, int.class) //$NON-NLS-1$
+					.invoke(null, Long.valueOf(root), title, Integer.valueOf(title.length));
+			return read <= 0 ? null : new String(title, 0, read);
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 			return null;
 		}
