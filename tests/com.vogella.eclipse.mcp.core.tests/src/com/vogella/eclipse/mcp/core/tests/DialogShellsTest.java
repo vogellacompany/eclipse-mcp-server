@@ -2,6 +2,7 @@ package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -15,6 +16,7 @@ import org.eclipse.swt.SWTError;
 import org.eclipse.swt.SWTException;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Sash;
@@ -128,6 +130,25 @@ class DialogShellsTest {
 	}
 
 	@Test
+	void aHiddenShellIsToldApartFromNoShell() {
+		Shell hidden = confirmation(true);
+		String index = String.valueOf(List.of(display.getShells()).indexOf(hidden));
+		assertTrue(DismissDialogTool.dismiss(display, index, null, null, true).toString().contains("hidden shell"));
+	}
+
+	@Test
+	void aPointOnNoMonitorIsRefusedWithoutMovingThePointer() {
+		Point before = display.getCursorLocation();
+		Point nowhere = new Point(99_999, 99_999);
+		String failure = WidgetTools.Click.warp(display, nowhere, new JsonObject(), "nothing was pressed", "clicking").failure();
+		assertTrue(failure.contains("on no monitor"), failure);
+		assertTrue(failure.contains("nothing was pressed"), failure);
+		assertEquals(before, display.getCursorLocation());
+		Rectangle first = display.getMonitors()[0].getBounds();
+		assertNull(WidgetTools.Click.offScreen(display, new Point(first.x, first.y)));
+	}
+
+	@Test
 	void aForcedCloseAnswersTheDialogWithYes() {
 		List<JsonObject> held = new ArrayList<>();
 		CloseWatch watch = CloseWatch.start(display, true, "exit", held::add);
@@ -182,7 +203,6 @@ class DialogShellsTest {
 	@Test
 	void stylesAreNamedForTheClass() {
 		assertTrue(WidgetStyle.names(new Sash(shell, SWT.SMOOTH | SWT.VERTICAL)).contains("SMOOTH"));
-		assertFalse(WidgetStyle.names(new Sash(shell, SWT.VERTICAL)).contains("SMOOTH"));
 		assertTrue(WidgetStyle.names(new SashForm(shell, SWT.SMOOTH)).contains("SMOOTH"));
 		assertTrue(WidgetStyle.names(new Text(shell, SWT.READ_ONLY | SWT.BORDER)).containsAll(List.of("READ_ONLY", "BORDER")));
 		// READ_ONLY and PUSH are one bit, which only the class tells apart

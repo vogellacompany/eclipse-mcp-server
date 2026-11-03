@@ -70,7 +70,11 @@ public final class DismissDialogTool implements IMcpTool {
 	public static JsonObject dismiss(Display display, String shellSpec, String shellTitle, String button, boolean dryRun) {
 		Shell shell = shellSpec != null ? Shells.select(display, shellSpec) : find(display, shellTitle);
 		String named = shellSpec != null ? shellSpec : shellTitle;
-		if (shell == null || !shell.isVisible()) {
+		if (shell != null && !shell.isVisible()) {
+			return new JsonObject().put("dismissed", Boolean.FALSE) //$NON-NLS-1$
+					.put("reason", "'%s' is a hidden shell, not an open dialog. Indices can shift between calls, so read them again with eclipse_list_ui_targets.".formatted(named)); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		if (shell == null) {
 			return new JsonObject().put("dismissed", Boolean.FALSE) //$NON-NLS-1$
 					.put("reason", named == null ? "No modal dialog is open." //$NON-NLS-1$ //$NON-NLS-2$
 							: "No dialog matching '%s' is open.".formatted(named)); //$NON-NLS-1$

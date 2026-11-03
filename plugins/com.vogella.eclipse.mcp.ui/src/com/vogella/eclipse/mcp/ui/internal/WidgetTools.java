@@ -16,6 +16,7 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
+import org.eclipse.swt.widgets.Monitor;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Widget;
 import org.eclipse.ui.IWorkbenchPage;
@@ -968,18 +969,39 @@ public final class WidgetTools {
 		}
 
 		/** Where the pointer landed: the control under it, or why it did not arrive. */
-		record Warp(Control under, String failure) {
+		public record Warp(Control under, String failure) {
+		}
+
+		/** Why a display point cannot be reached because no monitor shows it, or {@code null} when one does. */
+		public static String offScreen(Display display, org.eclipse.swt.graphics.Point point) {
+			StringBuilder monitors = new StringBuilder();
+			for (Monitor monitor : display.getMonitors()) {
+				Rectangle bounds = monitor.getBounds();
+				if (bounds.contains(point)) {
+					return null;
+				}
+				monitors.append(monitors.isEmpty() ? "" : ", ").append(Overlays.describe(bounds)); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+			return monitors.isEmpty() ? null
+					: "%d,%d is on no monitor; the monitors are %s".formatted(Integer.valueOf(point.x), //$NON-NLS-1$
+							Integer.valueOf(point.y), monitors);
 		}
 
 		/**
 		 * Moves the pointer to a display point and reads it back, reporting point,
-		 * previousPointer, pointer, controlUnderPointer and moved.
+		 * previousPointer, pointer, controlUnderPointer and moved. A point on no monitor
+		 * is refused first, since the window system would clamp the pointer to an edge.
 		 */
-		static Warp warp(Display display, org.eclipse.swt.graphics.Point point, JsonObject result, String nothing,
+		public static Warp warp(Display display, org.eclipse.swt.graphics.Point point, JsonObject result, String nothing,
 				String action) {
 			org.eclipse.swt.graphics.Point previous = display.getCursorLocation();
 			result.put("point", point.x + "," + point.y) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("previousPointer", previous.x + "," + previous.y); //$NON-NLS-1$ //$NON-NLS-2$
+			String offScreen = offScreen(display, point);
+			if (offScreen != null) {
+				result.put("moved", Boolean.FALSE); //$NON-NLS-1$
+				return new Warp(null, "%s, so the pointer stayed where it was and %s.".formatted(offScreen, nothing)); //$NON-NLS-1$
+			}
 			Event move = new Event();
 			move.type = SWT.MouseMove;
 			move.x = point.x;
@@ -995,10 +1017,14 @@ public final class WidgetTools {
 					.put("controlUnderPointer", under == null ? null : under.getClass().getSimpleName()); //$NON-NLS-1$
 			if (Math.abs(arrived.x - point.x) > 1 || Math.abs(arrived.y - point.y) > 1) {
 				result.put("moved", Boolean.FALSE); //$NON-NLS-1$
-				return new Warp(under, ("cocoa".equals(SWT.getPlatform()) //$NON-NLS-1$
-						? "The pointer did not arrive, so %s. macOS drops posted pointer events unless the IDE's process has the Accessibility permission (System Settings, Privacy & Security, Accessibility); grant it, drive the pointer from outside the IDE, or pass delivery synthetic." //$NON-NLS-1$
-						: "The pointer did not arrive, so %s. Native Wayland ignores pointer warps; %s needs the IDE on an X11 display without a compositor, such as Xvfb.") //$NON-NLS-1$
-						.formatted(nothing, action));
+				return new Warp(under, switch (SWT.getPlatform()) {
+				case "cocoa" -> "The pointer did not arrive, so %s. macOS drops posted pointer events unless the IDE's process has the Accessibility permission (System Settings, Privacy & Security, Accessibility); grant it, drive the pointer from outside the IDE, or pass delivery synthetic." //$NON-NLS-1$ //$NON-NLS-2$
+						.formatted(nothing);
+				case "win32" -> "The pointer did not arrive, so %s. Windows ignores a posted move on a locked screen or while an elevated window has the input, and a physical mouse can move it at the same moment; retry, or pass delivery synthetic." //$NON-NLS-1$ //$NON-NLS-2$
+						.formatted(nothing);
+				default -> "The pointer did not arrive, so %s. Native Wayland ignores pointer warps; %s needs the IDE on an X11 display without a compositor, such as Xvfb." //$NON-NLS-1$
+						.formatted(nothing, action);
+				});
 			}
 			result.put("moved", Boolean.TRUE); //$NON-NLS-1$
 			return new Warp(under, null);
