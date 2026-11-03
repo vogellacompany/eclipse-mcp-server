@@ -376,7 +376,7 @@ public final class PressWidgetTool implements IMcpTool {
 	private static void focus(JsonObject result, Control control, Control root, boolean viaToolBar) {
 		Display display = control.getDisplay();
 		JsonObject before = describe(display.getFocusControl(), root);
-		boolean focused = control.forceFocus();
+		boolean focused = FocusCalls.force(control);
 		// sampled after the attempt so it belongs to the same moment as focusControlAfter
 		boolean active = !control.isDisposed() && control.getShell() == display.getActiveShell()
 				&& NativeForeground.isForeground(display);
@@ -384,7 +384,7 @@ public final class PressWidgetTool implements IMcpTool {
 				.put("focusControlAfter", describe(display.getFocusControl(), root)) //$NON-NLS-1$
 				.put("focused", Boolean.valueOf(focused)) //$NON-NLS-1$
 				.put("shellActive", Boolean.valueOf(active)); //$NON-NLS-1$
-		if (!focused) {
+		if (!focused && !control.isDisposed()) {
 			result.put("focusNote", viaToolBar && active //$NON-NLS-1$
 					? "Focus was refused although the IDE is the active window; a ToolBar does not always take the keyboard focus." //$NON-NLS-1$
 					: "Focus was refused, most likely because the IDE is not the foreground window; eclipse_set_ide_visibility with visible=true raises it."); //$NON-NLS-1$

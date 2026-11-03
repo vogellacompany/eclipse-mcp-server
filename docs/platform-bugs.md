@@ -373,3 +373,10 @@ Nothing filed upstream yet.
 Found 2026-10-10: `PlatformUI.getDialogSettingsProvider(bundle)` creates a provider on demand and nothing enumerates the ones that exist, so `eclipse_reset_dialog_settings` cannot tell which bundles hold settings in memory only.
 `ResetDialogSettingsTool.loadedBundles` reads the private static `fTrackedBundles` of `org.eclipse.e4.ui.internal.workbench.swt.DialogSettingsProviderService` by name; when the field is renamed it falls back to the `dialog_settings.xml` files on disk and says so under `note`.
 Nothing filed upstream yet.
+
+## `Button.WM_SETFOCUS` on win32 throws when a `FocusIn` listener disposes a push button
+
+Observed 2026-11-03 on Windows 11 with `org.eclipse.swt.win32.win32.x86_64` 3.136.0.v20261102-2024: `forceFocus` on a push button whose `FocusIn` listener disposes it throws `NullPointerException` from `Control.menuShell` (`Cannot invoke "Composite.menuShell()" because "this.parent" is null`).
+`Button.WM_SETFOCUS` (win32, `Button.java:1212` in that build) sends the event through `super.WM_SETFOCUS` and then calls `menuShell ().setDefaultButton (this, false)` without checking `isDisposed`.
+`FocusCalls` catches the exception only when the control is disposed and the stack names `Control.menuShell` under `Button.WM_SETFOCUS`, so `eclipse_press_widget` and a synthetic `eclipse_click` answer rather than fail (`PressRowTest.aFocusListenerThatDisposesTheButtonGivesAStructuredAnswer` drives the real failure on win32, and `theSwtFocusBugOnADisposedButtonAnswersFalse`, `aPressWhoseFocusHitsTheSwtBugGivesAStructuredAnswer` and `aClickStopsWhenFocusDisposedTheButton` imitate it everywhere).
+Nothing filed upstream yet.

@@ -1,11 +1,13 @@
 package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.SWTError;
 import org.eclipse.swt.SWTException;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Display;
@@ -59,5 +61,9 @@ class ShellCoordinatesTest {
 		Rectangle shellBounds = shell.getBounds();
 
 		assertEquals(new Rectangle(inDisplay.x - shellBounds.x, inDisplay.y - shellBounds.y, 80, 30), inShell);
+		// independent of how it is computed: the child's offset behind the client origin, within a point of rounding
+		Point client = display.map(shell, null, 0, 0);
+		assertTrue(Math.abs(inShell.x - (client.x - shellBounds.x + 10)) <= 1, inShell.toString());
+		assertTrue(Math.abs(inShell.y - (client.y - shellBounds.y + 20)) <= 1, inShell.toString());
 	}
 }

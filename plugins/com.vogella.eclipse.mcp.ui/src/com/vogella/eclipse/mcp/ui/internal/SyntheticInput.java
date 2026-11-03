@@ -99,8 +99,12 @@ public final class SyntheticInput {
 
 	/** A press and release at {@code local}, in the control's own coordinates, with focus given first as a real click would. */
 	public static void click(Control control, Point local, int button, JsonObject result) {
-		boolean focused = control.setFocus();
+		boolean focused = FocusCalls.set(control);
 		result.put("focused", Boolean.valueOf(focused)); //$NON-NLS-1$
+		if (control.isDisposed()) {
+			result.put("widgetDisposed", Boolean.TRUE); //$NON-NLS-1$
+			return;
+		}
 		control.notifyListeners(SWT.MouseMove, mouseEvent(local, 0));
 		if (button == 0 || control.isDisposed()) {
 			return;
