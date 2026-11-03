@@ -44,12 +44,17 @@ public final class StartupUiCapture implements EventHandler {
 
 	/** Starts listening, and records whether a workbench was already up, in which case its early events have passed. */
 	public void start(BundleContext context) {
-		boolean workbenchAlreadyThere = context.getServiceReference(WORKBENCH_SERVICE) != null;
-		Dictionary<String, Object> properties = new Hashtable<>();
-		properties.put(EventConstants.EVENT_TOPIC,
-				new String[] { UIEvents.UIElement.TOPIC_WIDGET, UIEvents.UILifeCycle.APP_STARTUP_COMPLETE });
-		registration.set(context.registerService(EventHandler.class, this, properties));
-		timeline.uiCaptureStarted(workbenchAlreadyThere);
+		try {
+			boolean workbenchAlreadyThere = context.getServiceReference(WORKBENCH_SERVICE) != null;
+			Dictionary<String, Object> properties = new Hashtable<>();
+			properties.put(EventConstants.EVENT_TOPIC,
+					new String[] { UIEvents.UIElement.TOPIC_WIDGET, UIEvents.UILifeCycle.APP_STARTUP_COMPLETE });
+			registration.set(context.registerService(EventHandler.class, this, properties));
+			timeline.uiCaptureStarted(workbenchAlreadyThere);
+		} catch (RuntimeException | LinkageError e) {
+			// a timing is not worth failing the component that holds the other UI hooks
+			timeline.uiCaptureFailed(e.toString());
+		}
 	}
 
 	void stop() {

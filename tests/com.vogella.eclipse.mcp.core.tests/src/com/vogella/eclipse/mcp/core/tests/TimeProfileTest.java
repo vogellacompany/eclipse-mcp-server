@@ -255,6 +255,16 @@ class TimeProfileTest {
 				"org.eclipse.swt.widgets.Display.sleep")));
 	}
 
+	@Test
+	void aSampleWithoutAStackIsCountedAndSaidToBe() throws Exception {
+		TimeProfile profile = profile(false, 10, 10, 50);
+		add(profile, "main", true, WORK);
+		add(profile, "main", true, new String[0]);
+		Map<String, Object> answer = TestFixture.parse(profile.toJson().toString());
+		assertEquals(2, number(answer, "samples"));
+		assertEquals(1, number(answer, "withoutStack"));
+	}
+
 	private static void add(TimeProfile profile, String thread, boolean execution, String[] frames) {
 		profile.observe(thread, execution, frames);
 		profile.add(thread, execution, frames, false);

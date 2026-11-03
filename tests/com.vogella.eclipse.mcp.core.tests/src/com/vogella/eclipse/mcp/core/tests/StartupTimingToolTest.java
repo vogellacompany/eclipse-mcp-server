@@ -116,7 +116,7 @@ class StartupTimingToolTest {
 	@Test
 	void theCaptureComponentsRunInTheFramework() {
 		Bundle basic = FrameworkUtil.getBundle(StartupCaptureComponent.class);
-		assertEquals(DESCRIPTOR, basic.getHeaders().get("Service-Component"));
+		assertTrue(List.of(basic.getHeaders().get("Service-Component").split(",\\s*")).contains(DESCRIPTOR));
 		assertNotNull(basic.getEntry(DESCRIPTOR), "The committed descriptor should be packaged");
 		assertNotNull(StartupTimeline.getDefault().frameworkCaptureStarted(), "StartupCaptureComponent never activated");
 		assertNotNull(StartupTimeline.getDefault().uiCaptureStarted(), "McpUiComponent never started the UI capture");
@@ -217,6 +217,10 @@ class StartupTimingToolTest {
 		StartupTimeline noUi = new StartupTimeline();
 		assertTrue(firstShellReason(noUi, KNOWN).contains("com.vogella.eclipse.mcp.ui"));
 
+		StartupTimeline failed = new StartupTimeline();
+		failed.uiCaptureFailed("no event admin");
+		assertTrue(firstShellReason(failed, KNOWN).contains("no event admin"));
+
 		StartupTimeline headless = new StartupTimeline();
 		headless.uiCaptureStarted(false);
 		assertTrue(firstShellReason(headless, NOTHING_KNOWN).contains("headless"));
@@ -271,6 +275,18 @@ class StartupTimingToolTest {
 		assertFalse(timeline.mark(Phase.MAIN_WINDOW_VISIBLE, 1, "seen"));
 		assertEquals("too late", timeline.missedReason(Phase.MAIN_WINDOW_VISIBLE));
 		assertNull(timeline.get(Phase.MAIN_WINDOW_VISIBLE));
+	}
+
+	@Test
+	void theListenerSeesOnlyAnInstanceLocationWithAUrlAndTheApplicationServices() throws Exception {
+		var filter = FrameworkUtil.createFilter(StartupCaptureComponent.SERVICES_FILTER);
+		String location = "org.eclipse.osgi.service.datalocation.Location";
+		assertTrue(filter.matches(Map.of("objectClass", new String[] { location }, "type", "osgi.instance.area", "url", "file:/w")));
+		assertFalse(filter.matches(Map.of("objectClass", new String[] { location }, "type", "osgi.instance.area")));
+		assertFalse(filter.matches(Map.of("objectClass", new String[] { location }, "type", "osgi.configuration.area", "url", "file:/c")));
+		assertTrue(filter.matches(Map.of("objectClass", new String[] { "org.osgi.service.application.ApplicationHandle" })));
+		assertTrue(filter.matches(Map.of("objectClass", new String[] { "org.eclipse.osgi.service.runnable.ApplicationLauncher" })));
+		assertFalse(filter.matches(Map.of("objectClass", new String[] { "java.lang.Runnable" })));
 	}
 
 	@Test
@@ -435,8 +451,9 @@ class StartupTimingToolTest {
 	void aFailedRegistrationDoesNotReportTheCaptureAsStarted() {
 		StartupTimeline timeline = new StartupTimeline();
 		StartupUiCapture capture = new StartupUiCapture(timeline);
-		assertThrows(IllegalStateException.class, () -> capture.start(contextWith(false, false)));
+		capture.start(contextWith(false, false));
 		assertNull(timeline.uiCaptureStarted());
+		assertTrue(timeline.uiCaptureFailure().contains("IllegalStateException"), timeline.uiCaptureFailure());
 	}
 
 	@Test

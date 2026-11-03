@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.LaunchRecording;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -54,7 +55,12 @@ public final class RelaunchVmArguments {
 
 	private static final String FLIGHT_RECORDER_OPTIONS = "-XX:FlightRecorderOptions"; //$NON-NLS-1$
 
+	private static final String START_FLIGHT_RECORDING = "-XX:StartFlightRecording"; //$NON-NLS-1$
+
 	private static final int CHECK_SECONDS = 10;
+
+	/** What the check leaves of the call for the UI step that schedules the restart. */
+	private static final int FINAL_STEP_SECONDS = 2;
 
 	/** The launcher's JVM arguments for this process, one per line, its own launcher jar or class path among them. */
 	private static final String IDE_VM_ARGUMENTS = "eclipse.vmargs"; //$NON-NLS-1$
@@ -63,7 +69,7 @@ public final class RelaunchVmArguments {
 	private static final Set<String> CLASS_PATH = Set.of("-cp", "-classpath", "--class-path", "-Djava.class.path"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 
 	/** Belong to the running IDE: a repeat overwrites its recording, and JMX binds a port the running IDE holds. */
-	private static final List<String> NOT_FOR_A_PROBE = List.of("-XX:StartFlightRecording", FLIGHT_RECORDER_OPTIONS, //$NON-NLS-1$
+	private static final List<String> NOT_FOR_A_PROBE = List.of(START_FLIGHT_RECORDING, FLIGHT_RECORDER_OPTIONS,
 			"-Dcom.sun.management."); //$NON-NLS-1$
 
 	/** Can suspend the probe, listen on a port or act on their own. */
@@ -180,6 +186,10 @@ public final class RelaunchVmArguments {
 		if (file != null && isThere(file)) {
 			return "Refused: " + alreadyThere(file); //$NON-NLS-1$
 		}
+		int checkSeconds = CallBudget.boundedWaitSeconds(CHECK_SECONDS + FINAL_STEP_SECONDS) - FINAL_STEP_SECONDS;
+		if (checkSeconds < 1) {
+			return "Refused: too little of this call is left to try these arguments on a JVM, usually because the UI thread was busy. The IDE keeps running; call again."; //$NON-NLS-1$
+		}
 		Path java = Path.of(System.getProperty("java.home"), "bin", FileLocations.isWindows() ? "java.exe" : "java"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 		Path output = null;
 		try {
@@ -196,16 +206,20 @@ public final class RelaunchVmArguments {
 			command.add(java.toString());
 			List<String> own = probeArguments(ideVmArguments);
 			command.addAll(own);
-			List<String> probed = vmArguments.stream().filter(argument -> !hasSideEffects(argument)).toList();
-			List<String> notTried = vmArguments.stream().filter(RelaunchVmArguments::hasSideEffects).toList();
+			List<String> probed = vmArguments.stream().filter(this::isProbed).toList();
+			List<String> notTried = vmArguments.stream().filter(argument -> !isProbed(argument)).toList();
 			command.addAll(probed);
 			String tried = (own.isEmpty() ? "these arguments alone" : "these arguments behind this IDE's own " + own) //$NON-NLS-1$ //$NON-NLS-2$
 					+ (notTried.isEmpty() ? "" : ", leaving out " + notTried); //$NON-NLS-1$ //$NON-NLS-2$
 			command.add("-version"); //$NON-NLS-1$
 			Process process = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(output.toFile())
 					.start();
-			if (!process.waitFor(CHECK_SECONDS, TimeUnit.SECONDS)) {
+			if (!process.waitFor(checkSeconds, TimeUnit.SECONDS)) {
 				process.destroyForcibly().waitFor(2, TimeUnit.SECONDS);
+				if (checkSeconds < CHECK_SECONDS) {
+					return "Refused: a JVM with %s did not get through -version in the %d seconds left of this call, which says little about the arguments. The IDE keeps running; call again." //$NON-NLS-1$
+							.formatted(tried, Integer.valueOf(checkSeconds));
+				}
 				return "Refused: a JVM with %s did not get through -version within %d seconds, so the IDE would not come back either: %s" //$NON-NLS-1$
 						.formatted(tried, Integer.valueOf(CHECK_SECONDS), probed);
 			}
@@ -267,6 +281,12 @@ public final class RelaunchVmArguments {
 		return kept;
 	}
 
+	/** Whether the probe repeats this argument: the requested recording's file is deleted afterwards, one from vmArgs would stay. */
+	private boolean isProbed(String argument) {
+		boolean ownRecording = file != null && argument.equals(vmArguments.get(0));
+		return !hasSideEffects(argument) && (ownRecording || !argument.startsWith(START_FLIGHT_RECORDING));
+	}
+
 	/** Whether a probe with this argument would act beyond itself, whoever asked for the argument. */
 	private static boolean hasSideEffects(String argument) {
 		return AGENTS.stream().anyMatch(argument::startsWith) || WRITES_A_FILE.stream().anyMatch(argument::startsWith)
@@ -319,7 +339,7 @@ public final class RelaunchVmArguments {
 		String when = seconds > 0
 				? "written %d seconds after it started, WITHOUT ending the IDE, and the recording ends there; an IDE that exits earlier writes it at exit" //$NON-NLS-1$
 						.formatted(Integer.valueOf(seconds))
-				: "written when the IDE EXITS, and an IDE that is killed leaves nothing; 'jcmd <pid> JFR.dump name=%s filename=...' copies it out earlier" //$NON-NLS-1$
+				: "written when the IDE EXITS, and an IDE that is killed leaves it empty; 'jcmd <pid> JFR.dump name=%s filename=...' copies it out earlier" //$NON-NLS-1$
 						.formatted(LaunchRecording.NAME);
 		return "REQUESTED, NOT OBSERVED: the new JVM starts recording during its own initialization, before any Eclipse code runs, into %s. The file exists from that moment but stays EMPTY until it is %s. No file at all means the relaunch did not take these arguments. After reconnecting, read it with eclipse_stop_flight_recording passing file; nothing is stopped by that." //$NON-NLS-1$
 				.formatted(file, when);

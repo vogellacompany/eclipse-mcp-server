@@ -44,6 +44,9 @@ public final class StartupCaptureComponent {
 	private static final String APPLICATION_CLAUSES = "(objectClass=" + APPLICATION_HANDLE + ")(objectClass=" //$NON-NLS-1$ //$NON-NLS-2$
 			+ APPLICATION_LAUNCHER + ")"; //$NON-NLS-1$
 
+	/** The services whose events {@link #serviceChanged} reads as phases. */
+	public static final String SERVICES_FILTER = "(|" + WORKSPACE_FILTER + APPLICATION_CLAUSES + ")"; //$NON-NLS-1$ //$NON-NLS-2$
+
 	private static final String STATE = "application.state"; //$NON-NLS-1$
 
 	private static final String RUNNING = "RUNNING"; //$NON-NLS-1$
@@ -76,7 +79,7 @@ public final class StartupCaptureComponent {
 		// listening before looking, so nothing falls between the two; an observation beats a missed note
 		context.addBundleListener(bundles);
 		context.addFrameworkListener(framework);
-		context.addServiceListener(services, "(|" + WORKSPACE_FILTER + APPLICATION_CLAUSES + ")"); //$NON-NLS-1$ //$NON-NLS-2$
+		context.addServiceListener(services, SERVICES_FILTER);
 
 		List<String> active = new ArrayList<>();
 		for (Bundle bundle : context.getBundles()) {

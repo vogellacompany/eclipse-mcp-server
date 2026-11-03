@@ -51,6 +51,8 @@ public final class StartupTimeline {
 
 	private boolean uiCaptureLate;
 
+	private String uiCaptureFailure;
+
 	/** The timeline of this process. */
 	public static StartupTimeline getDefault() {
 		return DEFAULT;
@@ -122,6 +124,16 @@ public final class StartupTimeline {
 			uiCaptureStarted = Long.valueOf(System.currentTimeMillis());
 			uiCaptureLate = workbenchAlreadyThere;
 		}
+	}
+
+	/** Records why the UI listeners could not start. */
+	public synchronized void uiCaptureFailed(String reason) {
+		uiCaptureFailure = reason;
+	}
+
+	/** Why the UI listeners could not start, or null. */
+	public synchronized String uiCaptureFailure() {
+		return uiCaptureFailure;
 	}
 
 	/** When the UI listeners started, or null when they never did. */

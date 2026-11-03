@@ -101,6 +101,10 @@ class FlightRecordingToolsTest {
 		assertTrue(noSuchSetting.text().contains("perod"), noSuchSetting.text());
 		assertTrue(TestFixture.call(START, Map.of("settingsOverrides", Map.of("jdk.NoSuchEvent#period", "1 ms"))).isError());
 		assertTrue(TestFixture.call(START, Map.of("settingsOverrides", Map.of("noSeparator", "1 ms"))).isError());
+		assertTrue(TestFixture.call(START, Map.of("settingsOverrides", "jdk.ExecutionSample#period=1 ms")).text()
+				.contains("settingsOverrides has to be an object"));
+		assertTrue(TestFixture.call(STOP, Map.of("file", "does-not-matter.jfr", "threadNames", "main")).text()
+				.contains("threadNames has to be an array"));
 	}
 
 	@Test

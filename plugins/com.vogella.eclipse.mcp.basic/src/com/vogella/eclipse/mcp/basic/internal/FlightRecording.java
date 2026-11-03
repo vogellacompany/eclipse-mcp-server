@@ -213,6 +213,8 @@ final class FlightRecording {
 		Map<String, Integer> eventCounts = new HashMap<>();
 		List<Seen> seen = new ArrayList<>();
 		Map<RecordedMethod, String> frameNames = new IdentityHashMap<>();
+		// a recording repeats its stacks, and up to MAX_EVENTS of them are held until the file is read
+		Map<List<String>, String[]> distinctStacks = new HashMap<>();
 		Map<String, String> settings = new HashMap<>();
 		List<String[]> activeSettings = new ArrayList<>();
 		long first = Long.MAX_VALUE;
@@ -277,7 +279,7 @@ final class FlightRecording {
 				boolean throwing = isThrow(type);
 				boolean needsStack = options.frameFilter() != null || allocation || isSample(type) || throwing;
 				seen.add(new Seen(type, start, type.startsWith("jdk.GC") ? event.getDuration().toNanos() : 0, thread, //$NON-NLS-1$
-						needsStack ? names(frames, frameNames) : NO_FRAMES,
+						needsStack ? names(frames, frameNames, distinctStacks) : NO_FRAMES,
 						stackTrace != null && stackTrace.isTruncated(),
 						allocation && event.hasField("weight") ? event.getLong("weight") : 0, //$NON-NLS-1$ //$NON-NLS-2$
 						allocation ? className(event, "objectClass") : throwing ? className(event, "thrownClass") : null, //$NON-NLS-1$ //$NON-NLS-2$
@@ -560,14 +562,15 @@ final class FlightRecording {
 	}
 
 	/** Names per method once, since a stack repeats them and a recording repeats stacks. */
-	private static String[] names(List<RecordedFrame> frames, Map<RecordedMethod, String> cache) {
+	private static String[] names(List<RecordedFrame> frames, Map<RecordedMethod, String> cache,
+			Map<List<String>, String[]> distinctStacks) {
 		String[] names = new String[frames.size()];
 		for (int i = 0; i < names.length; i++) {
 			RecordedMethod method = frames.get(i).getMethod();
 			names[i] = method == null ? "unknown" //$NON-NLS-1$
 					: cache.computeIfAbsent(method, m -> m.getType().getName() + '.' + m.getName());
 		}
-		return names;
+		return distinctStacks.computeIfAbsent(Arrays.asList(names), unused -> names);
 	}
 
 	/** A temporary file for one dump, in the workspace-independent temp directory. */

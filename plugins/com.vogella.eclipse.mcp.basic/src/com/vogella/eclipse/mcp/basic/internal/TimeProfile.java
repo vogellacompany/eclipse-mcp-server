@@ -54,6 +54,8 @@ public final class TimeProfile {
 
 	private int idle;
 
+	private int withoutStack;
+
 	public TimeProfile(Limits limits) {
 		this.limits = limits;
 	}
@@ -81,6 +83,9 @@ public final class TimeProfile {
 			execution++;
 		} else {
 			nativeSamples++;
+		}
+		if (frames.length == 0) {
+			withoutStack++;
 		}
 		stacks.add(new StackAlignment.Stack(thread, frames, truncated, 1));
 		if (frames.length > 0) {
@@ -120,7 +125,7 @@ public final class TimeProfile {
 		List<String> waits = idleFrames.entrySet().stream()
 				.sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry::getKey)).limit(3)
 				.map(entry -> IdleFrames.brief(entry.getKey())).toList();
-		return "Nothing was busy. %d of %d samples were working and the rest were threads waiting, mostly in %s. So no frame is named as a culprit.%s" //$NON-NLS-1$
+		return "Nothing was busy. %d of %d samples were working and the rest were of waiting threads, mostly in %s. So no frame is named as a culprit.%s" //$NON-NLS-1$
 				.formatted(Integer.valueOf(busy), Integer.valueOf(busy + idle), String.join(", ", waits), //$NON-NLS-1$
 						limits.includeIdle() ? "" : " To look at a stall, whose threads are parked, include the idle samples."); //$NON-NLS-1$ //$NON-NLS-2$
 	}
@@ -131,6 +136,7 @@ public final class TimeProfile {
 		JsonObject result = new JsonObject().put("samples", Integer.valueOf(samples)) //$NON-NLS-1$
 				.put("execution", Integer.valueOf(execution)) //$NON-NLS-1$
 				.put("native", Integer.valueOf(nativeSamples)) //$NON-NLS-1$
+				.put("withoutStack", Integer.valueOf(withoutStack)) //$NON-NLS-1$
 				.put("idleSamples", Integer.valueOf(idle)) //$NON-NLS-1$
 				.put("idleExcluded", Integer.valueOf(limits.includeIdle() ? 0 : idle)) //$NON-NLS-1$
 				.put("nothingBusy", Boolean.valueOf(quiet != null)); //$NON-NLS-1$

@@ -139,6 +139,9 @@ public final class GetStartupTimingTool implements IMcpTool {
 		if (mark != null) {
 			return measured(mark.epochMillis(), base, mark.obtainedBy());
 		}
+		if (timeline.uiCaptureFailure() != null) {
+			return unknown("The UI listeners could not start, so nothing was listening: " + timeline.uiCaptureFailure()); //$NON-NLS-1$
+		}
 		if (timeline.uiCaptureStarted() == null) {
 			return unknown(
 					"com.vogella.eclipse.mcp.ui is not installed or its component has not run, so nothing was listening. This is the normal case in a headless application."); //$NON-NLS-1$
