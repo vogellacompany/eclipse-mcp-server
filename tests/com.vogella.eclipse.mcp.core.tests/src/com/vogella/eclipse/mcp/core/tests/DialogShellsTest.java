@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 import org.eclipse.jface.window.Window;
@@ -29,6 +30,9 @@ import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.Sash;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
+import org.eclipse.swt.widgets.Table;
+import org.eclipse.swt.widgets.TableColumn;
+import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeColumn;
 import org.eclipse.swt.widgets.TreeItem;
@@ -263,9 +267,17 @@ class DialogShellsTest {
 		box.setMessage("Answered by the test");
 		List<String> titles = new ArrayList<>();
 		List<String> answers = new ArrayList<>();
-		display.timerExec(500, () -> {
+		Runnable[] answer = new Runnable[1];
+		answer[0] = () -> {
+			// the box may not be up yet on a slow machine
+			if (NativeDialogs.list(display).isEmpty()) {
+				display.timerExec(100, answer[0]);
+				return;
+			}
 			try {
 				NativeDialogs.list(display).forEach(dialog -> titles.add(dialog.title()));
+				Set<Long> open = NativeDialogs.handles(display);
+				answers.add(NativeDialogs.listNew(display, open).isEmpty() ? "known" : "reported as new");
 				answers.add(DismissDialogTool.dismiss(display, null, "native question", null, true).toString());
 				// the labels follow the language of Windows, the order does not
 				String no = List.copyOf(NativeDialogs.list(display).get(0).buttons().keySet()).get(1);
@@ -273,11 +285,13 @@ class DialogShellsTest {
 			} catch (RuntimeException e) {
 				answers.add(e.toString());
 			}
-		});
+		};
+		display.timerExec(100, answer[0]);
 		display.timerExec(5000, () -> NativeDialogs.list(display).forEach(NativeDialogs::close));
 		assertEquals(SWT.NO, box.open(), answers::toString);
 		assertEquals(List.of("Native Question"), titles);
-		assertTrue(answers.get(0).contains("\"native\""), answers.toString());
+		assertEquals("known", answers.get(0), "A dialog already open is not a new one");
+		assertTrue(answers.get(1).contains("\"native\""), answers.toString());
 		assertTrue(NativeDialogs.list(display).isEmpty());
 	}
 
@@ -288,12 +302,18 @@ class DialogShellsTest {
 		FileDialog picker = new FileDialog(shell, SWT.OPEN);
 		picker.setText("Native Picker");
 		List<String> titles = new ArrayList<>();
-		display.timerExec(1500, () -> {
-			NativeDialogs.list(display).forEach(dialog -> {
+		Runnable[] close = new Runnable[1];
+		close[0] = () -> {
+			List<NativeDialogs.Dialog> dialogs = NativeDialogs.list(display);
+			if (dialogs.isEmpty()) {
+				display.timerExec(100, close[0]);
+			}
+			dialogs.forEach(dialog -> {
 				titles.add(dialog.title());
 				NativeDialogs.close(dialog);
 			});
-		});
+		};
+		display.timerExec(100, close[0]);
 		assertNull(picker.open());
 		assertEquals(List.of("Native Picker"), titles);
 	}
@@ -320,6 +340,12 @@ class DialogShellsTest {
 		row.setText(new String[] { "Name", "VARCHAR" });
 		assertEquals("[\"Name\",\"VARCHAR\"]", WidgetTools.cellsOf(row).toString().replaceAll("\\s", ""));
 		assertNull(WidgetTools.cellsOf(new TreeItem(new Tree(shell, SWT.NONE), SWT.NONE)));
+		Table table = new Table(shell, SWT.NONE);
+		new TableColumn(table, SWT.NONE);
+		new TableColumn(table, SWT.NONE);
+		TableItem tableRow = new TableItem(table, SWT.NONE);
+		tableRow.setText(new String[] { "Id", "INT" });
+		assertEquals("[\"Id\",\"INT\"]", WidgetTools.cellsOf(tableRow).toString().replaceAll("\\s", ""));
 	}
 
 	@Test
@@ -332,6 +358,42 @@ class DialogShellsTest {
 		String answer = WidgetTools.SelectTab.apply(folder, diagram, true).toString();
 		assertTrue(answer.contains("Diagram"), answer);
 		assertTrue(answer.contains("\"selected\""), answer);
+		assertFalse(answer.contains("folderDisposed"), answer);
+	}
+
+	@Test
+	void aTabWhoseListenerDisposesTheFolderStillAnswers() {
+		CTabFolder folder = new CTabFolder(shell, SWT.NONE);
+		CTabItem tab = new CTabItem(folder, SWT.NONE);
+		tab.setText("Diagram");
+		folder.addListener(SWT.Selection, event -> folder.dispose());
+		String answer = WidgetTools.SelectTab.apply(folder, tab, true).toString();
+		assertTrue(answer.contains("Diagram"), answer);
+		assertTrue(answer.contains("folderDisposed"), answer);
+		assertFalse(answer.contains("The page is rendered"), answer);
+	}
+
+	@Test
+	void aTabWhoseListenerThrowsStillSwitches() {
+		CTabFolder folder = new CTabFolder(shell, SWT.NONE);
+		new CTabItem(folder, SWT.NONE).setText("First");
+		CTabItem second = new CTabItem(folder, SWT.NONE);
+		second.setText("Second");
+		folder.addListener(SWT.Selection, event -> {
+			throw new IllegalStateException("stale viewer");
+		});
+		String answer = WidgetTools.SelectTab.apply(folder, second, true).toString();
+		assertEquals(second, folder.getSelection());
+		assertTrue(answer.contains("stale viewer"), answer);
+	}
+
+	@Test
+	void aQuietTabSwitchCarriesNoFailureField() {
+		CTabFolder folder = new CTabFolder(shell, SWT.NONE);
+		CTabItem only = new CTabItem(folder, SWT.NONE);
+		only.setText("Only");
+		String answer = WidgetTools.SelectTab.apply(folder, only, true).toString();
+		assertFalse(answer.contains("listenerFailure"), answer);
 	}
 
 	@Test

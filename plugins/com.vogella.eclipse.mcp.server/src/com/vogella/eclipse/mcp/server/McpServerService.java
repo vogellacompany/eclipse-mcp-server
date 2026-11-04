@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -122,7 +123,7 @@ public final class McpServerService {
 	/** The instructions, plus the tools they or the descriptions name that this installation does not have. */
 	private static String withMissingTools(String instructions) {
 		var tools = McpToolRegistry.getInstance().getTools();
-		List<String> texts = new java.util.ArrayList<>(List.of(instructions));
+		List<String> texts = new ArrayList<>(List.of(instructions));
 		tools.forEach(tool -> {
 			texts.add(tool.getDescription());
 			texts.add(tool.getInputSchema());

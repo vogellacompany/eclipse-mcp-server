@@ -25,7 +25,7 @@ public final class ClipboardTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Reads the text on the system clipboard, which is shared with everything else on the machine. Changes nothing. This reads a custom-painted control that reports no content of its own: run org.eclipse.ui.edit.copy through eclipse_run_workbench_command with the control focused, then read the result here. THAT COPY OVERWRITES WHAT THE PERSON AT THE MACHINE HAD ON THE CLIPBOARD, and what is read here can be anything they copied, a password included. availableTypes names the other formats on offer, which this does not read."; //$NON-NLS-1$
+		return "Reads the text on the system clipboard, which is shared with everything else on the machine. Changes nothing, with one exception on Linux: when the application holding the clipboard does not answer within about five seconds, SWT clears the clipboard to unblock later reads, and the IDE does not respond during that wait. This reads a custom-painted control that reports no content of its own: run org.eclipse.ui.edit.copy through eclipse_run_workbench_command with the control focused, then read the result here. THAT COPY OVERWRITES WHAT THE PERSON AT THE MACHINE HAD ON THE CLIPBOARD, and what is read here can be anything they copied, a password included. availableTypes names the other formats on offer, which this does not read."; //$NON-NLS-1$
 	}
 
 	@Override

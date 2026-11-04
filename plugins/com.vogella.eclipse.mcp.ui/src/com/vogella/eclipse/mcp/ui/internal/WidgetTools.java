@@ -120,13 +120,6 @@ public final class WidgetTools {
 		return path.isEmpty() ? "/" : path.toString(); //$NON-NLS-1$
 	}
 
-	/**
-	 * The rows of a Table or Tree, which an r prefixed path segment addresses.
-	 * <p>
-	 * A TreeItem answers its own children, so a nested row is addressable as
-	 * {@code 0/0/1/r1/r2}. Without that a path could only ever name a top level
-	 * row, and everything under a node was unreachable however it got expanded.
-	 */
 	/** The text of each column of a row, or {@code null} for a widget without columns, where 'text' says it all. */
 	public static JsonArray cellsOf(Widget row) {
 		int columns = switch (row) {
@@ -145,6 +138,13 @@ public final class WidgetTools {
 		return cells;
 	}
 
+	/**
+	 * The rows of a Table or Tree, which an r prefixed path segment addresses.
+	 * <p>
+	 * A TreeItem answers its own children, so a nested row is addressable as
+	 * {@code 0/0/1/r1/r2}. Without that a path could only ever name a top level
+	 * row, and everything under a node was unreachable however it got expanded.
+	 */
 	static Widget[] rowsOf(Widget widget) {
 		return switch (widget) {
 		case org.eclipse.swt.widgets.Table table -> table.getItems();
@@ -326,7 +326,7 @@ public final class WidgetTools {
 					    "filter":     {"type":"string","description":"Only report widgets whose simple class name contains this text, case insensitive, e.g. 'Tree' or 'ToolBar'. The walk still descends through everything."},
 				    "includeToolbar": {"type":"boolean","default":false,"description":"Start from the surrounding part stack rather than the part. A view's toolbar is built in the stack's CTabFolder, not in the part, so it is in no plain part tree at all; this is how to reach it."},
 					    "includeItems": {"type":"boolean","default":false,"description":"Also enumerate Items, which are not Controls and are therefore in no plain walk: ToolItems, CTabItems, TabItems, CoolItems, ExpandItems and the columns of a Table or Tree. Their paths carry an i prefix, as in 2/i0, and that is the only way eclipse_inspect_widget can address one. Off by default to keep the tree short."},
-				    "includeRows": {"type":"boolean","default":false,"description":"Also enumerate the rows of a Table or Tree, with an r prefixed path (0/r2) that eclipse_inspect_widget, eclipse_set_selection and eclipse_expand_row accept and, beside the row bounds, boundsInShell so a row can be highlighted on a shell=popup screenshot, and boundsInDisplay for a click. selected marks the row the widget has selected. ONLY THE ROWS THE TREE HAS CREATED ARE ROWS: the children of a collapsed node do not exist yet and have no path, so a view that comes up collapsed reports two or three entries and looks complete. Each tree row therefore carries childCount and expanded, and a collapsed node with children says so; open it with eclipse_expand_row and ask again. The children of an expanded node ARE reported, nested under its own path. Off by default because a big Table has many rows."},
+				    "includeRows": {"type":"boolean","default":false,"description":"Also enumerate the rows of a Table or Tree, with an r prefixed path (0/r2) that eclipse_inspect_widget, eclipse_set_selection and eclipse_expand_row accept and, beside the row bounds, boundsInShell so a row can be highlighted on a shell=popup screenshot, and boundsInDisplay for a click. selected marks the row the widget has selected, and cells gives the text of each column when there are two or more. ONLY THE ROWS THE TREE HAS CREATED ARE ROWS: the children of a collapsed node do not exist yet and have no path, so a view that comes up collapsed reports two or three entries and looks complete. Each tree row therefore carries childCount and expanded, and a collapsed node with children says so; open it with eclipse_expand_row and ask again. The children of an expanded node ARE reported, nested under its own path. Off by default because a big Table has many rows."},
 				    "includeMetrics": {"type":"boolean","default":false,"description":"Also report per control what it computes for itself, for comparing two IDEs or two SWT implementations control by control: preferredSize (computeSize with SWT.DEFAULT), borderWidth, fontName and fontHeight, clientArea and trim (computeTrim(0,0,0,0)) for a Scrollable, itemHeight for a Table, Tree, List or Combo, and nativeHandle, false for a control without a window system peer (a lightweight control), null where that cannot be read."},
 				    "maxDepth":   {"type":"integer","default":6,"minimum":1,"maximum":30,"description":"How far down the widget hierarchy to walk. A whole workbench window is dozens of levels deep, so the default stops well short of it."},
 					    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000}
@@ -744,10 +744,10 @@ public final class WidgetTools {
 			folder.setSelection(item);
 			String failure = notify ? fire(folder, item) : null;
 			if (folder.isDisposed()) {
-				return report(before, -1, text, notify).put("folderDisposed", Boolean.TRUE).put("listenerFailure", failure); //$NON-NLS-1$ //$NON-NLS-2$
+				return report(before, -1, text, notify, failure, true);
 			}
 			folder.layout(true, true);
-			return report(before, folder.getSelectionIndex(), text, notify).put("listenerFailure", failure); //$NON-NLS-1$
+			return report(before, folder.getSelectionIndex(), text, notify, failure, false);
 		}
 
 		public static JsonObject apply(org.eclipse.swt.widgets.TabFolder folder,
@@ -758,10 +758,10 @@ public final class WidgetTools {
 			folder.setSelection(item);
 			String failure = notify ? fire(folder, item) : null;
 			if (folder.isDisposed()) {
-				return report(before, -1, text, notify).put("folderDisposed", Boolean.TRUE).put("listenerFailure", failure); //$NON-NLS-1$ //$NON-NLS-2$
+				return report(before, -1, text, notify, failure, true);
 			}
 			folder.layout(true, true);
-			return report(before, folder.getSelectionIndex(), text, notify).put("listenerFailure", failure); //$NON-NLS-1$
+			return report(before, folder.getSelectionIndex(), text, notify, failure, false);
 		}
 
 		/**
@@ -779,20 +779,28 @@ public final class WidgetTools {
 			try {
 				folder.notifyListeners(org.eclipse.swt.SWT.Selection, event);
 				return null;
-			} catch (org.eclipse.swt.SWTException e) {
+			} catch (RuntimeException e) {
 				// the tab has switched by now, so this is not a failed call
-				return e.getMessage();
+				return e.toString();
 			}
 		}
 
-		private static JsonObject report(int before, int after, String text, boolean notified) {
-			return new JsonObject().put("selected", Boolean.TRUE) //$NON-NLS-1$
+		private static JsonObject report(int before, int after, String text, boolean notified, String failure,
+				boolean folderDisposed) {
+			JsonObject answer = new JsonObject().put("selected", Boolean.TRUE) //$NON-NLS-1$
 					.put("previousIndex", Integer.valueOf(before)) //$NON-NLS-1$
 					.put("index", Integer.valueOf(after)) //$NON-NLS-1$
 					.put("text", text) //$NON-NLS-1$
-					.put("listenersNotified", Boolean.valueOf(notified)) //$NON-NLS-1$
-					.put("note", //$NON-NLS-1$
-							"The page is rendered now, so eclipse_screenshot and eclipse_get_widget_tree report it with real bounds. Selecting another tab hides it again the same way."); //$NON-NLS-1$
+					.put("listenersNotified", Boolean.valueOf(notified)); //$NON-NLS-1$
+			if (failure != null) {
+				answer.put("listenerFailure", failure); //$NON-NLS-1$
+			}
+			if (folderDisposed) {
+				return answer.put("folderDisposed", Boolean.TRUE).put("note", //$NON-NLS-1$ //$NON-NLS-2$
+						"A listener disposed the tab folder, so its paths are gone: ask eclipse_get_widget_tree again."); //$NON-NLS-1$
+			}
+			return answer.put("note", //$NON-NLS-1$
+					"The page is rendered now, so eclipse_screenshot and eclipse_get_widget_tree report it with real bounds. Selecting another tab hides it again the same way."); //$NON-NLS-1$
 		}
 	}
 

@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 /** Finds tools that descriptions name but this installation does not have, since a product may install only some bundles. */
 public final class ToolReferences {
 
-	private static final Pattern TOOL_NAME = Pattern.compile("\\beclipse_[a-z]+(?:_[a-z]+)*\\b"); //$NON-NLS-1$
+	private static final Pattern TOOL_NAME = Pattern.compile("\\beclipse_[a-z0-9]+(?:_[a-z0-9]+)*\\b"); //$NON-NLS-1$
 
 	private ToolReferences() {
 	}

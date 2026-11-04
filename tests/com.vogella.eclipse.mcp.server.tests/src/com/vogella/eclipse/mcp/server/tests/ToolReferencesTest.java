@@ -17,4 +17,9 @@ class ToolReferencesTest {
 				ToolReferences.missing(List.of("eclipse_click"),
 						List.of("Use eclipse_click or eclipse_open, then eclipse_hot_code_replace.", "See eclipse.ini.")));
 	}
+
+	@Test
+	void readsADigitAsPartOfTheName() {
+		assertEquals(Set.of(), ToolReferences.missing(List.of("eclipse_run_junit6"), List.of("Use eclipse_run_junit6.")));
+	}
 }

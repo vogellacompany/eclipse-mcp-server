@@ -234,8 +234,10 @@ public final class CommandTools {
 			ExecutionRecorder recorder = new ExecutionRecorder();
 			CompletableFuture<String> pending = new CompletableFuture<>();
 			AtomicReference<Set<Shell>> before = new AtomicReference<>();
+			AtomicReference<Set<Long>> nativeBefore = new AtomicReference<>();
 			UiThread.exec(() -> {
 				try {
+					nativeBefore.set(NativeDialogs.handles(Workbenches.display()));
 					before.set(Set.of(Workbenches.display().getShells()));
 					pending.complete(execute(wanted, parameters, dryRun, selection, recorder).toString());
 				} catch (Throwable e) {
@@ -247,7 +249,7 @@ public final class CommandTools {
 			long deadline = started + timeoutSeconds * 1000L;
 			try {
 				if (returnOnDialog && !UiThread.onUiThread()) {
-					ModalShell dialog = awaitDialog(pending, before, deadline);
+					ModalShell dialog = awaitDialog(pending, before, nativeBefore, deadline);
 					if (dialog != null) {
 						pending.whenComplete((text, error) -> logLateCompletion(wanted, text, error));
 						return McpToolResult.of(dialogOpen(wanted, dialog, System.currentTimeMillis() - started, recorder)
@@ -491,7 +493,7 @@ public final class CommandTools {
 		 * leaves the probe queued and is waited for as before.
 		 */
 		private static ModalShell awaitDialog(CompletableFuture<String> pending, AtomicReference<Set<Shell>> before,
-				long deadline) throws InterruptedException {
+				AtomicReference<Set<Long>> nativeBefore, long deadline) throws InterruptedException {
 			CompletableFuture<ModalShell> probe = null;
 			Object candidate = null;
 			while (!pending.isDone()) {
@@ -514,7 +516,7 @@ public final class CommandTools {
 					}
 					candidate = found == null ? null : found.key();
 					CompletableFuture<ModalShell> next = new CompletableFuture<>();
-					Workbenches.display().asyncExec(() -> next.complete(newDialog(before.get())));
+					Workbenches.display().asyncExec(() -> next.complete(newDialog(before.get(), nativeBefore.get())));
 					probe = next;
 				}
 			}
@@ -525,15 +527,15 @@ public final class CommandTools {
 		}
 
 		/** A dialog that was not open before the command. */
-		private static ModalShell newDialog(Set<Shell> before) {
-			if (before == null) {
+		private static ModalShell newDialog(Set<Shell> before, Set<Long> nativeBefore) {
+			if (before == null || nativeBefore == null) {
 				return null;
 			}
 			Shell shell = Shells.newDialog(Workbenches.display(), before);
 			if (shell != null) {
 				return new ModalShell(shell, shell.getText(), false);
 			}
-			return NativeDialogs.list(Workbenches.display()).stream().findFirst()
+			return NativeDialogs.listNew(Workbenches.display(), nativeBefore).stream().findFirst()
 					.map(dialog -> new ModalShell(Long.valueOf(dialog.handle()), dialog.title(), true)).orElse(null);
 		}
 

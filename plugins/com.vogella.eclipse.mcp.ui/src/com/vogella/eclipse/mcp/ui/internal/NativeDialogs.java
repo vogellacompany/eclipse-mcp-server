@@ -84,6 +84,18 @@ public final class NativeDialogs {
 		return dialogs;
 	}
 
+	/** The native dialogs open now that are not among {@code before}, on the UI thread. */
+	public static List<Dialog> listNew(Display display, Set<Long> before) {
+		return list(display).stream().filter(dialog -> !before.contains(Long.valueOf(dialog.handle()))).toList();
+	}
+
+	/** The handles of the native dialogs open now, on the UI thread. */
+	public static Set<Long> handles(Display display) {
+		Set<Long> handles = new HashSet<>();
+		list(display).forEach(dialog -> handles.add(Long.valueOf(dialog.handle())));
+		return handles;
+	}
+
 	/** Asks the dialog to close, which cancels it, and answers whether the request was posted. */
 	public static boolean close(Dialog dialog) {
 		return post(dialog.handle(), WM_CLOSE);

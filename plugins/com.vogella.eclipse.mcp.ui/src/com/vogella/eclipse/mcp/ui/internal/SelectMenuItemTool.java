@@ -181,6 +181,9 @@ public final class SelectMenuItemTool implements IMcpTool {
 				return null;
 			}
 			result.put("part", partId); //$NON-NLS-1$
+			if (widget != null) {
+				result.put("widgetIgnored", "A part without the 3.x workbench answers its first menu, whatever the widget."); //$NON-NLS-1$ //$NON-NLS-2$
+			}
 			return firstMenu(control);
 		}
 		IWorkbenchPart part = SelectionTools.partFor(partId);
@@ -188,7 +191,7 @@ public final class SelectMenuItemTool implements IMcpTool {
 			return null;
 		}
 		result.put("part", part.getSite().getId()); //$NON-NLS-1$
-		Control control = ContextMenuTool.controlFor(part, partId, widget);
+		Control control = ContextMenuTool.controlFor(part, widget);
 		return control == null ? null : ContextMenuTool.detect(control);
 	}
 

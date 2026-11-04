@@ -71,7 +71,7 @@ public final class ContextMenuTool implements IMcpTool {
 					? "There is no active part. Give 'part'." //$NON-NLS-1$
 					: "No open part has the id '%s'. eclipse_list_ui_targets lists the open parts.".formatted(partId)); //$NON-NLS-1$
 		}
-		Control control = controlFor(part, partId, widget);
+		Control control = controlFor(part, widget);
 		if (control == null) {
 			throw new IllegalStateException(
 					"The part '%s' has no control that could carry a context menu.".formatted(part.getSite().getId())); //$NON-NLS-1$
@@ -121,16 +121,15 @@ public final class ContextMenuTool implements IMcpTool {
 	}
 
 	/** The control whose menu is meant: the widget asked for, else the focus control, else the part's viewer. */
-	static Control controlFor(IWorkbenchPart part, String partAddress, String widget) {
+	static Control controlFor(IWorkbenchPart part, String widget) {
 		Control root = ScreenshotTools.Capture.controlOf(part);
 		if (widget != null) {
-			Control base = WidgetTools.rootOf(partAddress != null ? partAddress : part.getSite().getId(), null, false);
-			Widget target = base == null ? null : WidgetTools.resolve(base, widget);
+			Widget target = root == null ? null : WidgetTools.resolve(root, widget);
 			Control control = target instanceof Control own ? own : target == null ? null : WidgetTools.parentOf(target);
 			if (control == null) {
 				throw new IllegalArgumentException("The widget path '%s' does not resolve under this part.".formatted(widget)); //$NON-NLS-1$
 			}
-			Control withMenu = nearestMenu(control, base);
+			Control withMenu = nearestMenu(control, root);
 			return withMenu != null ? withMenu : control;
 		}
 		Control focus = part.getSite().getShell().getDisplay().getFocusControl();
