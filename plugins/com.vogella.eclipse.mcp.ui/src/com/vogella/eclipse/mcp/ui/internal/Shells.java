@@ -8,6 +8,7 @@ import java.util.regex.Pattern;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.StyledText;
+import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
@@ -37,6 +38,16 @@ public final class Shells {
 		return shell != null ? shell : args.getString("shellTitle"); //$NON-NLS-1$
 	}
 
+	/** Bounds as printed, {@code x,y wxh}, or null when the text is not that. */
+	public static Rectangle boundsOf(String text) {
+		Matcher bounds = text == null ? null : BOUNDS.matcher(text.strip());
+		if (bounds == null || !bounds.matches()) {
+			return null;
+		}
+		return new Rectangle(Integer.parseInt(bounds.group(1)), Integer.parseInt(bounds.group(2)),
+				Integer.parseInt(bounds.group(3)), Integer.parseInt(bounds.group(4)));
+	}
+
 	/** The shells in the order {@code eclipse_list_ui_targets} reports them. */
 	static List<Shell> ordered(Display display) {
 		return List.of(display.getShells());
@@ -64,15 +75,10 @@ public final class Shells {
 			int i = Integer.parseInt(index.group(1));
 			return i >= 0 && i < shells.size() ? shells.get(i) : null;
 		}
-		Matcher bounds = BOUNDS.matcher(value);
-		if (bounds.matches()) {
-			int x = Integer.parseInt(bounds.group(1));
-			int y = Integer.parseInt(bounds.group(2));
-			int w = Integer.parseInt(bounds.group(3));
-			int h = Integer.parseInt(bounds.group(4));
+		Rectangle bounds = boundsOf(value);
+		if (bounds != null) {
 			for (Shell shell : ordered(display)) {
-				var b = shell.getBounds();
-				if (b.x == x && b.y == y && b.width == w && b.height == h) {
+				if (bounds.equals(shell.getBounds())) {
 					return shell;
 				}
 			}

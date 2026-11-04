@@ -136,7 +136,7 @@ The UI tools address widgets by their place in the SWT hierarchy rather than by 
 1. `eclipse_list_ui_targets` names the shells and parts; `eclipse_get_widget_tree` lists the widgets under one with a path for each, bounds in three coordinate systems, CSS id and class, and with `includeMetrics` what the control computes for itself: preferred size, trim, font and item height.
 2. `eclipse_press_widget`, `eclipse_set_widget_text`, `eclipse_select_tab`, `eclipse_expand_row`, `eclipse_click`, `eclipse_drag`, `eclipse_scroll`, `eclipse_press_key` and `eclipse_type_text` act on a path; key and click fall back to SWT events where the window system refuses synthetic input.
 3. `eclipse_wait_for` waits for a shell, widget, selection, editor or job condition, and `eclipse_wait_until_settled` for the display queue, the jobs and the reconcilers.
-4. `eclipse_screenshot` captures a part, a shell or the display; `settle` and `settlePixels` make a capture repeatable, and `method: print` paints the widgets instead of reading the screen.
+4. `eclipse_screenshot` captures a part, a shell, a widget, a screen region or the display; `settle` and `settlePixels` make a capture repeatable, and `method: print` paints the widgets instead of reading the screen.
 5. `eclipse_mark_log` and then `eclipse_get_log_entries` show what an action logged, UI freezes included.
 
 To run modified SWT or platform code, import the bundle's project into the IDE's workspace, build it, run `eclipse_substitute_bundle` with `action: substitute` and then `eclipse_restart`; `action: restore` and another restart put the installed bundle back.
