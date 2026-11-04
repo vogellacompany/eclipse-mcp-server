@@ -94,9 +94,12 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 	@Override
 	protected void createFieldEditors() {
 		addField(new BooleanFieldEditor(McpPreferences.KEY_ENABLED, "&Enable MCP server", getFieldEditorParent()));
-		portField = new IntegerFieldEditor(McpPreferences.KEY_PORT, "&Port:", getFieldEditorParent());
+		boolean ephemeral = McpServerService.isEphemeralPortRequested();
+		portField = new IntegerFieldEditor(McpPreferences.KEY_PORT,
+				ephemeral ? "&Port (not used, the system picks one):" : "&Port:", getFieldEditorParent());
 		portField.setValidRange(1024, 65535);
 		addField(portField);
+		portField.setEnabled(!ephemeral, getFieldEditorParent());
 		IntegerFieldEditor timeout = new IntegerFieldEditor(McpPreferences.KEY_CALL_TIMEOUT_SECONDS,
 				"&Tool call timeout (seconds):", getFieldEditorParent());
 		timeout.setValidRange(McpPreferences.MIN_CALL_TIMEOUT_SECONDS, McpPreferences.MAX_CALL_TIMEOUT_SECONDS);
@@ -153,7 +156,11 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 
 	private void regenerateToken() {
 		if (!MessageDialog.openConfirm(getShell(), "Regenerate token",
-				"Every MCP client configured with the current token will be rejected until it is updated. Continue?")) {
+				"Every MCP client configured with the current token will be rejected until it is updated."
+						+ (McpServerService.isEphemeralPortRequested()
+								? " The server also comes back on a new port, which the URL below and the discovery file name."
+								: "")
+						+ " Continue?")) {
 			return;
 		}
 		Job job = Job.create("Regenerating the MCP token", monitor -> {

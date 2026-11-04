@@ -57,7 +57,8 @@ public final class McpServerService {
 
 	private static final String LOOPBACK = "127.0.0.1"; //$NON-NLS-1$
 
-	private static final String EPHEMERAL_PORT_PROPERTY = "com.vogella.eclipse.mcp.server.ephemeralPort"; //$NON-NLS-1$
+	/** The system property that lets the operating system choose the port at each start. */
+	public static final String EPHEMERAL_PORT_PROPERTY = "com.vogella.eclipse.mcp.server.ephemeralPort"; //$NON-NLS-1$
 
 	/** How long a request waits for the tools to load, kept below the 30 seconds Claude Code gives a connection. */
 	private static final long READY_WAIT_MILLIS = 25_000;
@@ -105,6 +106,11 @@ public final class McpServerService {
 	/** The port the server is listening on, or {@code -1} while it is stopped. */
 	public synchronized int getPort() {
 		return runningPort;
+	}
+
+	/** Whether this IDE was started to take its port from the operating system, so the preference is not used. */
+	public static boolean isEphemeralPortRequested() {
+		return Boolean.getBoolean(EPHEMERAL_PORT_PROPERTY);
 	}
 
 	/** Whether the running server took a port from the operating system instead of the preference. */
@@ -192,7 +198,8 @@ public final class McpServerService {
 
 	/**
 	 * Replaces the bearer token and restarts the server when it is running, so that the
-	 * new token takes effect. Every configured client has to be updated afterwards.
+	 * new token takes effect. Every configured client has to be updated afterwards, with
+	 * ephemeral ports also to the new port.
 	 */
 	public synchronized void regenerateToken() throws McpServerException {
 		TokenStore.regenerate();
@@ -203,14 +210,15 @@ public final class McpServerService {
 	}
 
 	/**
-	 * Starts the server on the configured port. Does nothing when it is already running.
+	 * Starts the server on the configured port, or with {@link #EPHEMERAL_PORT_PROPERTY} on one the
+	 * system picks. Does nothing when it is already running.
 	 * Never call this on the UI thread, starting Jetty takes a moment.
 	 */
 	public synchronized void start() throws McpServerException {
 		if (isRunning()) {
 			return;
 		}
-		boolean ephemeralPort = Boolean.getBoolean(EPHEMERAL_PORT_PROPERTY);
+		boolean ephemeralPort = isEphemeralPortRequested();
 		int port = ephemeralPort ? 0 : McpPreferences.getPort();
 		String token = TokenStore.get();
 		McpJsonMapper jsonMapper = new JacksonMcpJsonMapperSupplier().get();
@@ -236,8 +244,9 @@ public final class McpServerService {
 			jetty.start();
 		} catch (Exception e) {
 			stopQuietly();
-			lastErrorIsPort = isBindFailure(e);
-			String address = ephemeralPort ? LOOPBACK + " on a port the system picks" : LOOPBACK + ":" + port; //$NON-NLS-1$ //$NON-NLS-2$
+			// no other port would help when the system picks it, so the page offers none
+			lastErrorIsPort = !ephemeralPort && isBindFailure(e);
+			String address = ephemeralPort ? LOOPBACK + " (ephemeral port)" : LOOPBACK + ":" + port; //$NON-NLS-1$ //$NON-NLS-2$
 			lastError = "Could not listen on %s. %s".formatted(address, //$NON-NLS-1$
 					e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
 			EndpointFile.markFailed(lastError);
@@ -347,6 +356,7 @@ public final class McpServerService {
 		EndpointFile.markStopped();
 		endpoint = null;
 		runningPort = -1;
+		portEphemeral = false;
 		if (mcpServer != null) {
 			try {
 				mcpServer.closeGracefully();

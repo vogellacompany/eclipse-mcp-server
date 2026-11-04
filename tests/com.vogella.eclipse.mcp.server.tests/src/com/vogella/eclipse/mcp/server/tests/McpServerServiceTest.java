@@ -72,8 +72,6 @@ class McpServerServiceTest {
 
 	private static final String PROJECT = "mcp-endpoint-test";
 
-	private static final String EPHEMERAL_PORT_PROPERTY = "com.vogella.eclipse.mcp.server.ephemeralPort";
-
 	private static final String SAMPLE = "/%s/src/example/Sample.java".formatted(PROJECT);
 
 	private static final Set<String> WRITES_FILES = Set.of("eclipse_organize_imports", "eclipse_format",
@@ -191,19 +189,19 @@ class McpServerServiceTest {
 	}
 
 	@Test
-	void usesAnEphemeralPortWhenTheConfiguredPortIsOccupied() throws Exception {
+	void takesAPortFromTheSystemWithEphemeralPortsOn() throws Exception {
 		McpServerService service = McpServerService.getInstance();
-		String previousProperty = System.getProperty(EPHEMERAL_PORT_PROPERTY);
+		String previousProperty = System.getProperty(McpServerService.EPHEMERAL_PORT_PROPERTY);
 		int configuredPort = McpPreferences.getPort();
 		service.stop();
 		try (ServerSocket blocker = new ServerSocket(configuredPort, 0, InetAddress.getLoopbackAddress())) {
-			System.setProperty(EPHEMERAL_PORT_PROPERTY, "true");
+			System.setProperty(McpServerService.EPHEMERAL_PORT_PROPERTY, "true");
 			service.start();
 
 			int actualPort = service.getPort();
 			assertTrue(actualPort > 0);
 			assertNotEquals(configuredPort, actualPort);
-			assertEquals(configuredPort, McpPreferences.getPort(), "Ephemeral mode must not change the preference");
+			assertTrue(service.isPortEphemeral());
 			assertEquals("http://127.0.0.1:%d/mcp".formatted(actualPort), endpoint().url());
 			String discovery = Files.readString(McpServerService.getEndpointFile());
 			assertTrue(discovery.contains(endpoint().url()), "The discovery file should advertise the bound port");
@@ -216,12 +214,15 @@ class McpServerServiceTest {
 			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putBoolean(McpPreferences.KEY_ENABLED, true);
 			McpServerLifecycle.reconcile().join();
 			assertEquals(actualPort, service.getPort(), "Applying the preferences must not move an ephemeral port");
+
+			service.stop();
+			assertFalse(service.isPortEphemeral(), "A stopped server has no ephemeral port");
 		} finally {
 			service.stop();
 			if (previousProperty == null) {
-				System.clearProperty(EPHEMERAL_PORT_PROPERTY);
+				System.clearProperty(McpServerService.EPHEMERAL_PORT_PROPERTY);
 			} else {
-				System.setProperty(EPHEMERAL_PORT_PROPERTY, previousProperty);
+				System.setProperty(McpServerService.EPHEMERAL_PORT_PROPERTY, previousProperty);
 			}
 			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).remove(McpPreferences.KEY_ENABLED);
 			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putInt(McpPreferences.KEY_PORT, configuredPort);
