@@ -97,7 +97,10 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 		boolean ephemeral = McpServerService.isEphemeralPortRequested();
 		portField = new IntegerFieldEditor(McpPreferences.KEY_PORT,
 				ephemeral ? "&Port (not used, the system picks one):" : "&Port:", getFieldEditorParent());
-		portField.setValidRange(1024, 65535);
+		if (!ephemeral) {
+			// a disabled field must not fail on a stored value nobody can correct here
+			portField.setValidRange(1024, 65535);
+		}
 		addField(portField);
 		portField.setEnabled(!ephemeral, getFieldEditorParent());
 		IntegerFieldEditor timeout = new IntegerFieldEditor(McpPreferences.KEY_CALL_TIMEOUT_SECONDS,
@@ -158,7 +161,7 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 		if (!MessageDialog.openConfirm(getShell(), "Regenerate token",
 				"Every MCP client configured with the current token will be rejected until it is updated."
 						+ (McpServerService.isEphemeralPortRequested()
-								? " The server also comes back on a new port, which the URL below and the discovery file name."
+								? " The server also comes back on a new port, shown in the URL below and written to the discovery file."
 								: "")
 						+ " Continue?")) {
 			return;
