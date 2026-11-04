@@ -54,6 +54,7 @@ public final class SelectMenuItemTool implements IMcpTool {
 				    "path":   {"type":"string","description":"Labels from the top, separated by /, without mnemonics or accelerators, matched case insensitively, e.g. 'File/New/Project...' or 'Team/Pull'. A trailing '...' may be left off. Empty with dryRun lists the top level."},
 				    "part":   {"type":"string","description":"Use this part's context menu instead of the menu bar, by part id from eclipse_list_ui_targets. Several parts with one id: id@editor input path or title."},
 				    "contextMenu": {"type":"boolean","default":false,"description":"Use the active part's context menu instead of the menu bar. Implied by 'part'."},
+				    "widget": {"type":"string","description":"With part, the context menu of this widget path from eclipse_get_widget_tree, for a part with several controls that have menus."},
 				    "dryRun": {"type":"boolean","default":false,"description":"Resolve and report without selecting anything."}
 				  },
 				  "additionalProperties": false
@@ -65,21 +66,22 @@ public final class SelectMenuItemTool implements IMcpTool {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path", ""); //$NON-NLS-1$ //$NON-NLS-2$
 		String partId = args.getString("part"); //$NON-NLS-1$
-		boolean context = partId != null || args.getBoolean("contextMenu", false); //$NON-NLS-1$
+		String widget = args.getString("widget"); //$NON-NLS-1$
+		boolean context = partId != null || widget != null || args.getBoolean("contextMenu", false); //$NON-NLS-1$
 		boolean dryRun = args.getBoolean("dryRun", false); //$NON-NLS-1$
 		if (path.isBlank() && !dryRun) {
 			return McpToolResult.error("Give the 'path' of the entry to select, e.g. 'File/New/Project...', or pass dryRun true to list the top level."); //$NON-NLS-1$
 		}
-		return UiThread.call(UI_TIMEOUT_SECONDS, () -> select(path, partId, context, dryRun));
+		return UiThread.call(UI_TIMEOUT_SECONDS, () -> select(path, partId, widget, context, dryRun));
 	}
 
-	private static JsonObject select(String path, String partId, boolean context, boolean dryRun) {
+	private static JsonObject select(String path, String partId, String widget, boolean context, boolean dryRun) {
 		List<Menu> shown = new ArrayList<>();
 		JsonObject result = new JsonObject().put("path", path) //$NON-NLS-1$
 				.put("menu", context ? "context" : "menuBar"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		MenuItem chosen = null;
 		try {
-			Menu current = context ? contextMenu(partId, result) : menuBar();
+			Menu current = context ? contextMenu(partId, widget, result) : menuBar();
 			if (current == null) {
 				return result.put("selected", Boolean.FALSE) //$NON-NLS-1$
 						.put("reason", context //$NON-NLS-1$
@@ -172,13 +174,16 @@ public final class SelectMenuItemTool implements IMcpTool {
 		return window == null ? null : window.getShell().getMenuBar();
 	}
 
-	private static Menu contextMenu(String partId, JsonObject result) {
+	private static Menu contextMenu(String partId, String widget, JsonObject result) {
 		if (!Workbenches.ide()) {
 			Control control = partId == null ? null : Workbenches.e4Part(partId);
 			if (control == null) {
 				return null;
 			}
 			result.put("part", partId); //$NON-NLS-1$
+			if (widget != null) {
+				result.put("widgetIgnored", "A part without the 3.x workbench answers its first menu, whatever the widget."); //$NON-NLS-1$ //$NON-NLS-2$
+			}
 			return firstMenu(control);
 		}
 		IWorkbenchPart part = SelectionTools.partFor(partId);
@@ -186,7 +191,7 @@ public final class SelectMenuItemTool implements IMcpTool {
 			return null;
 		}
 		result.put("part", part.getSite().getId()); //$NON-NLS-1$
-		Control control = ContextMenuTool.viewerControl(part);
+		Control control = ContextMenuTool.controlFor(part, widget);
 		return control == null ? null : ContextMenuTool.detect(control);
 	}
 

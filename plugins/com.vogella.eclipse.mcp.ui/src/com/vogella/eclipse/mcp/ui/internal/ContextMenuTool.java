@@ -11,6 +11,7 @@ import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Menu;
 import org.eclipse.swt.widgets.MenuItem;
+import org.eclipse.swt.widgets.Widget;
 import org.eclipse.ui.IWorkbenchPart;
 
 import com.vogella.eclipse.mcp.core.IMcpTool;
@@ -44,6 +45,7 @@ public final class ContextMenuTool implements IMcpTool {
 				  "properties": {
 				    "part":       {"type":"string","description":"Part id whose context menu to report, e.g. org.eclipse.ui.navigator.ProjectExplorer. Defaults to the active part. Several parts with one id: id@editor input path or title."},
 				    "path":       {"type":"string","description":"Report only this submenu, by label without its mnemonic, e.g. 'Team'. Nested submenus are separated by /, as in 'Team/Advanced'."},
+				    "widget":     {"type":"string","description":"Widget path inside the part, from eclipse_get_widget_tree, for a part with several controls that have menus. Defaults to the control with focus, then the part's viewer."},
 				    "maxDepth":   {"type":"integer","default":2,"minimum":1,"maximum":6,"description":"How many levels of submenu to open. Every level costs a Show event on each submenu, which is what populates it."},
 				    "maxResults": {"type":"integer","default":300,"minimum":1,"maximum":2000}
 				  },
@@ -56,19 +58,20 @@ public final class ContextMenuTool implements IMcpTool {
 		ToolArguments args = ToolArguments.of(arguments);
 		String partId = args.getString("part"); //$NON-NLS-1$
 		String path = args.getString("path"); //$NON-NLS-1$
+		String widget = args.getString("widget"); //$NON-NLS-1$
 		int maxDepth = args.getInt("maxDepth", 2, 1, 6); //$NON-NLS-1$
 		int maxResults = args.getInt("maxResults", 300, 1, 2000); //$NON-NLS-1$
-		return UiThread.call(UI_TIMEOUT_SECONDS, () -> collect(partId, path, maxDepth, maxResults));
+		return UiThread.call(UI_TIMEOUT_SECONDS, () -> collect(partId, widget, path, maxDepth, maxResults));
 	}
 
-	private static JsonObject collect(String partId, String path, int maxDepth, int maxResults) {
+	private static JsonObject collect(String partId, String widget, String path, int maxDepth, int maxResults) {
 		IWorkbenchPart part = SelectionTools.partFor(partId);
 		if (part == null) {
 			throw new IllegalArgumentException(partId == null
 					? "There is no active part. Give 'part'." //$NON-NLS-1$
 					: "No open part has the id '%s'. eclipse_list_ui_targets lists the open parts.".formatted(partId)); //$NON-NLS-1$
 		}
-		Control control = viewerControl(part);
+		Control control = controlFor(part, widget);
 		if (control == null) {
 			throw new IllegalStateException(
 					"The part '%s' has no control that could carry a context menu.".formatted(part.getSite().getId())); //$NON-NLS-1$
@@ -115,6 +118,41 @@ public final class ContextMenuTool implements IMcpTool {
 				hide(shown.get(i));
 			}
 		}
+	}
+
+	/** The control whose menu is meant: the widget asked for, else the focus control, else the part's viewer. */
+	static Control controlFor(IWorkbenchPart part, String widget) {
+		Control root = ScreenshotTools.Capture.controlOf(part);
+		if (widget != null) {
+			Widget target = root == null ? null : WidgetTools.resolve(root, widget);
+			Control control = target instanceof Control own ? own : target == null ? null : WidgetTools.parentOf(target);
+			if (control == null) {
+				throw new IllegalArgumentException("The widget path '%s' does not resolve under this part.".formatted(widget)); //$NON-NLS-1$
+			}
+			Control withMenu = nearestMenu(control, root);
+			return withMenu != null ? withMenu : control;
+		}
+		Control focus = part.getSite().getShell().getDisplay().getFocusControl();
+		if (focus != null && root != null && WidgetTools.Click.isInside(focus, root)) {
+			Control withMenu = nearestMenu(focus, root);
+			if (withMenu != null) {
+				return withMenu;
+			}
+		}
+		return viewerControl(part);
+	}
+
+	/** This control or the closest ancestor up to {@code root} that has a menu, or {@code null}. */
+	private static Control nearestMenu(Control control, Control root) {
+		for (Control current = control; current != null; current = current.getParent()) {
+			if (current.getMenu() != null) {
+				return current;
+			}
+			if (current == root) {
+				return null;
+			}
+		}
+		return null;
 	}
 
 	/** The control a right click would land on, which is the viewer's, not the part's composite. */

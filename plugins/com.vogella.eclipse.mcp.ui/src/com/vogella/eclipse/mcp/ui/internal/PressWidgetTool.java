@@ -136,7 +136,7 @@ public final class PressWidgetTool implements IMcpTool {
 					target.getClass().getSimpleName(), target instanceof Tree || target instanceof Table
 							? " Address a row as an r path (includeRows) or a column header as an i path (includeItems)." //$NON-NLS-1$
 							: target instanceof Control
-									? " eclipse_set_widget_text drives text fields and combos." //$NON-NLS-1$
+									? " eclipse_set_widget_text drives text fields and combos, and a custom-painted control takes eclipse_click with this path." //$NON-NLS-1$
 									: "")); //$NON-NLS-1$
 		}
 		if ((target.getStyle() & SWT.SEPARATOR) != 0) {

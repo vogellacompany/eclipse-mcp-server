@@ -120,6 +120,24 @@ public final class WidgetTools {
 		return path.isEmpty() ? "/" : path.toString(); //$NON-NLS-1$
 	}
 
+	/** The text of each column of a row, or {@code null} for a widget without columns, where 'text' says it all. */
+	public static JsonArray cellsOf(Widget row) {
+		int columns = switch (row) {
+		case org.eclipse.swt.widgets.TreeItem item -> item.getParent().getColumnCount();
+		case org.eclipse.swt.widgets.TableItem item -> item.getParent().getColumnCount();
+		default -> 0;
+		};
+		if (columns < 2) {
+			return null;
+		}
+		JsonArray cells = new JsonArray();
+		for (int i = 0; i < columns; i++) {
+			cells.add(row instanceof org.eclipse.swt.widgets.TreeItem item ? item.getText(i)
+					: ((org.eclipse.swt.widgets.TableItem) row).getText(i));
+		}
+		return cells;
+	}
+
 	/**
 	 * The rows of a Table or Tree, which an r prefixed path segment addresses.
 	 * <p>
@@ -308,7 +326,7 @@ public final class WidgetTools {
 					    "filter":     {"type":"string","description":"Only report widgets whose simple class name contains this text, case insensitive, e.g. 'Tree' or 'ToolBar'. The walk still descends through everything."},
 				    "includeToolbar": {"type":"boolean","default":false,"description":"Start from the surrounding part stack rather than the part. A view's toolbar is built in the stack's CTabFolder, not in the part, so it is in no plain part tree at all; this is how to reach it."},
 					    "includeItems": {"type":"boolean","default":false,"description":"Also enumerate Items, which are not Controls and are therefore in no plain walk: ToolItems, CTabItems, TabItems, CoolItems, ExpandItems and the columns of a Table or Tree. Their paths carry an i prefix, as in 2/i0, and that is the only way eclipse_inspect_widget can address one. Off by default to keep the tree short."},
-				    "includeRows": {"type":"boolean","default":false,"description":"Also enumerate the rows of a Table or Tree, with an r prefixed path (0/r2) that eclipse_inspect_widget, eclipse_set_selection and eclipse_expand_row accept and, beside the row bounds, boundsInShell so a row can be highlighted on a shell=popup screenshot, and boundsInDisplay for a click. selected marks the row the widget has selected. ONLY THE ROWS THE TREE HAS CREATED ARE ROWS: the children of a collapsed node do not exist yet and have no path, so a view that comes up collapsed reports two or three entries and looks complete. Each tree row therefore carries childCount and expanded, and a collapsed node with children says so; open it with eclipse_expand_row and ask again. The children of an expanded node ARE reported, nested under its own path. Off by default because a big Table has many rows."},
+				    "includeRows": {"type":"boolean","default":false,"description":"Also enumerate the rows of a Table or Tree, with an r prefixed path (0/r2) that eclipse_inspect_widget, eclipse_set_selection and eclipse_expand_row accept and, beside the row bounds, boundsInShell so a row can be highlighted on a shell=popup screenshot, and boundsInDisplay for a click. selected marks the row the widget has selected, and cells gives the text of each column when there are two or more. ONLY THE ROWS THE TREE HAS CREATED ARE ROWS: the children of a collapsed node do not exist yet and have no path, so a view that comes up collapsed reports two or three entries and looks complete. Each tree row therefore carries childCount and expanded, and a collapsed node with children says so; open it with eclipse_expand_row and ask again. The children of an expanded node ARE reported, nested under its own path. Off by default because a big Table has many rows."},
 				    "includeMetrics": {"type":"boolean","default":false,"description":"Also report per control what it computes for itself, for comparing two IDEs or two SWT implementations control by control: preferredSize (computeSize with SWT.DEFAULT), borderWidth, fontName and fontHeight, clientArea and trim (computeTrim(0,0,0,0)) for a Scrollable, itemHeight for a Table, Tree, List or Combo, and nativeHandle, false for a control without a window system peer (a lightweight control), null where that cannot be read."},
 				    "maxDepth":   {"type":"integer","default":6,"minimum":1,"maximum":30,"description":"How far down the widget hierarchy to walk. A whole workbench window is dozens of levels deep, so the default stops well short of it."},
 					    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000}
@@ -373,6 +391,9 @@ public final class WidgetTools {
 							.put("bounds", bounds(widget)) //$NON-NLS-1$
 							.put("visible", widget instanceof Control control ? Boolean.valueOf(control.isVisible()) //$NON-NLS-1$
 									: null);
+					if (textOf(widget) == null) {
+						node.put("accessibleName", AccessibleNames.of(widget)); //$NON-NLS-1$
+					}
 					addPlacement(node, widget);
 					if (includeMetrics && widget instanceof Control control) {
 						node.put("metrics", ControlMetrics.of(control)); //$NON-NLS-1$
@@ -459,6 +480,10 @@ public final class WidgetTools {
 									Overlays.describe(rowBounds)) //$NON-NLS-1$
 							.put("boundsInShell", Overlays.describe(inShell)) //$NON-NLS-1$
 							.put("boundsInDisplay", Overlays.describe(table.getDisplay().map(table, null, rowBounds))); //$NON-NLS-1$
+					JsonArray cells = cellsOf(rows[i]);
+					if (cells != null) {
+						row.put("cells", cells); //$NON-NLS-1$
+					}
 					if (node) {
 						row.put("childCount", Integer.valueOf(children)) //$NON-NLS-1$
 								.put("expanded", Boolean.valueOf(expanded)); //$NON-NLS-1$
@@ -711,26 +736,32 @@ public final class WidgetTools {
 			};
 		}
 
-		private static JsonObject apply(org.eclipse.swt.custom.CTabFolder folder,
+		public static JsonObject apply(org.eclipse.swt.custom.CTabFolder folder,
 				org.eclipse.swt.custom.CTabItem item, boolean notify) {
 			int before = folder.getSelectionIndex();
+			// read first: building the page can rebuild the folder's items
+			String text = item.getText();
 			folder.setSelection(item);
-			if (notify) {
-				fire(folder, item);
+			String failure = notify ? fire(folder, item) : null;
+			if (folder.isDisposed()) {
+				return report(before, -1, text, notify, failure, true);
 			}
 			folder.layout(true, true);
-			return report(before, folder.getSelectionIndex(), item.getText(), notify);
+			return report(before, folder.getSelectionIndex(), text, notify, failure, false);
 		}
 
-		private static JsonObject apply(org.eclipse.swt.widgets.TabFolder folder,
+		public static JsonObject apply(org.eclipse.swt.widgets.TabFolder folder,
 				org.eclipse.swt.widgets.TabItem item, boolean notify) {
 			int before = folder.getSelectionIndex();
+			// read first: building the page can rebuild the folder's items
+			String text = item.getText();
 			folder.setSelection(item);
-			if (notify) {
-				fire(folder, item);
+			String failure = notify ? fire(folder, item) : null;
+			if (folder.isDisposed()) {
+				return report(before, -1, text, notify, failure, true);
 			}
 			folder.layout(true, true);
-			return report(before, folder.getSelectionIndex(), item.getText(), notify);
+			return report(before, folder.getSelectionIndex(), text, notify, failure, false);
 		}
 
 		/**
@@ -741,21 +772,35 @@ public final class WidgetTools {
 		 * is highlighted, the content is not there, and a screenshot shows the gap
 		 * rather than the page.
 		 */
-		private static void fire(Widget folder, Widget item) {
+		private static String fire(Widget folder, Widget item) {
 			org.eclipse.swt.widgets.Event event = new org.eclipse.swt.widgets.Event();
 			event.widget = folder;
 			event.item = item;
-			folder.notifyListeners(org.eclipse.swt.SWT.Selection, event);
+			try {
+				folder.notifyListeners(org.eclipse.swt.SWT.Selection, event);
+				return null;
+			} catch (RuntimeException e) {
+				// the tab has switched by now, so this is not a failed call
+				return e.toString();
+			}
 		}
 
-		private static JsonObject report(int before, int after, String text, boolean notified) {
-			return new JsonObject().put("selected", Boolean.TRUE) //$NON-NLS-1$
+		private static JsonObject report(int before, int after, String text, boolean notified, String failure,
+				boolean folderDisposed) {
+			JsonObject answer = new JsonObject().put("selected", Boolean.TRUE) //$NON-NLS-1$
 					.put("previousIndex", Integer.valueOf(before)) //$NON-NLS-1$
 					.put("index", Integer.valueOf(after)) //$NON-NLS-1$
 					.put("text", text) //$NON-NLS-1$
-					.put("listenersNotified", Boolean.valueOf(notified)) //$NON-NLS-1$
-					.put("note", //$NON-NLS-1$
-							"The page is rendered now, so eclipse_screenshot and eclipse_get_widget_tree report it with real bounds. Selecting another tab hides it again the same way."); //$NON-NLS-1$
+					.put("listenersNotified", Boolean.valueOf(notified)); //$NON-NLS-1$
+			if (failure != null) {
+				answer.put("listenerFailure", failure); //$NON-NLS-1$
+			}
+			if (folderDisposed) {
+				return answer.put("folderDisposed", Boolean.TRUE).put("note", //$NON-NLS-1$ //$NON-NLS-2$
+						"A listener disposed the tab folder, so its paths are gone: ask eclipse_get_widget_tree again."); //$NON-NLS-1$
+			}
+			return answer.put("note", //$NON-NLS-1$
+					"The page is rendered now, so eclipse_screenshot and eclipse_get_widget_tree report it with real bounds. Selecting another tab hides it again the same way."); //$NON-NLS-1$
 		}
 	}
 
@@ -769,7 +814,7 @@ public final class WidgetTools {
 
 		@Override
 		public String getDescription() {
-			return "Clicks a widget with a real mouse button: moves the pointer onto it and sends a press and a release through the X server's XTest extension on GTK, or Display.post elsewhere, so the event goes through the window system and SWT's own dispatch exactly like a person's click, including a right click opening a context menu through Control.showMenu. CHANGES WHAT THE IDE DOES, which is whatever that click does, and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path, including item paths such as a CTabItem (0/i2) and row paths (0/r3); the click lands on its centre, or at x and y inside it. displayX and displayY click an absolute screen point instead. Before pressing, the pointer is read back: when it did not arrive, or the control under it is not the addressed widget, nothing is pressed and the answer names what is there, so a covering window or popup is never clicked by mistake, with coveredBy naming another application's window where the platform can tell. pointerDisturbed says the pointer had left the point right after the press, as a physical mouse moving does on Windows, so the click may have landed elsewhere. The press is dispatched after this call returns, so verify the effect with eclipse_screenshot or eclipse_list_ui_targets. It works on an X11 display without a compositor, such as Xvfb. It refuses on native Wayland, which ignores pointer warps, and under XWayland on a compositing desktop such as GNOME, where the pointer moves but the compositor keeps the IDE window from being under it. A native menu is no SWT control, so a point over an open menu is refused; pick menu entries with eclipse_select_menu_item instead. button none only moves the pointer and presses nothing, which is how a tooltip or a hover highlight is moved off a capture; it is allowed over an open menu or another window, and the answer reports moved rather than clicked, and for a widget onTarget, whether the pointer is over it. No modifier keys and no double click; eclipse_double_click_text double-clicks inside a text editor, and eclipse_press_widget presses a Button or ToolItem without the pointer. delivery synthetic, or auto when the window system refuses, sends focus, MouseMove, MouseDown, MouseUp and for a right click MenuDetect to the widget through notifyListeners instead, which works while the IDE is inactive or the screen is locked; the answer says synthetic true, and only listeners see such a click."; //$NON-NLS-1$
+			return "Clicks a widget with a real mouse button: moves the pointer onto it and sends a press and a release through the X server's XTest extension on GTK, or Display.post elsewhere, so the event goes through the window system and SWT's own dispatch exactly like a person's click, including a right click opening a context menu through Control.showMenu. CHANGES WHAT THE IDE DOES, which is whatever that click does, and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path, including item paths such as a CTabItem (0/i2) and row paths (0/r3); the click lands on its centre, or at x and y inside it. displayX and displayY click an absolute screen point instead. Before pressing, the pointer is read back: when it did not arrive, or the control under it is not the addressed widget, nothing is pressed and the answer names what is there, so a covering window or popup is never clicked by mistake, with coveredBy naming another application's window where the platform can tell. pointerDisturbed says the pointer had left the point right after the press, as a physical mouse moving does on Windows, so the click may have landed elsewhere. A real click also brings the IDE forward, so what a person at the machine types next lands in it; use delivery synthetic beside someone working. The press is dispatched after this call returns, so verify the effect with eclipse_screenshot or eclipse_list_ui_targets. It works on an X11 display without a compositor, such as Xvfb. It refuses on native Wayland, which ignores pointer warps, and under XWayland on a compositing desktop such as GNOME, where the pointer moves but the compositor keeps the IDE window from being under it. A native menu is no SWT control, so a point over an open menu is refused; pick menu entries with eclipse_select_menu_item instead. button none only moves the pointer and presses nothing, which is how a tooltip or a hover highlight is moved off a capture; it is allowed over an open menu or another window, and the answer reports moved rather than clicked, and for a widget onTarget, whether the pointer is over it. No modifier keys and no double click; eclipse_double_click_text double-clicks inside a text editor, and eclipse_press_widget presses a Button or ToolItem without the pointer. delivery synthetic, or auto when the window system refuses, sends focus, MouseMove, MouseDown, MouseUp and for a right click MenuDetect to the widget through notifyListeners instead, which works while the IDE is inactive or the screen is locked; the answer says synthetic true, and only listeners see such a click."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -1133,6 +1178,7 @@ public final class WidgetTools {
 					.put("class", control.getClass().getName()) //$NON-NLS-1$
 					.put("style", styleNames(control)) //$NON-NLS-1$
 					.put("styleBits", "0x" + Integer.toHexString(control.getStyle())) //$NON-NLS-1$ //$NON-NLS-2$
+					.put("accessibleName", AccessibleNames.of(control)) //$NON-NLS-1$
 					.put("bounds", bounds(control)) //$NON-NLS-1$
 					.put("visible", control instanceof Control visible ? Boolean.valueOf(visible.isVisible()) : null) //$NON-NLS-1$
 					.put("pseudo", pseudo); //$NON-NLS-1$
