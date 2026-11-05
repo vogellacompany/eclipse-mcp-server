@@ -123,6 +123,11 @@ releng/mcp-test-ide.sh --ide /path/to/eclipse --junit results.xml releng/scripts
 
 `mcp-script.py` prints each step, exits non-zero on a failed expectation and can write JUnit XML.
 `mcp-test-ide.sh` starts the IDE on a fresh workspace and configuration area, sharing the installation's plug-ins but not any bundle substituted into it, runs the scripts and shuts the IDE down again.
+`--bundle <jar>` runs a patched bundle in that private configuration only.
+`--serve` keeps the IDE up for interactive use until the script is terminated.
+If the IDE exits on its own during `--serve`, the script exits with the IDE's status and, when that is not 0, keeps the workspace and prints the last lines of its logs.
+`--vm` names the java executable for an installation without a JRE.
+On macOS, `--ide` takes the `.app` bundle or the directory holding it.
 
 ## Testing Eclipse and SWT changes
 
