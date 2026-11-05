@@ -48,6 +48,7 @@ import com.vogella.eclipse.mcp.ui.internal.CloseWatch;
 import com.vogella.eclipse.mcp.ui.internal.DismissDialogTool;
 import com.vogella.eclipse.mcp.ui.internal.DragTool;
 import com.vogella.eclipse.mcp.ui.internal.NativeDialogs;
+import com.vogella.eclipse.mcp.ui.internal.NativeForeground;
 import com.vogella.eclipse.mcp.ui.internal.Shells;
 import com.vogella.eclipse.mcp.ui.internal.WidgetStyle;
 import com.vogella.eclipse.mcp.ui.internal.WidgetTools;
@@ -107,6 +108,12 @@ class DialogShellsTest {
 		assertSame(first, Shells.select(display, "popup"));
 		second.moveAbove(null);
 		assertSame(second, Shells.select(display, "popup"));
+	}
+
+	@Test
+	void theInputQueueCallIsReachableOnWindows() {
+		assumeTrue("win32".equals(SWT.getPlatform()), "only Windows has the call");
+		assertFalse(NativeForeground.attachInput(0, 0, true));
 	}
 
 	private static final class StyledWindow extends Window {
