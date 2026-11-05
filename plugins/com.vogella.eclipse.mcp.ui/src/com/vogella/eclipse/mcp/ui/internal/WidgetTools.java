@@ -807,6 +807,9 @@ public final class WidgetTools {
 	/** Moves the pointer onto a widget or a screen point and posts a real button press and release. */
 	public static final class Click implements IMcpTool {
 
+		/** Cocoa delivers a posted move asynchronously; UI thread only. */
+		private static final PointerWait COCOA_WAIT = PointerWait.system();
+
 		@Override
 		public String getName() {
 			return "eclipse_click"; //$NON-NLS-1$
@@ -814,7 +817,7 @@ public final class WidgetTools {
 
 		@Override
 		public String getDescription() {
-			return "Clicks a widget with a real mouse button: moves the pointer onto it and sends a press and a release through the X server's XTest extension on GTK, or Display.post elsewhere, so the event goes through the window system and SWT's own dispatch exactly like a person's click, including a right click opening a context menu through Control.showMenu. CHANGES WHAT THE IDE DOES, which is whatever that click does, and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path, including item paths such as a CTabItem (0/i2) and row paths (0/r3); the click lands on its centre, or at x and y inside it. displayX and displayY click an absolute screen point instead. Before pressing, the pointer is read back: when it did not arrive, or the control under it is not the addressed widget, nothing is pressed and the answer names what is there, so a covering window or popup is never clicked by mistake, with coveredBy naming another application's window where the platform can tell. pointerDisturbed says the pointer had left the point right after the press, as a physical mouse moving does on Windows, so the click may have landed elsewhere. A real click also brings the IDE forward, so what a person at the machine types next lands in it; use delivery synthetic beside someone working. The press is dispatched after this call returns, so verify the effect with eclipse_screenshot or eclipse_list_ui_targets. It works on an X11 display without a compositor, such as Xvfb. It refuses on native Wayland, which ignores pointer warps, and under XWayland on a compositing desktop such as GNOME, where the pointer moves but the compositor keeps the IDE window from being under it. A native menu is no SWT control, so a point over an open menu is refused; pick menu entries with eclipse_select_menu_item instead. button none only moves the pointer and presses nothing, which is how a tooltip or a hover highlight is moved off a capture; it is allowed over an open menu or another window, and the answer reports moved rather than clicked, and for a widget onTarget, whether the pointer is over it. No modifier keys and no double click; eclipse_double_click_text double-clicks inside a text editor, and eclipse_press_widget presses a Button or ToolItem without the pointer. delivery synthetic, or auto when the window system refuses, sends focus, MouseMove, MouseDown, MouseUp and for a right click MenuDetect to the widget through notifyListeners instead, which works while the IDE is inactive or the screen is locked; the answer says synthetic true, and only listeners see such a click."; //$NON-NLS-1$
+			return "Clicks a widget with a real mouse button: moves the pointer onto it and sends a press and a release through the X server's XTest extension on GTK, or Display.post elsewhere, so the event goes through the window system and SWT's own dispatch exactly like a person's click, including a right click opening a context menu through Control.showMenu. CHANGES WHAT THE IDE DOES, which is whatever that click does, and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path, including item paths such as a CTabItem (0/i2) and row paths (0/r3); the click lands on its centre, or at x and y inside it. displayX and displayY click an absolute screen point instead. Before pressing, the pointer is read back: when it did not arrive, or the control under it is not the addressed widget, nothing is pressed and the answer names what is there, so a covering window or popup is never clicked by mistake, with coveredBy naming another application's window where the platform can tell. On macOS the read back waits up to half a second for the move; a refusal after that wait reports pointerWaitMillis, and later refusals give it only a short grace and report pointerWaitSkipped until a move arrives. pointerDisturbed says the pointer had left the point right after the press, as a physical mouse moving does on Windows, so the click may have landed elsewhere. A real click also brings the IDE forward, so what a person at the machine types next lands in it; use delivery synthetic beside someone working. The press is dispatched after this call returns, so verify the effect with eclipse_screenshot or eclipse_list_ui_targets. It works on an X11 display without a compositor, such as Xvfb. It refuses on native Wayland, which ignores pointer warps, and under XWayland on a compositing desktop such as GNOME, where the pointer moves but the compositor keeps the IDE window from being under it. A native menu is no SWT control, so a point over an open menu is refused; pick menu entries with eclipse_select_menu_item instead. button none only moves the pointer and presses nothing, which is how a tooltip or a hover highlight is moved off a capture; it is allowed over an open menu or another window, and the answer reports moved rather than clicked, and for a widget onTarget, whether the pointer is over it. No modifier keys and no double click; eclipse_double_click_text double-clicks inside a text editor, and eclipse_press_widget presses a Button or ToolItem without the pointer. delivery synthetic, or auto when the window system refuses, sends focus, MouseMove, MouseDown, MouseUp and for a right click MenuDetect to the widget through notifyListeners instead, which works while the IDE is inactive or the screen is locked; the answer says synthetic true, and only listeners see such a click."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -1033,9 +1036,8 @@ public final class WidgetTools {
 		}
 
 		/**
-		 * Moves the pointer to a display point and reads it back, reporting point,
-		 * previousPointer, pointer, controlUnderPointer and moved. A point on no monitor
-		 * is refused first, since the window system would clamp the pointer to an edge.
+		 * Moves the pointer to a display point and reads it back, refusing a point on
+		 * no monitor, which the window system would clamp to an edge.
 		 */
 		public static Warp warp(Display display, org.eclipse.swt.graphics.Point point, JsonObject result, String nothing,
 				String action) {
@@ -1055,12 +1057,11 @@ public final class WidgetTools {
 				result.put("moved", Boolean.FALSE); //$NON-NLS-1$
 				return new Warp(null, "Display.post refused to move the pointer, which is what GTK4 does with every posted event."); //$NON-NLS-1$
 			}
-			// the read back is a round trip to the window server, so it sees the warp
-			org.eclipse.swt.graphics.Point arrived = display.getCursorLocation();
+			org.eclipse.swt.graphics.Point arrived = arrival(display, previous, point, result);
 			Control under = display.getCursorControl();
 			result.put("pointer", arrived.x + "," + arrived.y) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("controlUnderPointer", under == null ? null : under.getClass().getSimpleName()); //$NON-NLS-1$
-			if (Math.abs(arrived.x - point.x) > 1 || Math.abs(arrived.y - point.y) > 1) {
+			if (!PointerWait.isAt(arrived, point)) {
 				result.put("moved", Boolean.FALSE); //$NON-NLS-1$
 				return new Warp(under, switch (SWT.getPlatform()) {
 				case "cocoa" -> "The pointer did not arrive, so %s. macOS drops posted pointer events unless the IDE's process has the Accessibility permission (System Settings, Privacy & Security, Accessibility); grant it, drive the pointer from outside the IDE, or pass delivery synthetic." //$NON-NLS-1$ //$NON-NLS-2$
@@ -1073,6 +1074,23 @@ public final class WidgetTools {
 			}
 			result.put("moved", Boolean.TRUE); //$NON-NLS-1$
 			return new Warp(under, null);
+		}
+
+		/** Where the pointer is once it reached the point or, on Cocoa, the wait ran out. */
+		private static org.eclipse.swt.graphics.Point arrival(Display display, org.eclipse.swt.graphics.Point previous,
+				org.eclipse.swt.graphics.Point point, JsonObject result) {
+			// elsewhere a move that did not arrive never will, and a wait blocks the UI thread
+			if (!WindowCapture.COCOA) {
+				return display.getCursorLocation();
+			}
+			PointerWait.Arrival arrival = COCOA_WAIT.await(previous, point, display::getCursorLocation);
+			if (!arrival.arrived()) {
+				result.put("pointerWaitMillis", Long.valueOf(arrival.waitedMillis())); //$NON-NLS-1$
+				if (arrival.skipped()) {
+					result.put("pointerWaitSkipped", Boolean.TRUE); //$NON-NLS-1$
+				}
+			}
+			return arrival.point();
 		}
 
 		private static boolean post(Display display, int type, int button) {
