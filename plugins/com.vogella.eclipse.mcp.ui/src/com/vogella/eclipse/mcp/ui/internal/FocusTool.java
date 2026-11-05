@@ -28,7 +28,7 @@ public final class FocusTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Reports the keyboard focus without sending any input: the focus control with its class, text, message hint, the text of the Label just before it, its path from its shell as eclipse_get_widget_tree prints it, bounds, boundsInDisplay and nativeHandle; the active shell with title, index as eclipse_list_ui_targets numbers it and bounds; whether the IDE owns the foreground; and focusCues, whether the window system currently draws keyboard focus indicators. Read-only. Use it to assert that a dialog put the focus where it should, for example on the Preferences filter field, where posting input is unavailable or would change the answer. focusCues is read from WM_QUERYUISTATE on Windows and is null elsewhere, since GTK and Cocoa offer SWT no equivalent."; //$NON-NLS-1$
+		return "Reports the keyboard focus without sending any input: the focus control with its class, text, message hint, the text of the Label just before it, its path from its shell as eclipse_get_widget_tree prints it, bounds, boundsInDisplay and nativeHandle; the active shell with title, index as eclipse_list_ui_targets numbers it and bounds; whether the IDE owns the foreground; and focusCues, whether the window system currently draws keyboard focus indicators. On Cocoa, appKit reports AppKit's own view: active; keyWindow, the title of the key shell, null when the IDE is inactive or the key window is not an SWT shell; firstResponder with nativeClass, widgetClass and path of the SWT control it belongs to if any, and isFocusControl, which is what shows the native first responder disagreeing with SWT's focus control; responderWindow, keyWindow or focusShell, saying whether the responder was read from the key window or, while the IDE is inactive and has none, from the focus control's shell; unreadable is set when SWT's internals could not be read; appKit is null elsewhere. Read-only. Use it to assert that a dialog put the focus where it should, for example on the Preferences filter field, where posting input is unavailable or would change the answer. focusCues is read from WM_QUERYUISTATE on Windows and is null elsewhere, since GTK and Cocoa offer SWT no equivalent."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -50,12 +50,13 @@ public final class FocusTool implements IMcpTool {
 		return UiThread.call(10, () -> describe(display));
 	}
 
-	static JsonObject describe(Display display) {
+	public static JsonObject describe(Display display) {
 		Control focus = display.getFocusControl();
 		Shell active = display.getActiveShell();
 		return new JsonObject().put("focusControl", focus == null || focus.isDisposed() ? null : control(focus)) //$NON-NLS-1$
 				.put("activeShell", active == null ? null : shell(display, active)) //$NON-NLS-1$
 				.put("foreground", Boolean.valueOf(NativeForeground.isForeground(display))) //$NON-NLS-1$
+				.put("appKit", NativeAppKit.describe(display, focus == null || focus.isDisposed() ? null : focus)) //$NON-NLS-1$
 				.put("focusCues", focusCues(focus != null ? focus.getShell() : active)); //$NON-NLS-1$
 	}
 
