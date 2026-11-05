@@ -51,5 +51,6 @@
    <plugin id="org.eclipse.jetty.util" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="org.eclipse.jetty.security" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="org.eclipse.jetty.session" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
+   <plugin id="jakarta.servlet-api" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
 
 </feature>
