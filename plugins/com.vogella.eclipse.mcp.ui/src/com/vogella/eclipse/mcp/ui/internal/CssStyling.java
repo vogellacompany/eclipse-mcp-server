@@ -17,7 +17,6 @@ import org.eclipse.e4.ui.css.core.engine.CSSEngine;
 import org.eclipse.e4.ui.css.swt.dom.WidgetElement;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Widget;
-import org.eclipse.ui.PlatformUI;
 import org.w3c.dom.Element;
 import org.w3c.dom.css.CSSStyleDeclaration;
 import org.w3c.dom.css.CSSStyleSheet;
@@ -176,7 +175,7 @@ final class CssStyling {
 		if (drop && !themeReset) {
 			return result.put("applied", Boolean.FALSE) //$NON-NLS-1$
 					.put("reason", //$NON-NLS-1$
-							"The theme engine could not be reached, so a snippet cannot be taken back. Restarting the IDE drops it.")
+							"No CSS theme engine could be reached, and an application without a cssTheme has none, so a snippet cannot be taken back. Restarting the application drops it.")
 					.put("errors", errors); //$NON-NLS-1$
 		}
 		List<CSSEngine> engines = engines(themeEngine);
@@ -217,6 +216,9 @@ final class CssStyling {
 				preferencesApplied &= outcome.fullyApplied();
 			}
 		}
+		if (drop) {
+			result.put("reset", Boolean.TRUE); //$NON-NLS-1$
+		}
 		result.put("applied", Boolean.valueOf(!drop && parsed.ok() && preferencesApplied)) //$NON-NLS-1$
 				.put("previousSnippet", previous) //$NON-NLS-1$
 				.put("theme", activeThemeId(themeEngine)) //$NON-NLS-1$
@@ -237,7 +239,7 @@ final class CssStyling {
 
 	private static String note(boolean themeReset) {
 		return themeReset ? LIFETIME_NOTE
-				: "The theme engine could not be reached, so the snippet was added without re-applying the theme first and can only be taken back by restarting the IDE."; //$NON-NLS-1$
+				: "No CSS theme engine could be reached, and an application without a cssTheme has none, so the snippet was added without re-applying the theme first and can only be taken back by restarting the application."; //$NON-NLS-1$
 	}
 
 	private static final String LIFETIME_NOTE = "The snippet lives in memory only. It is gone on the next theme change, on eclipse_restart, and when this plug-in stops."; //$NON-NLS-1$
@@ -434,14 +436,15 @@ final class CssStyling {
 	}
 
 	/**
-	 * The theme engine of the running workbench, {@code null} when there is none.
+	 * The theme engine of the running workbench, the IDE's or an E4 application's,
+	 * {@code null} when there is none.
 	 * <p>
 	 * Looked up by name rather than by type: the interface is exported to a friends
 	 * list this bundle is not on, and nothing here needs to compile against it.
 	 */
 	private static Object themeEngine() {
 		try {
-			IEclipseContext context = PlatformUI.getWorkbench().getService(IEclipseContext.class);
+			IEclipseContext context = Workbenches.applicationContext();
 			return context == null ? null : context.get("org.eclipse.e4.ui.css.swt.theme.IThemeEngine"); //$NON-NLS-1$
 		} catch (LinkageError | RuntimeException e) {
 			return null;

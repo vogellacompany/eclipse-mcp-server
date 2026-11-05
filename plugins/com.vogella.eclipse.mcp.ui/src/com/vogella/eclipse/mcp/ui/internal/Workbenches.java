@@ -3,6 +3,7 @@ package com.vogella.eclipse.mcp.ui.internal;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.eclipse.e4.core.contexts.IEclipseContext;
 import org.eclipse.e4.ui.model.application.MApplication;
 import org.eclipse.e4.ui.model.application.ui.basic.MPart;
 import org.eclipse.e4.ui.model.application.ui.basic.MWindow;
@@ -110,6 +111,12 @@ public final class Workbenches {
 		}
 		List<Shell> shells = e4WindowShells();
 		return shells.isEmpty() ? null : shells.get(0);
+	}
+
+	/** The application context, which the IDE's workbench and an E4 application both have, or null. */
+	static IEclipseContext applicationContext() {
+		MApplication application = e4Application();
+		return application == null ? null : application.getContext();
 	}
 
 	/** The rendered parts of an E4 application model, empty under the IDE's workbench. */
