@@ -1,5 +1,6 @@
 package com.vogella.eclipse.mcp.ui.internal;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -107,20 +108,19 @@ public final class Shells {
 
 	/** The topmost visible shell that is neither a workbench window nor a dialog. */
 	private static Shell popup(Display display) {
-		Shell withTable = null;
-		Shell any = null;
+		List<Shell> withTable = new ArrayList<>();
+		List<Shell> any = new ArrayList<>();
 		for (Shell shell : ordered(display)) {
 			if (!shell.isVisible() || isWorkbench(shell) || isDialog(shell)) {
 				continue;
 			}
-			any = shell;
+			any.add(shell);
 			if (firstControl(shell) instanceof org.eclipse.swt.widgets.Table) {
-				withTable = shell;
+				withTable.add(shell);
 			}
 		}
-		// a proposal popup carries a Table, which is the one a caller usually means;
-		// fall back to the last visible non-workbench shell otherwise
-		return withTable != null ? withTable : any;
+		// a proposal popup carries a Table, which is the one a caller usually means
+		return NativeStacking.topmost(withTable.isEmpty() ? any : withTable);
 	}
 
 	static boolean isModal(Shell shell) {

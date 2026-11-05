@@ -3,6 +3,7 @@ package com.vogella.eclipse.mcp.core.tests;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -76,6 +77,25 @@ class DialogShellsTest {
 		if (display != null) {
 			display.dispose();
 		}
+	}
+
+	private Shell tablePopup() {
+		Shell popup = new Shell(display, SWT.NO_TRIM);
+		new Table(popup, SWT.NONE);
+		popup.setBounds(100, 100, 200, 100);
+		popup.setVisible(true);
+		return popup;
+	}
+
+	@Test
+	void thePopupKeywordFollowsTheStackingOrderOnWindows() {
+		assumeTrue("win32".equals(SWT.getPlatform()), "only Windows reads the stacking order");
+		Shell first = tablePopup();
+		Shell second = tablePopup();
+		first.moveAbove(null);
+		assertSame(first, Shells.select(display, "popup"));
+		second.moveAbove(null);
+		assertSame(second, Shells.select(display, "popup"));
 	}
 
 	private static final class StyledWindow extends Window {
