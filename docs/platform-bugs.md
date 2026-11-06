@@ -9,6 +9,13 @@ rather than because we are.
 
 ## Open
 
+### JGit 7.8.1: a fetch into an explicit `FETCH_HEAD` destination skips the objects once `FETCH_HEAD` exists
+
+With the refspec `refs/pull/7/head:FETCH_HEAD`, a second fetch after the remote ref moved advertises the new commit but downloads nothing and leaves `FETCH_HEAD` at the old one, so a following `RefUpdate` answers `REJECTED_MISSING_OBJECT`.
+7.2.0, 7.8.0 and a 7.9.0 nightly from 2026-10-04 fetch it; 7.8.1.202611041320-r does not, and a refspec without a destination works on all of them.
+`FetchPullRequestTool` fetches `refs/pull/N/head` without a destination, which writes `FETCH_HEAD` anyway, so nothing needs to change back once JGit is fixed.
+Not filed upstream yet.
+
 ### SWT GTK: `GC.copyArea` on a display GC returns a stale root read at GDK scale 2
 
 At `GDK_SCALE=2` the first `copyArea(Image, x, y)` of a display GC for an area is returned again for every later read of that area, while a read of a different area is current and `gdk_pixbuf_get_from_window` on the same area is current too.
