@@ -167,8 +167,8 @@ public final class FetchPullRequestTool implements IMcpTool {
 				return dryRun(result, uri, ref, existing, onBranch, checkout);
 			}
 
-			FetchOperation fetch = new FetchOperation(repository, uri,
-					List.of(new RefSpec().setSource(ref).setDestination(Constants.FETCH_HEAD)),
+			// No destination: a fetch writes FETCH_HEAD anyway, and JGit 7.8.1 skips the objects of an explicit one.
+			FetchOperation fetch = new FetchOperation(repository, uri, List.of(new RefSpec().setSource(ref)),
 					CallBudget.maxWaitSeconds(), false);
 			try {
 				fetch.run(monitor);
