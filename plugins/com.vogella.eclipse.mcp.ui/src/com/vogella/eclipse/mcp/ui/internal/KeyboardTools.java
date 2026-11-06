@@ -4,12 +4,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.ITextSelection;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.SWTException;
 import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
@@ -23,6 +30,7 @@ import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.texteditor.ITextEditor;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -173,6 +181,8 @@ public final class KeyboardTools {
 	/** Posts real key events to the focused control. */
 	public static final class PressKey implements IMcpTool {
 
+		private static final String CANCELLED = "The call was cancelled, so no key was sent."; //$NON-NLS-1$
+
 		@Override
 		public String getName() {
 			return "eclipse_press_key"; //$NON-NLS-1$
@@ -180,7 +190,7 @@ public final class KeyboardTools {
 
 		@Override
 		public String getDescription() {
-			return "Posts real key events through Display.post to whatever control has focus, for the cases the document API cannot reach: Ctrl+Space to open content assist, Escape to close a popup, Enter to accept a proposal, arrow keys to move the selection in a proposal table, Tab, Backspace. CHANGES WHAT THE IDE DOES, which is whatever that key does with the current focus. Take a key like 'Ctrl+Space', 'Escape', 'Down', 'Enter', 'Tab', 'BackSpace', or a single character. There is no Menu key: Shift+F10 opens the focused control's context menu instead, and on GTK it opens at the pointer rather than at the selected row, so put the pointer there first with eclipse_click and button none. Display.post goes to the window that has OS focus, so this refuses when the IDE is not the active window rather than sending the key somewhere else. On Wayland Display.post is often ignored by the compositor; the answer reports whether the post was accepted and whether focus was inside the IDE, and for entering plain characters eclipse_type_text is the reliable path. count repeats the key. delivery synthetic, or auto when the post is refused or the IDE is inactive, sends the key at SWT level instead: Tab, Shift+Tab, Escape, Enter and Ctrl+PageUp/PageDown traverse as SWT would, other keys reach the KeyDown and KeyUp listeners of the focus control or of path; the answer says synthetic true."; //$NON-NLS-1$
+			return "Posts real key events through Display.post to whatever control has focus, for the cases the document API cannot reach: Ctrl+Space to open content assist, Escape to close a popup, Enter to accept a proposal, arrow keys to move the selection in a proposal table, Tab, Backspace. CHANGES WHAT THE IDE DOES, which is whatever that key does with the current focus. Take a key like 'Ctrl+Space', 'Escape', 'Down', 'Enter', 'Tab', 'BackSpace', or a single character. There is no Menu key: Shift+F10 opens the focused control's context menu instead, and on GTK it opens at the pointer rather than at the selected row, so put the pointer there first with eclipse_click and button none. Display.post goes to the window that has OS focus, so this refuses when the IDE is not the active window rather than sending the key somewhere else; it first waits up to waitForForegroundMillis (0 disables the wait) for focus that is merely late, and foregroundWaitMillis in the answer is the time waited, foregroundWaitState how the wait ended (foreground, timedOut, uiBusy or probeFailed) and foregroundWaitClamped whether what was left of the call cut it short, all null when no wait was made because waitForForegroundMillis is 0, the delivery is synthetic or the call runs on the UI thread; a call cancelled before the key is sent answers an error and sends no key. On Wayland Display.post is often ignored by the compositor; the answer reports whether the post was accepted and whether focus was inside the IDE, and for entering plain characters eclipse_type_text is the reliable path. count repeats the key. delivery synthetic, or auto when the post is refused or the IDE is inactive, sends the key at SWT level instead: Tab, Shift+Tab, Escape, Enter and Ctrl+PageUp/PageDown traverse as SWT would, other keys reach the KeyDown and KeyUp listeners of the focus control or of path; the answer says synthetic true."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -195,11 +205,13 @@ public final class KeyboardTools {
 					    "shellTitle": {"type":"string","description":"Synthetic delivery only: the shell the path is rooted in, by title substring."},
 					    "shell":     {"type":"string","description":"Synthetic delivery only: the shell independent of title, as eclipse_get_widget_tree takes it."},
 					    "path":      {"type":"string","description":"Synthetic delivery only: the control to send the key to. Defaults to the focus control, and while the IDE is inactive to the control the shell gives focus back to."},
+					    "waitForForegroundMillis": {"type":"integer","default":%d,"minimum":0,"maximum":%d,"description":"How long to wait for the IDE to become the active window before refusing or falling back, since focus can arrive after a dialog the previous call opened. 0 disables the wait."},
 					    %s
 					  },
 					  "required": ["key"],
 					  "additionalProperties": false
-					}""".formatted(SyntheticInput.SCHEMA); //$NON-NLS-1$
+					}""".formatted(Integer.valueOf(ForegroundWait.DEFAULT_MILLIS), Integer.valueOf(ForegroundWait.MAX_MILLIS),
+					SyntheticInput.SCHEMA); //$NON-NLS-1$
 		}
 
 		@Override
@@ -225,17 +237,41 @@ public final class KeyboardTools {
 			String partId = args.getString("part"); //$NON-NLS-1$
 			String shellSpec = Shells.spec(args);
 			String path = args.getString("path"); //$NON-NLS-1$
-			return UiThread.call(UI_TIMEOUT_SECONDS, () -> {
+			int waitMillis = args.getInt("waitForForegroundMillis", ForegroundWait.DEFAULT_MILLIS, 0, //$NON-NLS-1$
+					ForegroundWait.MAX_MILLIS);
+			Long budget = ForegroundWait.budgetMillis(delivery == SyntheticInput.Delivery.SYNTHETIC, UiThread.onUiThread(),
+					waitMillis, CallBudget.leftMillis());
+			BooleanSupplier cancelled = () -> (monitor != null && monitor.isCanceled())
+					|| Thread.currentThread().isInterrupted();
+			ForegroundWait.Result wait = budget == null ? null
+					: ForegroundWait.await(PressKey::probeForeground, budget.longValue(), cancelled);
+			// await can return after the cancel arrived
+			if (cancelled.getAsBoolean() || (wait != null && wait.state() == ForegroundWait.State.CANCELLED)) {
+				return McpToolResult.error(CANCELLED);
+			}
+			Long waited = wait == null ? null : Long.valueOf(wait.waitedMillis());
+			String waitState = wait == null ? null : wait.state().label();
+			Boolean clamped = budget == null ? null : Boolean.valueOf(budget.longValue() < waitMillis);
+			AtomicBoolean cancelledOnUi = new AtomicBoolean();
+			UiThread.Outcome outcome = UiThread.run(UI_TIMEOUT_SECONDS, () -> {
+				if (monitor != null && monitor.isCanceled()) {
+					cancelledOnUi.set(true);
+					return new JsonObject();
+				}
 				Display display = Workbenches.display();
 				String osFailure = null;
 				if (delivery != SyntheticInput.Delivery.SYNTHETIC) {
 					if (!NativeForeground.isForeground(display)) {
-						osFailure = "The IDE is not the active window, so a posted key would go to another application. Bring the IDE to the front, or use eclipse_type_text for plain text."; //$NON-NLS-1$
+						osFailure = "The IDE is not the active window%s, so a posted key would go to another application. Bring the IDE to the front, or use eclipse_type_text for plain text." //$NON-NLS-1$
+								.formatted(waited == null ? "" //$NON-NLS-1$
+										: " after waiting %d ms%s".formatted(waited, //$NON-NLS-1$
+												Boolean.TRUE.equals(clamped) ? ", all the call had left" : "")); //$NON-NLS-1$ //$NON-NLS-2$
 						if (delivery == SyntheticInput.Delivery.OS) {
 							throw new IllegalStateException(osFailure);
 						}
 					} else {
-						JsonObject posted = postKey(display, key, stroke, count);
+						JsonObject posted = postKey(display, key, stroke, count).put("foregroundWaitMillis", waited) //$NON-NLS-1$
+								.put("foregroundWaitState", waitState).put("foregroundWaitClamped", clamped); //$NON-NLS-1$ //$NON-NLS-2$
 						Object accepted = posted.remove("posted"); //$NON-NLS-1$
 						posted.put("posted", accepted); //$NON-NLS-1$
 						if (delivery == SyntheticInput.Delivery.OS || Boolean.TRUE.equals(accepted)) {
@@ -268,8 +304,42 @@ public final class KeyboardTools {
 						.put("targetPath", target.isDisposed() ? null : WidgetTools.pathOf(target.getShell(), target)) //$NON-NLS-1$
 						.put("targetDisposed", Boolean.valueOf(target.isDisposed())) //$NON-NLS-1$
 						.put("osFailure", osFailure) //$NON-NLS-1$
+						.put("foregroundWaitMillis", waited) //$NON-NLS-1$
+						.put("foregroundWaitState", waitState) //$NON-NLS-1$
+						.put("foregroundWaitClamped", clamped) //$NON-NLS-1$
 						.put("note", SyntheticInput.NOTE); //$NON-NLS-1$
 			});
+			if (cancelledOnUi.get()) {
+				return McpToolResult.error(CANCELLED);
+			}
+			return outcome.error() == null ? McpToolResult.of(outcome.value().toString()) : outcome.errorResult();
+		}
+
+		/** One short hop to the UI thread; a probe the UI does not answer in time is withdrawn and reads as unknown. */
+		private static Boolean probeForeground(long timeoutMillis) {
+			Display display = Workbenches.running() ? Workbenches.display() : null;
+			if (display == null || display.isDisposed()) {
+				throw new IllegalStateException("no display"); //$NON-NLS-1$
+			}
+			CompletableFuture<JsonObject> pending = new CompletableFuture<>();
+			try {
+				display.asyncExec(() -> UiThread.completeFrom(pending,
+						() -> NativeForeground.isForeground(display) ? new JsonObject() : null));
+			} catch (SWTException | NullPointerException e) {
+				throw new IllegalStateException(e);
+			}
+			try {
+				return Boolean.valueOf(pending.get(timeoutMillis, TimeUnit.MILLISECONDS) != null);
+			} catch (TimeoutException e) {
+				pending.cancel(false);
+				return null;
+			} catch (ExecutionException e) {
+				throw new IllegalStateException(e.getCause());
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				pending.cancel(false);
+				return null;
+			}
 		}
 
 		/** Posts the key through the window system; the answer keeps "posted" so the caller can decide on a fallback. */
