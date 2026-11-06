@@ -122,17 +122,6 @@ The failure is silent in both cases, which makes it the worst shape of bug for a
 screenshot tool. `ScreenshotTools` detects it by rejecting a uniform capture and
 falls back to `Control.print`.
 
-### SWT: `Display.getBounds()` zoom is not the primary monitor's
-
-[eclipse-platform/eclipse.platform.swt#3530](https://github.com/eclipse-platform/eclipse.platform.swt/issues/3530),
-open, targeting 4.41, with PR #3532.
-
-`Display.getBounds()` derives its zoom from `DPIUtil.getDeviceZoom()`, which
-reports the zoom of whichever shell last changed zoom rather than the primary
-monitor, so full display capture is non-deterministic on Windows with multiple
-monitors at different DPI. Not reproducible on Linux; relevant when
-`eclipse_screenshot` runs on Windows.
-
 ### p2: `ColocatedRepositoryTracker` refreshes the artifact manager too
 
 `ColocatedRepositoryTracker.java:96-97` refreshes both the metadata and the
@@ -313,18 +302,6 @@ Here it surfaced during shutdown, inside the nested event loop of `SaveableHelpe
 Four independent stack frames match the shipped source exactly (616, 705, 712, 868), and no `org.eclipse.jface.text` has ever been substituted in this installation, so it is not a local artifact.
 
 Nothing filed upstream yet; the session working in the platform text editors has the analysis.
-
-## `GC.fillGradientRectangle` on GTK rewrites the target surface's device scale
-
-Observed 2026-09-14 on GTK 3.24.52, Wayland, zoom 200, on stock SWT `3.135.100.v20260911-2129` as well as a locally built one: an `eclipse_screenshot` shell or `includeToolbar` capture in the Light theme painted every part stack at twice its size inside a correctly sized image, while the same capture in the Dark theme was right, and so was a `part` capture in either theme.
-
-`GC.fillGradientRectangle` (`org.eclipse.swt.graphics.GC`, GTK, right after the colour setup) calls `cairo_surface_set_device_scale(cairo_get_target(cairo), deviceZoom / 100, ...)` and never restores it.
-On screen the surface already has that scale, so the write is a no-op.
-Into an image created with `new Image(display, w, h)`, whose surface has scale 1, it changes the surface for the rest of the paint, so a print that scaled the GC with a `Transform` was scaled twice from the first gradient on.
-The Light theme's `CTabRendering` draws gradients and the Dark one does not, which is the whole theme dependence; a bare `CTabFolder` with `setSelectionBackground(Color[], int[], true)` reproduces it outside the workbench.
-
-`DeviceScale.paint` prints into a surface that already carries the device scale (an image built from `ImageData`), so the write changes nothing.
-Fixed upstream by https://github.com/eclipse-platform/eclipse.platform.swt/pull/3589 (open), which restores the previous device scale; the workaround stays for every IDE released without it.
 
 ## `SmartImportJob` leaves auto-build switched off when an import fails
 
