@@ -59,7 +59,8 @@ public final class GetCallHierarchyTool implements IMcpTool {
 				    "project":    {"type":"string","description":"Project used to resolve the type and to scope the search. Defaults to the whole workspace."},
 				    "direction":  {"type":"string","enum":["callers","callees","both"],"default":"callers"},
 				    "depth":      {"type":"integer","default":2,"minimum":1,"maximum":5,"description":"How many levels to follow. Each level costs another search, so keep it small."},
-				    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000,"description":"Maximum nodes in the whole tree."}
+				    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000,"description":"Maximum nodes in the whole tree."},
+				    """ + JavaModelSupport.REFRESH_PROPERTY + """
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -89,12 +90,13 @@ public final class GetCallHierarchyTool implements IMcpTool {
 		List<IJavaProject> projects;
 		IType type;
 		List<IMember> methods;
+		JavaModelSupport.Refreshed refreshed;
 		try {
 			projects = JavaModelSupport.javaProjects(args.getString("project")); //$NON-NLS-1$
 			if (projects.isEmpty()) {
 				return McpToolResult.error("The workspace contains no open Java project."); //$NON-NLS-1$
 			}
-			JavaModelSupport.refresh(args.getString("project"), monitor); //$NON-NLS-1$
+			refreshed = JavaModelSupport.refreshUnlessSkipped(args, args.getString("project"), monitor); //$NON-NLS-1$
 			type = JavaModelSupport.findType(typeName, projects, monitor);
 			methods = JavaModelSupport.findMembers(type, methodName).stream().filter(IMethod.class::isInstance)
 					.toList();
@@ -117,7 +119,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 				.put("total", counter.used()) //$NON-NLS-1$
 				.put("truncated", counter.exhausted()) //$NON-NLS-1$
 				.put("callers", callers); //$NON-NLS-1$
-		return McpToolResult.of(result.toString());
+		return McpToolResult.of(refreshed.report(result).toString());
 	}
 
 	/** Bounds the whole tree rather than each level, so a wide first level cannot explode. */

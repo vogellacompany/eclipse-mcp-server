@@ -116,6 +116,7 @@ A tool that needs editors, views, perspectives or commands refuses with `Workben
 Every list-returning tool honours `maxResults` and reports `total` and `truncated`.
 A picture is attached with `McpToolResult.withImage`, never as base64 inside the JSON; `eclipse_run_script` passes its steps' images on.
 Anything derived from files refreshes first through `WorkspaceSync.refresh`, since clients edit through their own shell; stale markers are worse than none.
+`eclipse_find_references`, `eclipse_get_call_hierarchy` and `eclipse_list_declarations` pay that refresh on every call, which in a workspace of hundreds of projects is most of the call, so they take `refresh` (default true, reported as `refreshed` and `refreshMillis`) to let a client that already refreshed skip it; the default stays on.
 Read what the answer needs off a widget before the action that may dispose it, and report disposal as a fact (`shellClosed`); a completed operation must never come back as a failed call.
 Never put a Java element's `toString()` into a message; use `getElementName()`, `getFullyQualifiedName()` or `JavaModelSupport.describe`.
 Build a lookup key in one helper, as `FindReferencesTool.locationOf` does; two spellings silently match nothing.

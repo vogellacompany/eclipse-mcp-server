@@ -66,7 +66,7 @@ public final class GetProblemsTool implements IMcpTool {
 				    "messageFilter": {"type":"string","description":"Only problems whose message contains this text, case insensitive. Use 'deprecated' for deprecation warnings."},
 				    "types":        {"type":"array","items":{"type":"string"},"description":"Only markers of these types, subtypes included, e.g. ['org.eclipse.jdt.core.problem'] for compilation problems alone."},
 				    "excludeTypes": {"type":"array","items":{"type":"string"},"description":"Drop markers of these types, subtypes included. ['org.eclipse.pde.api.tools.version_numbering'] removes the API Tools version markers, which flicker in and out across rebuilds of an unchanged commit and otherwise read as regressions in a before/after comparison."},
-				    "refresh":    {"type":"boolean","default":true,"description":"Read changes made outside the IDE into the workspace first, restricted to 'project' when one is named. Cheap: seconds for the whole workspace."}
+				    "refresh":    {"type":"boolean","default":true,"description":"Read changes made outside the IDE into the workspace first, restricted to 'project' when one is named. It walks every file in scope: seconds in a small workspace, tens of seconds in one of hundreds of projects, even when nothing changed."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
