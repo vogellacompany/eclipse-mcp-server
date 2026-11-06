@@ -2,6 +2,7 @@ package com.vogella.eclipse.mcp.ui.internal;
 
 import java.lang.reflect.Method;
 
+import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.ImageData;
 import org.eclipse.swt.graphics.PaletteData;
 import org.eclipse.swt.graphics.Rectangle;
@@ -10,11 +11,18 @@ import org.eclipse.swt.widgets.Shell;
 
 /**
  * Reads the screen through {@code gdk_pixbuf_get_from_window}, because
- * {@code GC.copyArea} on a display GC returns stale pixels at GDK scale 2.
+ * {@code GC.copyArea} on a display GC returns stale pixels at GDK scale 2, and
+ * through {@code BitBlt} on Windows, where {@code GC.copyArea} returns points
+ * rather than the pixels the screen holds.
  */
 public final class ScreenPixels {
 
 	private static final String GDK = "org.eclipse.swt.internal.gtk.GDK"; //$NON-NLS-1$
+
+	private static final String WIN32 = "org.eclipse.swt.internal.win32."; //$NON-NLS-1$
+
+	/** Also takes the layered windows, which a plain copy leaves out. */
+	private static final int CAPTUREBLT = 0x40000000;
 
 	/** The pixels of a read, or why there are none. */
 	record Read(ImageData data, String failure) {
@@ -33,6 +41,9 @@ public final class ScreenPixels {
 	 * size than the zoom promises, and then the failure says which.
 	 */
 	static Read read(int x, int y, int width, int height, int zoom) {
+		if ("win32".equals(SWT.getPlatform())) { //$NON-NLS-1$
+			return win32(x, y, width, height);
+		}
 		if (!DeviceScale.GTK) {
 			return Read.failed("not GTK"); //$NON-NLS-1$
 		}
@@ -46,6 +57,98 @@ public final class ScreenPixels {
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 			return Read.failed("the GDK call failed: " + e); //$NON-NLS-1$
 		}
+	}
+
+	/**
+	 * On the UI thread. Reads into a bitmap of exactly the area's device pixels rather than an SWT image, whose size
+	 * follows the display's zoom and would clip a monitor scaled higher than that.
+	 */
+	private static Read win32(int x, int y, int width, int height) {
+		Display display = Display.getCurrent();
+		if (display == null) {
+			return Read.failed("not on the UI thread"); //$NON-NLS-1$
+		}
+		Rectangle pixels;
+		try {
+			pixels = NativeScreen.pixelsOf(display, new Rectangle(x, y, width, height));
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			return Read.failed("the monitors could not be read: " + e); //$NON-NLS-1$
+		}
+		if (pixels.isEmpty()) {
+			return Read.failed("the area lies outside every monitor"); //$NON-NLS-1$
+		}
+		try {
+			byte[] bits = bitBlt(pixels);
+			if (bits == null) {
+				return Read.failed("BitBlt returned false"); //$NON-NLS-1$
+			}
+			// GetDIBits writes blue, green, red and an unused byte per pixel
+			return new Read(new ImageData(pixels.width, pixels.height, 32, new PaletteData(0xFF00, 0xFF0000, 0xFF000000),
+					4, bits), null);
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			return Read.failed("BitBlt could not be called: " + e); //$NON-NLS-1$
+		}
+	}
+
+	/** The screen's pixels in the area, top row first, or null when the copy failed. */
+	private static byte[] bitBlt(Rectangle pixels) throws ReflectiveOperationException {
+		Class<?> os = Class.forName(WIN32 + "OS", true, Display.class.getClassLoader()); //$NON-NLS-1$
+		Class<?> headerClass = Class.forName(WIN32 + "BITMAPINFOHEADER", true, os.getClassLoader()); //$NON-NLS-1$
+		Long none = Long.valueOf(0);
+		long screen = (Long) os.getMethod("GetDC", long.class).invoke(null, none); //$NON-NLS-1$
+		try {
+			long memory = (Long) os.getMethod("CreateCompatibleDC", long.class).invoke(null, Long.valueOf(screen)); //$NON-NLS-1$
+			try {
+				long bitmap = (Long) os.getMethod("CreateCompatibleBitmap", long.class, int.class, int.class).invoke(null, //$NON-NLS-1$
+						Long.valueOf(screen), Integer.valueOf(pixels.width), Integer.valueOf(pixels.height));
+				try {
+					return copy(os, headerClass, screen, memory, bitmap, pixels);
+				} finally {
+					os.getMethod("DeleteObject", long.class).invoke(null, Long.valueOf(bitmap)); //$NON-NLS-1$
+				}
+			} finally {
+				os.getMethod("DeleteDC", long.class).invoke(null, Long.valueOf(memory)); //$NON-NLS-1$
+			}
+		} finally {
+			os.getMethod("ReleaseDC", long.class, long.class).invoke(null, none, Long.valueOf(screen)); //$NON-NLS-1$
+		}
+	}
+
+	/** Copies the screen into the bitmap and reads it back, or null when the copy failed. */
+	private static byte[] copy(Class<?> os, Class<?> headerClass, long screen, long memory, long bitmap, Rectangle pixels)
+			throws ReflectiveOperationException {
+		Method select = os.getMethod("SelectObject", long.class, long.class); //$NON-NLS-1$
+		Object previous = select.invoke(null, Long.valueOf(memory), Long.valueOf(bitmap));
+		Object copied;
+		try {
+			copied = os.getMethod("BitBlt", long.class, int.class, int.class, int.class, int.class, long.class, //$NON-NLS-1$
+					int.class, int.class, int.class).invoke(null, Long.valueOf(memory), Integer.valueOf(0), Integer.valueOf(0),
+							Integer.valueOf(pixels.width), Integer.valueOf(pixels.height), Long.valueOf(screen),
+							Integer.valueOf(pixels.x), Integer.valueOf(pixels.y),
+							Integer.valueOf(os.getField("SRCCOPY").getInt(null) | CAPTUREBLT)); //$NON-NLS-1$
+		} finally {
+			// GetDIBits needs the bitmap out of the DC
+			select.invoke(null, Long.valueOf(memory), previous);
+		}
+		if (!Boolean.TRUE.equals(copied)) {
+			return null;
+		}
+		Object header = headerClass.getConstructor().newInstance();
+		int size = headerClass.getField("sizeof").getInt(null); //$NON-NLS-1$
+		headerClass.getField("biSize").setInt(header, size); //$NON-NLS-1$
+		headerClass.getField("biWidth").setInt(header, pixels.width); //$NON-NLS-1$
+		// negative for rows top down, as ImageData holds them
+		headerClass.getField("biHeight").setInt(header, -pixels.height); //$NON-NLS-1$
+		headerClass.getField("biPlanes").setShort(header, (short) 1); //$NON-NLS-1$
+		headerClass.getField("biBitCount").setShort(header, (short) 32); //$NON-NLS-1$
+		headerClass.getField("biCompression").setInt(header, os.getField("BI_RGB").getInt(null)); //$NON-NLS-1$ //$NON-NLS-2$
+		byte[] info = new byte[size];
+		os.getMethod("MoveMemory", byte[].class, headerClass, int.class).invoke(null, info, header, Integer.valueOf(size)); //$NON-NLS-1$
+		byte[] bits = new byte[pixels.width * pixels.height * 4];
+		int lines = (Integer) os.getMethod("GetDIBits", long.class, long.class, int.class, int.class, byte[].class, //$NON-NLS-1$
+				byte[].class, int.class).invoke(null, Long.valueOf(memory), Long.valueOf(bitmap), Integer.valueOf(0),
+						Integer.valueOf(pixels.height), bits, info, Integer.valueOf(os.getField("DIB_RGB_COLORS").getInt(null))); //$NON-NLS-1$
+		return lines == pixels.height ? bits : null;
 	}
 
 	/** The area of a GdkWindow, given in points relative to it, as device pixels. */
