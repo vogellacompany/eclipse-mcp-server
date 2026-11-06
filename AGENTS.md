@@ -148,7 +148,8 @@ Do not undo these without understanding why they are there.
 
 - The root pom sets `project.build.outputTimestamp` to the build time: Tycho takes the qualifier from it, and the super POM of Maven 3.10 and later pins it to 1980, which gives every build the same version and p2 never sees an update.
 - `.mvn/maven.config` sets `tycho.pomless.aggregator.names`, otherwise `update-site/` is not an aggregator and the build fails.
-- The feature includes Jetty ee11, the MCP SDK, Jackson 3, networknt and reactor, and leaves out `slf4j.api` and `jakarta.servlet-api`, which the host IDE ships.
+- The feature includes Jetty ee11, the MCP SDK, Jackson 3, networknt, reactor and `jakarta.servlet-api`, and leaves out `slf4j.api`, which the host IDE ships.
+  The server imports `jakarta.servlet` `[6.1,7)`, which a plain SDK does not provide, so without the bundle an install from the update site alone fails.
 - Jetty imports are pinned to `[12.1.12,13)`, the floor `jetty-ee11-servlet` needs.
 - `com.vogella.eclipse.mcp.ui` is the feature's branding plugin; `featureImage` is 32x32 (source `icons/eclipse-mcp-server.png`), and there is no `about.mappings` because Tycho does not substitute `{0}`.
 - `org.w3c.dom.css` comes from the JRE's `jdk.xml.dom` module and is not imported; an optional import the target cannot resolve would be a compile error.
