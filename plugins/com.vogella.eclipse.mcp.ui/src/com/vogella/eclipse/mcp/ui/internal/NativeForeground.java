@@ -147,11 +147,15 @@ public final class NativeForeground {
 	 * {@code SetForegroundWindow} can still activate the shell inside the process,
 	 * so a raise reported foreground true while another program stayed in front.
 	 * {@code GetForegroundWindow} is the screen's answer.
+	 * On Cocoa it is {@code NSApplication.isActive}.
 	 */
 	static boolean isForeground(Display display) {
 		Boolean owned = ownsForeground();
 		if (owned == null) {
 			owned = gtkActivated(display);
+		}
+		if (owned == null) {
+			owned = NativeAppKit.active();
 		}
 		return owned != null ? owned.booleanValue() : display.getActiveShell() != null;
 	}
