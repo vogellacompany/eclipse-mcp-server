@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.SWTError;
 import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.ImageData;
@@ -111,17 +112,31 @@ public final class WindowCapture {
 
 	/** The whole window rectangle, frame included, which is what Shell.getBounds covers on Windows. */
 	private static Read win32(Shell shell) {
-		String reader = "PrintWindow"; //$NON-NLS-1$
-		Display display = shell.getDisplay();
 		Rectangle bounds = shell.getBounds();
-		int zoom = DeviceScale.zoomOf(shell);
-		Image image = new Image(display, bounds.width, bounds.height);
+		long hwnd;
+		try {
+			hwnd = shell.getClass().getField("handle").getLong(shell); //$NON-NLS-1$
+		} catch (ReflectiveOperationException | LinkageError e) {
+			return Read.failed("PrintWindow", "the shell's handle could not be read: " + e); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		Read read = printWindow(shell.getDisplay(), hwnd, bounds.width, bounds.height, DeviceScale.zoomOf(shell));
+		return new Read(read.data(), bounds, read.reader(), read.failure());
+	}
+
+	/** A native window of the given size in points through PrintWindow, without a window rectangle in the answer. */
+	static Read printWindow(Display display, long hwnd, int width, int height, int zoom) {
+		String reader = "PrintWindow"; //$NON-NLS-1$
+		Image image;
+		try {
+			image = new Image(display, width, height);
+		} catch (IllegalArgumentException | SWTError e) {
+			return Read.failed(reader, "no %dx%d image could be made for it: %s".formatted(Integer.valueOf(width), Integer.valueOf(height), e)); //$NON-NLS-1$
+		}
 		try {
 			GC gc = new GC(image);
 			boolean printed;
 			try {
 				Class<?> os = Class.forName("org.eclipse.swt.internal.win32.OS", true, Display.class.getClassLoader()); //$NON-NLS-1$
-				long hwnd = shell.getClass().getField("handle").getLong(shell); //$NON-NLS-1$
 				long hdc = GC.class.getField("handle").getLong(gc); //$NON-NLS-1$
 				int flags = os.getField("PW_RENDERFULLCONTENT").getInt(null); //$NON-NLS-1$
 				printed = ((Boolean) os.getMethod("PrintWindow", long.class, long.class, int.class) //$NON-NLS-1$
@@ -132,7 +147,7 @@ public final class WindowCapture {
 			if (!printed) {
 				return Read.failed(reader, "PrintWindow returned false"); //$NON-NLS-1$
 			}
-			return new Read(image.getImageData(zoom), bounds, reader, null);
+			return new Read(image.getImageData(zoom), null, reader, null);
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 			return Read.failed(reader, "PrintWindow could not be called: " + e); //$NON-NLS-1$
 		} finally {
