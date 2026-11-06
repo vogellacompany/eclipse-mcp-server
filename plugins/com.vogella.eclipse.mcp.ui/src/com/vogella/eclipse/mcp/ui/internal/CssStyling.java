@@ -174,8 +174,9 @@ final class CssStyling {
 		}
 		if (drop && !themeReset) {
 			return result.put("applied", Boolean.FALSE) //$NON-NLS-1$
+					.put("reset", Boolean.FALSE) //$NON-NLS-1$
 					.put("reason", //$NON-NLS-1$
-							"No CSS theme engine could be reached, and an application without a cssTheme has none, so a snippet cannot be taken back. Restarting the application drops it.")
+							"The CSS theme engine could not be reached (an application started without a cssTheme has none), so a snippet cannot be taken back. Restarting the application drops it.")
 					.put("errors", errors); //$NON-NLS-1$
 		}
 		List<CSSEngine> engines = engines(themeEngine);
@@ -239,7 +240,7 @@ final class CssStyling {
 
 	private static String note(boolean themeReset) {
 		return themeReset ? LIFETIME_NOTE
-				: "No CSS theme engine could be reached, and an application without a cssTheme has none, so the snippet was added without re-applying the theme first and can only be taken back by restarting the application."; //$NON-NLS-1$
+				: "The CSS theme engine could not be reached (an application started without a cssTheme has none), so the snippet was added without re-applying the theme first and can only be taken back by restarting the application."; //$NON-NLS-1$
 	}
 
 	private static final String LIFETIME_NOTE = "The snippet lives in memory only. It is gone on the next theme change, on eclipse_restart, and when this plug-in stops."; //$NON-NLS-1$

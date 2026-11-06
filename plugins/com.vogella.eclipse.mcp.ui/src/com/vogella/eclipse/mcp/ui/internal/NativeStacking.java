@@ -42,11 +42,14 @@ final class NativeStacking {
 			}
 			Shell top = shells.getFirst();
 			long window = handle.getLong(top);
-			for (int i = 0; i < MAX_WINDOWS && window != 0; i++) {
+			// walking up from the first shell, the last one met is on top, so stop once all were met
+			int unseen = byWindow.size() - 1;
+			for (int i = 0; i < MAX_WINDOWS && window != 0 && unseen > 0; i++) {
 				window = (Long) getWindow.invoke(null, Long.valueOf(window), above);
 				Shell shell = byWindow.get(Long.valueOf(window));
 				if (shell != null) {
 					top = shell;
+					unseen--;
 				}
 			}
 			return top;

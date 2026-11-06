@@ -88,6 +88,17 @@ class DialogShellsTest {
 	}
 
 	@Test
+	void thePopupKeywordPrefersAPopupWithATable() {
+		Shell plain = new Shell(display, SWT.NO_TRIM);
+		plain.setBounds(10, 10, 50, 50);
+		plain.setVisible(true);
+		assertSame(plain, Shells.select(display, "popup"));
+		Shell withTable = tablePopup();
+		plain.moveAbove(null);
+		assertSame(withTable, Shells.select(display, "popup"));
+	}
+
+	@Test
 	void thePopupKeywordFollowsTheStackingOrderOnWindows() {
 		assumeTrue("win32".equals(SWT.getPlatform()), "only Windows reads the stacking order");
 		Shell first = tablePopup();
