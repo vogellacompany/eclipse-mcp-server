@@ -191,6 +191,7 @@ Do not undo these without understanding why they are there.
 - Organize imports, rename and clean-up need the `org.eclipse.jdt.ui` preference node seeded, or JDT throws deep inside; `ensureCodeStylePreferences` fills defaults only.
 - `RenameTool` calls `initializeValidationData` and runs through `IWorkspace.run`, and refuses binary elements, which JDT's processor dereferences as null.
 - `JavaModelSupport.findType` prefers source over a binary type from build output.
+- `SourceText` is the one offset-to-line index of the jdt bundle; do not add another, or line numbers drift between tools.
 - `SearchMatch.getResource()` names the owning project for a jar match; use `JavaModelSupport.describeLocation` and never `match.getResource().getFullPath()`.
 - `eclipse_run_tests` takes the test kind from the x-friends `TestKindRegistry.getContainerTestKindId`, because `JUnitLaunchConfigurationDelegate.preLaunchCheck` rechecks it and refuses a JUnit 6 project launched as junit5; a copy of that decision would drift from the delegate.
 - `eclipse_clean_up` deliberately depends on the discouraged `CleanUpConstants` and `*CleanUpCore` (no public alternative; `CleanUpRefactoring` drags in the UI). `RemoveUnusedImportsTool` stays on public API. Clean-up options are a tree, so `CleanUpEntry.companions` enables the parents a leaf needs.

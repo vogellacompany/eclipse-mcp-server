@@ -20,7 +20,7 @@ class McpToolRegistryTest {
 		Collection<IMcpTool> tools = McpToolRegistry.getInstance().getTools();
 		List<String> names = tools.stream().map(IMcpTool::getName).toList();
 		assertTrue(names.containsAll(List.of("eclipse_list_projects", "eclipse_get_problems", "eclipse_find_references",
-				"eclipse_get_type_hierarchy", "eclipse_get_source", "eclipse_search_types",
+				"eclipse_get_type_hierarchy", "eclipse_get_source", "eclipse_get_outline", "eclipse_search_types",
 				"eclipse_organize_imports", "eclipse_format")), "Missing tools, found " + names);
 	}
 

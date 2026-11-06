@@ -20,7 +20,6 @@ import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.ISourceRange;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaModelException;
-import org.eclipse.jdt.core.Signature;
 import org.eclipse.jdt.core.search.IJavaSearchConstants;
 import org.eclipse.jdt.core.search.IJavaSearchScope;
 import org.eclipse.jdt.core.search.SearchEngine;
@@ -71,7 +70,7 @@ public final class FindReferencesTool implements IMcpTool {
 				    "queries":    {"type":"array","description":"Ask about many elements in one call, which returns COUNTS ONLY: [{typeName, memberName?, accessKind?}]. A dead code sweep asks 'how many references' about hundreds of candidates, and one call per candidate is mostly round trips. Use the single form when you need the match locations.","items":{"type":"object","properties":{"typeName":{"type":"string"},"memberName":{"type":"string"},"paramTypes":{"type":"array","items":{"type":"string"}},"accessKind":{"type":"string","enum":["all","read","write"]}},"required":["typeName"],"additionalProperties":false}},
 				    "typeName":   {"type":"string","description":"Fully qualified type name, e.g. org.eclipse.jface.viewers.TreeViewer"},
 				    "memberName": {"type":"string","description":"Optional method or field name. Omit to find references to the type itself. Every overload of the name is searched unless paramTypes narrows it, and each match reports the overload it belongs to."},
-				    "paramTypes": {"type":"array","items":{"type":"string"},"description":"Selects one overload of memberName by its parameter types, simple or qualified: ['String','int','int'] or ['java.lang.String']. An empty array is the no-argument overload. Without it all overloads are searched and byMember splits the counts."},
+				    "paramTypes": {"type":"array","items":{"type":"string"},"description":"Selects one overload of memberName by its parameter types, simple or qualified: ['String','int','int'] or ['java.lang.String']. Generics are erased, ... is accepted for varargs, Map$Entry is Map.Entry, and a qualified name must match the package too. An empty array is the no-argument overload. Without it all overloads are searched and byMember splits the counts."},
 				    "project":    {"type":"string","description":"Optional project used to resolve the type. It scopes the search to that project AND everything on its build path, which includes other workspace projects and jars, so it narrows less than it looks. Defaults to the whole workspace."},
 				    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000},
 				    "accessKind": {"type":"string","enum":["all","read","write"],"default":"all","description":"Restrict to read or to write accesses. Only meaningful for fields. With 'all', field results additionally carry a byKind summary and a kind per match. A field initializer is a write but not a reference, so byKind counts can exceed total. With 'read' or 'write' the matches include the declaration itself, marked with declaration true and counted under declaration in byKind."},
@@ -99,7 +98,12 @@ public final class FindReferencesTool implements IMcpTool {
 		if (!ACCESS_KINDS.contains(accessKind)) {
 			return McpToolResult.error("Unknown accessKind '%s', expected one of all, read, write.".formatted(accessKind)); //$NON-NLS-1$
 		}
-		List<String> paramTypes = paramTypes(arguments);
+		List<String> paramTypes;
+		try {
+			paramTypes = JavaModelSupport.paramTypes(arguments);
+		} catch (ToolInputException e) {
+			return McpToolResult.error(e.getMessage());
+		}
 		if (paramTypes != null && memberName == null) {
 			return McpToolResult.error("'paramTypes' picks one overload of 'memberName', so give a memberName too."); //$NON-NLS-1$
 		}
@@ -390,35 +394,11 @@ public final class FindReferencesTool implements IMcpTool {
 	private static List<IMember> select(List<IMember> members, List<String> paramTypes) {
 		List<IMember> selected = new ArrayList<>();
 		for (IMember member : members) {
-			if (member instanceof IMethod method && takes(method, paramTypes)) {
+			if (member instanceof IMethod method && JavaModelSupport.takesParameters(method, paramTypes)) {
 				selected.add(member);
 			}
 		}
 		return selected;
-	}
-
-	private static boolean takes(IMethod method, List<String> paramTypes) {
-		String[] actual = method.getParameterTypes();
-		if (actual.length != paramTypes.size()) {
-			return false;
-		}
-		for (int i = 0; i < actual.length; i++) {
-			String full = Signature.toString(actual[i]);
-			String simple = Signature.getSimpleName(full);
-			String wanted = paramTypes.get(i).trim();
-			if (!wanted.equals(full) && !wanted.equals(simple) && !Signature.getSimpleName(wanted).equals(simple)) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	/** {@code null} when absent, which is not the same as an empty list: that is the no-argument overload. */
-	private static List<String> paramTypes(Map<String, Object> arguments) {
-		if (!(arguments.get("paramTypes") instanceof List<?> list)) { //$NON-NLS-1$
-			return null;
-		}
-		return list.stream().map(String::valueOf).toList();
 	}
 
 	private static int limitTo(String accessKind) {
@@ -512,7 +492,12 @@ public final class FindReferencesTool implements IMcpTool {
 		if (!ACCESS_KINDS.contains(accessKind)) {
 			return entry.put("error", "Unknown accessKind '%s'.".formatted(accessKind)); //$NON-NLS-1$ //$NON-NLS-2$
 		}
-		List<String> paramTypes = paramTypes(query);
+		List<String> paramTypes;
+		try {
+			paramTypes = JavaModelSupport.paramTypes(query);
+		} catch (ToolInputException e) {
+			return entry.put("error", e.getMessage()); //$NON-NLS-1$
+		}
 		if (paramTypes != null && memberName == null) {
 			return entry.put("error", "'paramTypes' picks one overload of 'memberName', so give a memberName too."); //$NON-NLS-1$ //$NON-NLS-2$
 		}

@@ -480,9 +480,11 @@ final class RegistryIndex {
 			add(literal.group(1), new Evidence("reflection", path, "string literal", null, null, true)); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		Matcher any = ANY_REFLECTION.matcher(content);
+		SourceText lines = null;
 		while (any.find()) {
 			if (!literals.contains(Integer.valueOf(any.start()))) {
-				dynamicReflection.add(path + ":" + FileText.lineOf(content, any.start())); //$NON-NLS-1$
+				lines = lines == null ? SourceText.of(content) : lines;
+				dynamicReflection.add(path + ":" + lines.lineOf(any.start())); //$NON-NLS-1$
 			}
 		}
 	}

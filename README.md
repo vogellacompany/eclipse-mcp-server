@@ -182,7 +182,7 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_find_references` | References to a type or member, single or batched as counts |
 | `eclipse_list_declarations` | Declarations cross-checked against the extension registry and e4 models, for dead code sweeps |
 | `eclipse_get_call_hierarchy`, `eclipse_get_type_hierarchy` | Callers, supertypes and subtypes |
-| `eclipse_get_source`, `eclipse_search_types` | Source and Javadoc of any type on the classpath, type search by name |
+| `eclipse_get_source`, `eclipse_get_outline`, `eclipse_search_types` | Source and Javadoc of any type or single member on the classpath, a type's members with signatures and line ranges, type search by name |
 | ✎ `eclipse_rename` | Rename through the JDT refactoring |
 | ✎ `eclipse_clean_up`, `eclipse_remove_unused_imports`, `eclipse_organize_imports`, `eclipse_format` | JDT clean-ups, import handling and formatting |
 | ✎ `eclipse_set_java_version` | Set a project's compiler level and JDK |

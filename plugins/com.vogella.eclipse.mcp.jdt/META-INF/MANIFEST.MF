@@ -6,6 +6,7 @@ Bundle-Version: 3.2.0.qualifier
 Bundle-Vendor: vogella GmbH
 Bundle-RequiredExecutionEnvironment: JavaSE-25
 Automatic-Module-Name: com.vogella.eclipse.mcp.jdt
+Export-Package: com.vogella.eclipse.mcp.jdt.internal;x-friends:="com.vogella.eclipse.mcp.core.tests"
 Require-Bundle: org.eclipse.core.runtime;bundle-version="3.31.0",
  org.eclipse.core.resources;bundle-version="3.20.0",
  org.eclipse.jdt.core;bundle-version="3.38.0",
