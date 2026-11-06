@@ -1,5 +1,12 @@
 package com.vogella.eclipse.mcp.ui.internal;
 
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+
+import java.lang.foreign.Arena;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.SymbolLookup;
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
@@ -31,9 +38,11 @@ import com.vogella.eclipse.mcp.core.FileLocations;
  * <p>
  * {@code org.eclipse.swt.internal.win32.OS} exists on one window system only,
  * so it is reached by name here, the way {@link DisplayScaling} reaches
- * DPIUtil. Anywhere else this costs a reason string rather than a link error.
+ * DPIUtil, and {@code AttachThreadInput}, which it no longer has, is called
+ * in user32 directly. Anywhere else this costs a reason string rather than a
+ * link error.
  */
-final class NativeForeground {
+public final class NativeForeground {
 
 	private static final String OS = "org.eclipse.swt.internal.win32.OS"; //$NON-NLS-1$
 
@@ -84,24 +93,49 @@ final class NativeForeground {
 					.getMethod("GetWindowThreadProcessId", long.class, int[].class) //$NON-NLS-1$
 					.invoke(null, Long.valueOf(owner), null);
 			int ourThread = (Integer) os.getMethod("GetCurrentThreadId").invoke(null); //$NON-NLS-1$
-			Method attachThreadInput = os.getMethod("AttachThreadInput", int.class, int.class, //$NON-NLS-1$
-					boolean.class);
-			boolean attached = ownerThread != 0 && ownerThread != ourThread && Boolean.TRUE
-					.equals(attachThreadInput.invoke(null, Integer.valueOf(ourThread),
-							Integer.valueOf(ownerThread), Boolean.TRUE));
+			boolean foreign = ownerThread != 0 && ownerThread != ourThread;
+			boolean attached = false;
+			String plainReason = foreign
+					? "Windows refused to attach to the foreground thread's input queue, so the raise went out as a plain request" //$NON-NLS-1$
+					: null;
+			try {
+				attached = foreign && attachInput(ourThread, ownerThread, true);
+			} catch (RuntimeException | LinkageError e) {
+				plainReason = "AttachThreadInput could not be called, so the raise went out as a plain request: " + e; //$NON-NLS-1$
+			}
 			try {
 				setForeground.invoke(null, Long.valueOf(window));
 			} finally {
 				// a shared input queue left behind would make this IDE's keyboard state
 				// follow another process for as long as it lives
 				if (attached) {
-					attachThreadInput.invoke(null, Integer.valueOf(ourThread),
-							Integer.valueOf(ownerThread), Boolean.FALSE);
+					attachInput(ourThread, ownerThread, false);
 				}
 			}
-			return null;
+			return attached ? null : plainReason;
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
 			return "SWT's win32 internals could not be reached: " + e; //$NON-NLS-1$
+		}
+	}
+
+	private static volatile MethodHandle attachThreadInput;
+
+	/** Attaches or detaches two threads' input queues, called directly since SWT's {@code OS} no longer has it. */
+	public static boolean attachInput(int thread, int toThread, boolean attach) {
+		MethodHandle handle = attachThreadInput;
+		if (handle == null) {
+			handle = Linker.nativeLinker().downcallHandle(
+					SymbolLookup.libraryLookup("user32.dll", Arena.global()).findOrThrow("AttachThreadInput"), //$NON-NLS-1$ //$NON-NLS-2$
+					FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT, JAVA_INT));
+			attachThreadInput = handle;
+		}
+		try {
+			return (int) handle.invokeExact(thread, toThread, attach ? 1 : 0) != 0;
+		} catch (RuntimeException | Error e) {
+			throw e;
+		} catch (Throwable e) {
+			// a downcall declares Throwable but throws nothing checked
+			throw new IllegalStateException(e);
 		}
 	}
 
