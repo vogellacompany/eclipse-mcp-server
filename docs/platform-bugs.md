@@ -24,23 +24,6 @@ A dialog opened after a first capture was photographed as the workbench under it
 `ScreenPixels` reads through the pixbuf call instead, and `ScreenshotTools` falls back to `copyArea` where that is unavailable.
 Filed as https://github.com/eclipse-platform/eclipse.platform.swt/issues/3685.
 
-### SWT: `Control.print` does not paint a `CTabFolder`'s `topRight` control
-
-A print of a `CTabFolder` omits its `topRight` children, which in the workbench
-are the view toolbar, the view menu and the minimise and maximise buttons.
-Rooting the print at the folder, at its parent and at the window's content
-composite all miss them, so no ancestor supplies them.
-
-The tab row is also laid out as though the control were absent: for a stack
-whose model reports `ToolbarComposite` at x=369, the printed tab label runs to
-about x=460, which cannot happen on screen. So the folder paints itself without
-its `topRight` rather than merely skipping a child.
-
-Observed on GTK at zoom 200 through `eclipse_screenshot` with `includeToolbar`.
-Nothing filed yet. The consequence for this project is that `includeToolbar`
-cannot show a view toolbar; capture the shell and crop to bounds from
-`eclipse_get_widget_tree` instead.
-
 ### p2: a failed resolution reports only "Operation details"
 
 `ProfileChangeOperation.resolveModal` returns, for every planner failure, a
