@@ -8,13 +8,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IFolder;
 import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.jdt.core.IJavaProject;
 import org.junit.jupiter.api.AfterEach;
@@ -38,6 +42,44 @@ class ListDeclarationsToolTest {
 	@AfterEach
 	void deleteTestProjects() throws Exception {
 		fixture.dispose();
+	}
+
+	@Test
+	void theProjectFormSeesAnOutsideEditOnlyAfterRefreshing() throws Exception {
+		assertRefreshDecides(Map.of("project", PROJECT, "maxResults", 5000));
+	}
+
+	@Test
+	void theTypeNamesFormSeesAnOutsideEditOnlyAfterRefreshing() throws Exception {
+		assertRefreshDecides(Map.of("typeNames", List.of("registry.Unused")));
+	}
+
+	/** A model file written behind the workspace's back keeps registry.Unused alive only once refreshed. */
+	private void assertRefreshDecides(Map<String, Object> form) throws Exception {
+		fixtureProject();
+		IProject project = ResourcesPlugin.getWorkspace().getRoot().getProject(PROJECT);
+		Path model = project.getLocation().toPath().resolve("Outside.e4xmi");
+		Files.writeString(model, """
+				<?xml version="1.0" encoding="ASCII"?>
+				<application:Application xmlns:application="http://www.eclipse.org/ui/2010/UIModel/application">
+				  <addons xmi:id="_2" elementId="registry.outside"
+				     contributionURI="bundleclass://registry.host/registry.Unused"/>
+				</application:Application>
+				""");
+
+		Map<String, Object> skipped = new HashMap<>(form);
+		skipped.put("refresh", Boolean.FALSE);
+		Map<String, Object> withoutRefresh = TestFixture.callAndParse(TOOL, skipped);
+		assertEquals(Boolean.FALSE, withoutRefresh.get("refreshed"), "got " + withoutRefresh);
+		assertFalse(withoutRefresh.containsKey("refreshMillis"), "got " + withoutRefresh);
+		assertEquals("dead", find(withoutRefresh, "registry.Unused").get("registryStatus"),
+				"refresh false must not read the file written outside the IDE");
+
+		Map<String, Object> withRefresh = TestFixture.callAndParse(TOOL, form);
+		assertEquals(Boolean.TRUE, withRefresh.get("refreshed"), "got " + withRefresh);
+		assertTrue(withRefresh.get("refreshMillis") instanceof Number, "got " + withRefresh);
+		assertEquals("live-via-registry", find(withRefresh, "registry.Unused").get("registryStatus"),
+				"the default refresh must read the file written outside the IDE");
 	}
 
 	@Test

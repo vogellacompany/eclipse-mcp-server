@@ -77,7 +77,8 @@ public final class ListDeclarationsTool implements IMcpTool {
 				    "deprecated": {"type":"string","enum":["all","yes","no","forRemoval","annotationOnly","javadocOnly"],"default":"all","description":"Filter by deprecation. 'yes' is either mark, 'forRemoval' only @Deprecated(forRemoval=true). 'annotationOnly' and 'javadocOnly' find the two marks disagreeing, which is what dates a deprecation wrongly."},
 				    "includeTest":{"type":"boolean","default":false,"description":"Include source folders the build path marks as test."},
 				    "includeReflection":{"type":"boolean","default":true,"description":"Scan source for Class.forName and loadClass. A literal name counts as a registry position; a name built at runtime makes every dead verdict in that project provisional, which is reported either way."},
-				    "maxResults": {"type":"integer","default":500,"minimum":1,"maximum":5000}
+				    "maxResults": {"type":"integer","default":500,"minimum":1,"maximum":5000},
+				    """ + JavaModelSupport.refreshProperty("Read changes made outside the IDE into the whole workspace first, whatever projects are named, because the registry evidence comes from every project's plugin.xml, manifest, OSGI-INF and application models.") + """
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -128,18 +129,18 @@ public final class ListDeclarationsTool implements IMcpTool {
 
 		try {
 			List<String> typeNames = strings(arguments, "typeNames"); //$NON-NLS-1$
-			JavaModelSupport.refresh(null, monitor);
+			JavaModelSupport.Refreshed refreshed = JavaModelSupport.refreshUnlessSkipped(args, null, monitor);
 			RegistryIndex index = RegistryIndex.build(monitor);
 			if (!typeNames.isEmpty()) {
-				return McpToolResult.of(reportNamed(typeNames, projects, index, kinds, visibility, status, deprecated, maxResults,
-						includeReflection, monitor).toString());
+				return McpToolResult.of(refreshed.report(reportNamed(typeNames, projects, index, kinds, visibility, status,
+						deprecated, maxResults, includeReflection, monitor)).toString());
 			}
 			List<IPackageFragmentRoot> roots = sourceRoots(projects, includeTest);
 			if (includeReflection) {
 				index.indexReflection(containers(roots), MAX_REFLECTION_FILES, monitor);
 			}
-			return McpToolResult.of(report(roots, index, kinds, visibility, status, deprecated, maxResults, includeReflection,
-					monitor).toString());
+			return McpToolResult.of(refreshed.report(report(roots, index, kinds, visibility, status, deprecated, maxResults,
+					includeReflection, monitor)).toString());
 		} catch (JavaModelException e) {
 			throw new McpToolException("Could not read the Java model", e); //$NON-NLS-1$
 		} catch (CoreException e) {

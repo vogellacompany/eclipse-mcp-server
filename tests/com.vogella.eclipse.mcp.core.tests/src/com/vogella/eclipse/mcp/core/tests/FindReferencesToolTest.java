@@ -1,9 +1,12 @@
 package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -58,6 +61,51 @@ class FindReferencesToolTest {
 		assertEquals(Integer.valueOf(0), results.get(1).get("total"), "got " + results.get(1));
 		// a name that does not resolve fails that query alone rather than the batch
 		assertTrue(results.get(2).containsKey("error"), "got " + results.get(2));
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void refreshesBeforeSearchingUnlessToldNotTo() throws Exception {
+		IJavaProject project = fixture.createJavaProject("mcp-refresh-references-test");
+		TestFixture.addType(project, "example", "Holder", """
+				package example;
+				public class Holder {
+					public static int USED = 1;
+				}
+				""");
+		TestFixture.build(project.getProject());
+		// written the way a client's own shell writes, so the workspace has not seen it
+		Path outside = project.getProject().getLocation().toPath().resolve("src/example/Reader.java");
+		Files.writeString(outside, """
+				package example;
+				public class Reader {
+					int read() { return Holder.USED; }
+				}
+				""");
+
+		Map<String, Object> skipped = TestFixture.callAndParse("eclipse_find_references", Map.of("project",
+				"mcp-refresh-references-test", "typeName", "example.Holder", "memberName", "USED", "refresh", false));
+		assertEquals(Integer.valueOf(0), skipped.get("total"), "got " + skipped);
+		assertEquals(Boolean.FALSE, skipped.get("refreshed"), "got " + skipped);
+		assertFalse(skipped.containsKey("refreshMillis"), "got " + skipped);
+		Map<String, Object> skippedBatch = TestFixture.callAndParse("eclipse_find_references",
+				Map.of("project", "mcp-refresh-references-test", "refresh", false, "queries",
+						List.of(Map.of("typeName", "example.Holder", "memberName", "USED"))));
+		assertEquals(Boolean.FALSE, skippedBatch.get("refreshed"), "got " + skippedBatch);
+		assertFalse(skippedBatch.containsKey("refreshMillis"), "got " + skippedBatch);
+		assertEquals(Integer.valueOf(0), ((List<Map<String, Object>>) skippedBatch.get("results")).get(0).get("total"),
+				"got " + skippedBatch);
+
+		Map<String, Object> refreshed = TestFixture.callAndParse("eclipse_find_references", Map.of("project",
+				"mcp-refresh-references-test", "typeName", "example.Holder", "memberName", "USED"));
+		assertEquals(Integer.valueOf(1), refreshed.get("total"), "got " + refreshed);
+		assertEquals(Boolean.TRUE, refreshed.get("refreshed"), "got " + refreshed);
+		assertTrue(refreshed.get("refreshMillis") instanceof Number, "got " + refreshed);
+		Map<String, Object> refreshedBatch = TestFixture.callAndParse("eclipse_find_references",
+				Map.of("project", "mcp-refresh-references-test", "queries",
+						List.of(Map.of("typeName", "example.Holder", "memberName", "USED"))));
+		assertEquals(Boolean.TRUE, refreshedBatch.get("refreshed"), "got " + refreshedBatch);
+		assertTrue(refreshedBatch.get("refreshMillis") instanceof Number, "got " + refreshedBatch);
 	}
 
 	@Test

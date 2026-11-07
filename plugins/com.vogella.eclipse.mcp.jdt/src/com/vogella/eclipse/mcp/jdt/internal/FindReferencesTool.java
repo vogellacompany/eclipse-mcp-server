@@ -74,7 +74,8 @@ public final class FindReferencesTool implements IMcpTool {
 				    "paramTypes": {"type":"array","items":{"type":"string"},"description":"Selects one overload of memberName by its parameter types, simple or qualified: ['String','int','int'] or ['java.lang.String']. An empty array is the no-argument overload. Without it all overloads are searched and byMember splits the counts."},
 				    "project":    {"type":"string","description":"Optional project used to resolve the type. It scopes the search to that project AND everything on its build path, which includes other workspace projects and jars, so it narrows less than it looks. Defaults to the whole workspace."},
 				    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000},
-				    "accessKind": {"type":"string","enum":["all","read","write"],"default":"all","description":"Restrict to read or to write accesses. Only meaningful for fields. With 'all', field results additionally carry a byKind summary and a kind per match. A field initializer is a write but not a reference, so byKind counts can exceed total. With 'read' or 'write' the matches include the declaration itself, marked with declaration true and counted under declaration in byKind."}
+				    "accessKind": {"type":"string","enum":["all","read","write"],"default":"all","description":"Restrict to read or to write accesses. Only meaningful for fields. With 'all', field results additionally carry a byKind summary and a kind per match. A field initializer is a write but not a reference, so byKind counts can exceed total. With 'read' or 'write' the matches include the declaration itself, marked with declaration true and counted under declaration in byKind."},
+				    """ + JavaModelSupport.REFRESH_PROPERTY + """
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -85,7 +86,7 @@ public final class FindReferencesTool implements IMcpTool {
 		ToolArguments args = ToolArguments.of(arguments);
 		List<Map<String, Object>> queries = queries(arguments);
 		if (!queries.isEmpty()) {
-			return countAll(queries, args.getString("project"), monitor); //$NON-NLS-1$
+			return countAll(queries, args, monitor);
 		}
 		String typeName = args.getString("typeName"); //$NON-NLS-1$
 		if (typeName == null) {
@@ -109,12 +110,13 @@ public final class FindReferencesTool implements IMcpTool {
 		List<Overload> overloads;
 		List<IMember> fields;
 		String resolved;
+		JavaModelSupport.Refreshed refreshed;
 		try {
 			projects = JavaModelSupport.javaProjects(projectName);
 			if (projects.isEmpty()) {
 				return McpToolResult.error("The workspace contains no open Java project."); //$NON-NLS-1$
 			}
-			JavaModelSupport.refresh(projectName, monitor);
+			refreshed = JavaModelSupport.refreshUnlessSkipped(args, projectName, monitor);
 			types = JavaModelSupport.findTypes(typeName, projects, monitor);
 			type = types.get(0);
 			overloads = memberName == null ? List.of() : overloadsOf(types, memberName, paramTypes);
@@ -239,7 +241,7 @@ public final class FindReferencesTool implements IMcpTool {
 					"'%s' resolved to a copy inside build output (%s). No project compiles against that, so treat this count with suspicion." //$NON-NLS-1$
 							.formatted(type.getFullyQualifiedName(), JavaModelSupport.originOf(type)));
 		}
-		result.put("matches", reported); //$NON-NLS-1$
+		refreshed.report(result).put("matches", reported); //$NON-NLS-1$
 		return McpToolResult.of(result.toString());
 	}
 
@@ -469,8 +471,9 @@ public final class FindReferencesTool implements IMcpTool {
 	 * Counts references for many elements in one call.
 	 * Counts only, since a sweep needs locations for almost none of hundreds of candidates.
 	 */
-	private McpToolResult countAll(List<Map<String, Object>> queries, String projectName, IProgressMonitor monitor)
+	private McpToolResult countAll(List<Map<String, Object>> queries, ToolArguments args, IProgressMonitor monitor)
 			throws McpToolException {
+		String projectName = args.getString("project"); //$NON-NLS-1$
 		List<IJavaProject> projects;
 		try {
 			projects = JavaModelSupport.javaProjects(projectName);
@@ -480,7 +483,7 @@ public final class FindReferencesTool implements IMcpTool {
 		if (projects.isEmpty()) {
 			return McpToolResult.error("The workspace contains no open Java project."); //$NON-NLS-1$
 		}
-		JavaModelSupport.refresh(projectName, monitor);
+		JavaModelSupport.Refreshed refreshed = JavaModelSupport.refreshUnlessSkipped(args, projectName, monitor);
 		IJavaSearchScope scope = projectName == null ? SearchEngine.createWorkspaceScope()
 				: SearchEngine.createJavaSearchScope(new IJavaElement[] { projects.get(0) }, true);
 		JsonArray results = new JsonArray();
@@ -490,10 +493,10 @@ public final class FindReferencesTool implements IMcpTool {
 			}
 			results.add(count(query, projects, scope, monitor));
 		}
-		return McpToolResult.of(new JsonObject().put("total", Integer.valueOf(results.size())) //$NON-NLS-1$
+		return McpToolResult.of(refreshed.report(new JsonObject().put("total", Integer.valueOf(results.size())) //$NON-NLS-1$
 				.put("countsOnly", Boolean.TRUE) //$NON-NLS-1$
 				.put("note", //$NON-NLS-1$
-						"Counts only. Ask the single form about anything whose match locations you need.") //$NON-NLS-1$
+						"Counts only. Ask the single form about anything whose match locations you need.")) //$NON-NLS-1$
 				.put("results", results).toString()); //$NON-NLS-1$
 	}
 

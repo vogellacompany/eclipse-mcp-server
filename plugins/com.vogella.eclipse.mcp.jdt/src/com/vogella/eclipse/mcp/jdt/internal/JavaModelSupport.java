@@ -27,6 +27,7 @@ import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.Signature;
 
 import com.vogella.eclipse.mcp.core.McpToolException;
+import com.vogella.eclipse.mcp.core.ToolArguments;
 import com.vogella.eclipse.mcp.core.WorkspaceSync;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
@@ -66,6 +67,39 @@ final class JavaModelSupport {
 			throw new McpToolException("Could not read the natures of project " + projectName, e); //$NON-NLS-1$
 		}
 		return List.of(JavaCore.create(project));
+	}
+
+	/** The {@code refresh} argument of the search tools that narrow it to {@code project}. */
+	static final String REFRESH_PROPERTY = refreshProperty(
+			"Read changes made outside the IDE into the workspace before searching: the whole workspace, or only 'project' when one is named, not the projects on its build path, which the search still reads."); //$NON-NLS-1$
+
+	/** The {@code refresh} argument, its description starting with what {@code refreshed} covers. */
+	static String refreshProperty(String what) {
+		return """
+				"refresh": {"type":"boolean","default":true,"description":"%s It walks every file it covers, which takes tens of seconds in a workspace of hundreds of projects even when nothing changed; refreshMillis in the answer says what it cost. Pass false when no file was changed outside the IDE since the last refresh, for example after one eclipse_refresh following your edits."}""" //$NON-NLS-1$
+				.formatted(what);
+	}
+
+	/** Whether the call refreshed and how long it took, reported in the answer. */
+	record Refreshed(boolean done, long millis) {
+		JsonObject report(JsonObject result) {
+			result.put("refreshed", Boolean.valueOf(done)); //$NON-NLS-1$
+			if (done) {
+				result.put("refreshMillis", Long.valueOf(millis)); //$NON-NLS-1$
+			}
+			return result;
+		}
+	}
+
+	/** Refreshes like {@link #refresh(String, IProgressMonitor)} unless the {@code refresh} argument is false. */
+	static Refreshed refreshUnlessSkipped(ToolArguments args, String projectName, IProgressMonitor monitor)
+			throws McpToolException {
+		if (!args.getBoolean("refresh", true)) { //$NON-NLS-1$
+			return new Refreshed(false, 0);
+		}
+		long start = System.nanoTime();
+		refresh(projectName, monitor);
+		return new Refreshed(true, (System.nanoTime() - start) / 1_000_000);
 	}
 
 	/** Reads outside edits into the workspace, so the search index does not answer from stale files. */
