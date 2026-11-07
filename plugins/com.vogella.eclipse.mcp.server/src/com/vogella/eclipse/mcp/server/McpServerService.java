@@ -259,6 +259,10 @@ public final class McpServerService {
 		try {
 			if (ephemeralPort) {
 				int savedPort = LastPortFile.read();
+				if (savedPort == McpPreferences.getPort()) {
+					savedPort = -1;
+				}
+
 				if (savedPort > 0) {
 					try {
 						jetty = startEphemeralJetty(savedPort, token);

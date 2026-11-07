@@ -51,7 +51,7 @@ The page also shows the URL, the bearer token and the discovery file, and can re
 By default, if the configured port is taken, the server stays down and the page says why.
 To enable best-effort port reuse, add `-Dcom.vogella.eclipse.mcp.server.ephemeralPort=true` after `-vmargs` in `eclipse.ini`; the page then disables the port field, and the stored value applies again once the property is gone.
 Every successful startup saves its listening port as `lastPort` in `<workspace>/.metadata/.plugins/com.vogella.eclipse.mcp.server/port.properties`, regardless of mode.
-Fixed-port mode always binds only to the configured preference and never reads the saved port for binding; ephemeral mode tries the saved port first.
+Fixed-port mode always binds only to the configured preference and never reads the saved port for binding; ephemeral mode tries the saved port first, unless it equals the configured fixed port, in which case it requests an OS-assigned port.
 If that port is occupied, it immediately asks the operating system to assign another; failures reading or writing the file do not prevent startup.
 The actual endpoint remains in `endpoint.json`, which clients must rediscover after every restart.
 
