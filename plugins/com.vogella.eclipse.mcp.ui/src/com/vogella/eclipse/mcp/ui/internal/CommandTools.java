@@ -251,7 +251,7 @@ public final class CommandTools {
 				if (returnOnDialog && !UiThread.onUiThread()) {
 					ModalShell dialog = awaitDialog(pending, before, nativeBefore, deadline);
 					if (dialog != null) {
-						pending.whenComplete((text, error) -> logLateCompletion(wanted, text, error));
+						pending.whenComplete((text, error) -> logLateCompletion(wanted, dialog.title(), text, error));
 						return McpToolResult.of(dialogOpen(wanted, dialog, System.currentTimeMillis() - started, recorder)
 								.toString());
 					}
@@ -261,7 +261,7 @@ public final class CommandTools {
 						TimeUnit.MILLISECONDS));
 			} catch (TimeoutException e) {
 				// registered here so a completion between the timeout and this line is logged too
-				pending.whenComplete((text, error) -> logLateCompletion(wanted, text, error));
+				pending.whenComplete((text, error) -> logLateCompletion(wanted, null, text, error));
 				return McpToolResult.of(timedOut(wanted, timeoutSeconds, recorder).toString());
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
@@ -562,12 +562,21 @@ public final class CommandTools {
 									.formatted(Long.valueOf(timeoutSeconds))));
 		}
 
-		private static void logLateCompletion(String wanted, String answer, Throwable error) {
+		private static void logLateCompletion(String wanted, String dialog, String answer, Throwable error) {
+			ILog.get().log(new Status(IStatus.INFO, McpUiComponent.PLUGIN_ID,
+					lateCompletionMessage(wanted, dialog, answer, error)));
+		}
+
+		/** The Error Log text for a command that finished after its call answered; {@code dialog} is the title it answered with. */
+		public static String lateCompletionMessage(String wanted, String dialog, String answer, Throwable error) {
 			String outcome = error != null ? "it failed with: " + error //$NON-NLS-1$
 					: answer == null ? "no result" : "its answer was: " + cap(answer); //$NON-NLS-1$ //$NON-NLS-2$
-			ILog.get().log(new Status(IStatus.INFO, McpUiComponent.PLUGIN_ID,
-					"eclipse_run_workbench_command: '%s' finished after its call had already answered; the caller never saw this result. %s" //$NON-NLS-1$
-							.formatted(wanted, outcome)));
+			if (dialog != null) {
+				return "eclipse_run_workbench_command: '%s' ended after the call had answered dialogOpen for '%s'. %s" //$NON-NLS-1$
+						.formatted(wanted, dialog, outcome);
+			}
+			return "eclipse_run_workbench_command: '%s' finished after its call had already answered; the caller never saw this result. %s" //$NON-NLS-1$
+					.formatted(wanted, outcome);
 		}
 	}
 
