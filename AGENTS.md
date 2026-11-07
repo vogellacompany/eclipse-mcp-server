@@ -293,7 +293,8 @@ A capture downscaled by a fraction is blurry and looks like a rendering bug.
 ## Releasing
 
 Every push to `main` publishes through `.github/workflows/release.yml`; `gh workflow run release.yml` republishes by hand.
-It builds `main` with the tests, so a red build publishes nothing, copies the p2 repository into `releases/<built version>/` on `gh-pages`, regenerates the composite with `releng/update-composite-site.sh --only "$version"` and force-pushes a single orphan commit.
+It builds `main` with the tests, so a red build publishes nothing, copies the p2 repository into `releases/<built version>/` on `gh-pages`, regenerates the composite with `releng/update-composite-site.sh --only "$version" --retain "$previous"` and force-pushes a single orphan commit.
+`--retain` keeps the build the live composite listed on disk, unlisted, for one more publish: GitHub Pages and its CDN switch files one at a time, so an install that read the old composite would otherwise get 404 for every jar.
 Use `--only`, not `--keep 1`: `sort -V` does not sort qualifiers as p2 does.
 Its `concurrency` group lets a newer pending run replace an older one.
 Pushing a `v<version>` tag also creates the GitHub release with the repository archive, the only downloadable zip and the only place older builds survive.

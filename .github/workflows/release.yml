@@ -54,13 +54,15 @@ jobs:
       - name: Add the build to the update site
         run: |
           version="${{ steps.version.outputs.value }}"
+          # the build the live composite lists, kept unlisted so an install that read it still finds its jars
+          previous=$(grep -o "releases/[^']*" gh-pages/compositeArtifacts.xml 2>/dev/null | sed 's|^releases/||' | tail -1 || true)
           rm -rf "gh-pages/releases/$version"
           mkdir -p "gh-pages/releases/$version"
           cp -r update-site/com.vogella.eclipse.mcp.repository/target/repository/. "gh-pages/releases/$version"
-          # the site carries this build only; everything else is dropped.
+          # the site lists this build only; everything but the previous one is dropped.
           # --only rather than --keep 1, because a qualifier-named directory does
           # not sort above a plainly named one: 0.2.1 beats 0.2.0.202608201136.
-          releng/update-composite-site.sh --only "$version" gh-pages
+          releng/update-composite-site.sh --only "$version" ${previous:+--retain "$previous"} gh-pages
 
       # one orphan commit replaces the branch, so its history never accumulates
       # the copies of builds the site has already dropped
