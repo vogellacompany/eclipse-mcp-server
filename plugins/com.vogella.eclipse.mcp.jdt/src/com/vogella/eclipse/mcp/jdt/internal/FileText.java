@@ -47,15 +47,4 @@ final class FileText {
 		String header = manifestHeader(manifest, "Bundle-SymbolicName"); //$NON-NLS-1$
 		return header == null ? null : header.split(";", 2)[0].trim(); //$NON-NLS-1$
 	}
-
-	/** The one-based line of an offset in {@code content}. */
-	static int lineOf(String content, int offset) {
-		int line = 1;
-		for (int i = 0; i < offset && i < content.length(); i++) {
-			if (content.charAt(i) == '\n') {
-				line++;
-			}
-		}
-		return line;
-	}
 }

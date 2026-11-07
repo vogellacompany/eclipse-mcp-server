@@ -475,7 +475,8 @@ class McpServerServiceTest {
 		// one harmless step, so the smoke test exercises the sequencing rather than
 		// whatever a step might do
 		case "eclipse_run_script" -> Map.of("steps", List.of(Map.of("tool", "eclipse_list_projects")));
-		case "eclipse_get_type_hierarchy", "eclipse_get_source" -> Map.of("typeName", "java.lang.Object");
+		case "eclipse_get_type_hierarchy", "eclipse_get_source", "eclipse_get_outline" ->
+			Map.of("typeName", "java.lang.Object");
 		// scoped to the fixture: a binary type is searched by name, so asking for
 		// references to java.lang.Object walks the whole workspace
 		case "eclipse_find_references" -> Map.of("typeName", "example.Sample", "project", PROJECT);

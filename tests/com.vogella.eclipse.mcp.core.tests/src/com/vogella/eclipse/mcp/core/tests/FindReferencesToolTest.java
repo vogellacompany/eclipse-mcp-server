@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -177,6 +179,57 @@ class FindReferencesToolTest {
 		List<Map<String, Object>> results = (List<Map<String, Object>>) result.get("results");
 		assertEquals(Integer.valueOf(1), results.get(0).get("total"), "got " + results.get(0));
 		assertEquals(Integer.valueOf(0), results.get(1).get("total"), "the int overload is dead, got " + results.get(1));
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void aQualifiedParamTypeSelectsOnlyTheOverloadInThatPackage() throws Exception {
+		IJavaProject project = fixture.createJavaProject("mcp-overload-package-test");
+		// written qualified: JDT's pattern for an unqualified source parameter matches any type of that simple name
+		TestFixture.addType(project, "example", "Dates", """
+				package example;
+				public class Dates {
+					public static int set(java.util.Date day) { return 1; }
+					public static int set(java.sql.Date day) { return 2; }
+				}
+				""");
+		TestFixture.addType(project, "example", "Caller", """
+				package example;
+				public class Caller {
+					int a() { return Dates.set(new java.util.Date()); }
+					int b() { return Dates.set(new java.sql.Date(0)) + Dates.set(new java.sql.Date(1)); }
+				}
+				""");
+		TestFixture.build(project.getProject());
+
+		Map<String, Object> sql = TestFixture.callAndParse("eclipse_find_references", Map.of("project",
+				"mcp-overload-package-test", "typeName", "example.Dates", "memberName", "set", "paramTypes",
+				List.of("java.sql.Date")));
+		assertEquals(Integer.valueOf(2), sql.get("total"), "only the java.sql.Date overload, got " + sql);
+		List<Map<String, Object>> results = (List<Map<String, Object>>) TestFixture.callAndParse(
+				"eclipse_find_references",
+				Map.of("project", "mcp-overload-package-test", "queries",
+						List.of(Map.of("typeName", "example.Dates", "memberName", "set", "paramTypes",
+								List.of("java.util.Date")))))
+				.get("results");
+		assertEquals(Integer.valueOf(1), results.get(0).get("total"), "got " + results.get(0));
+
+		Map<String, Object> call = new HashMap<>(Map.of("project", "mcp-overload-package-test", "typeName",
+				"example.Dates", "memberName", "set"));
+		call.put("paramTypes", null);
+		assertEquals(Integer.valueOf(3), TestFixture.callAndParse("eclipse_find_references", call).get("total"),
+				"A null paramTypes is absent and searches every overload");
+		call.put("paramTypes", Arrays.asList((Object) null));
+		assertTrue(TestFixture.call("eclipse_find_references", call).isError(),
+				"A null entry is refused rather than matching nothing");
+		call.put("paramTypes", "java.sql.Date");
+		assertTrue(TestFixture.call("eclipse_find_references", call).isError(), "A string is not a list");
+		List<Map<String, Object>> refused = (List<Map<String, Object>>) TestFixture.callAndParse(
+				"eclipse_find_references",
+				Map.of("project", "mcp-overload-package-test", "queries",
+						List.of(Map.of("typeName", "example.Dates", "memberName", "set", "paramTypes", "int"))))
+				.get("results");
+		assertTrue(refused.get(0).get("error") != null, "A malformed query is refused in its entry: " + refused);
 	}
 
 	@Test

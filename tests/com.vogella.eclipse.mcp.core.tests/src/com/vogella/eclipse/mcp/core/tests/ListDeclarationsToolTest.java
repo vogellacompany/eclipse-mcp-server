@@ -203,6 +203,8 @@ class ListDeclarationsToolTest {
 
 		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("project", PROJECT));
 		assertNotNull(result.get("dynamicReflectionSites"), "the concatenated load should be reported");
+		assertTrue(strings(result, "dynamicReflectionSites").contains("/" + PROJECT + "/src/registry/Loader.java:4"),
+				"the site is reported at its own line, got " + result.get("dynamicReflectionSites"));
 		assertTrue(String.join(" ", strings(result, "caveats")).contains("provisional"),
 				"a dead verdict next to unresolvable reflection has to be reported as provisional");
 	}
