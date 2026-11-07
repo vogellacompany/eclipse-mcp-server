@@ -4,13 +4,14 @@
 # directories present under <site>/releases, optionally dropping older releases
 # first.
 #
-# Usage: releng/update-composite-site.sh [--keep <n>] <site-directory>
+# Usage: releng/update-composite-site.sh [--keep <n>] [--only <version> [--retain <version>]] <site-directory>
 
 set -euo pipefail
 
-usage="Usage: $0 [--keep <n>] [--only <version>] <site-directory>"
+usage="Usage: $0 [--keep <n>] [--only <version> [--retain <version>]] <site-directory>"
 keep=
 only=
+retain=
 
 while [ $# -gt 0 ]; do
 	case $1 in
@@ -23,6 +24,10 @@ while [ $# -gt 0 ]; do
 		;;
 	--only)
 		only=${2:?$usage}
+		shift 2
+		;;
+	--retain)
+		retain=${2:?$usage}
 		shift 2
 		;;
 	-*)
@@ -38,6 +43,10 @@ while [ $# -gt 0 ]; do
 done
 
 site=${site:?$usage}
+if [ -n "$retain" ] && [ -z "$only" ]; then
+	echo "--retain only applies together with --only" >&2
+	exit 1
+fi
 releases_dir="$site/releases"
 
 if [ ! -d "$releases_dir" ]; then
@@ -65,7 +74,10 @@ if [ -n "$only" ]; then
 		exit 1
 	fi
 	for version in "${versions[@]}"; do
-		if [ "$version" != "$only" ]; then
+		if [ "$version" = "$retain" ] && [ "$version" != "$only" ]; then
+			# unlisted, but a client still holding the previous composite can finish its download
+			echo "Keeping release $version unlisted"
+		elif [ "$version" != "$only" ]; then
 			echo "Dropping release $version"
 			rm -rf "${releases_dir:?}/$version"
 		fi
@@ -129,7 +141,7 @@ for version in "${versions[@]}"; do
 done
 if [ ${#versions[@]} -eq 1 ]; then
 	builds_heading='Current build'
-	builds_note='This site carries the newest build and nothing else. The previous build is dropped when a new one is published, so update rather than pin.'
+	builds_note='This site offers the newest build and nothing else. The previous build is dropped one publish later, so update rather than pin.'
 else
 	builds_heading='Builds'
 	builds_note='The site offers all of these, and p2 installs the highest version it finds.'
