@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.URI;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.jar.Attributes;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
@@ -32,7 +34,10 @@ import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IProjectDescription;
 import org.eclipse.core.resources.IncrementalProjectBuilder;
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.ILog;
+import org.eclipse.core.runtime.ILogListener;
 import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.preferences.InstanceScope;
 import org.eclipse.jdt.core.IClasspathEntry;
 import org.eclipse.jdt.core.IJavaProject;
@@ -41,6 +46,8 @@ import org.eclipse.jdt.launching.JavaRuntime;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.osgi.framework.FrameworkUtil;
+import org.osgi.service.prefs.Preferences;
 
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolRegistry;
@@ -71,6 +78,8 @@ class McpServerServiceTest {
 	private static int testPort;
 
 	private static final String PROJECT = "mcp-endpoint-test";
+
+	private static final String PORT_FILE_NAME = "port.properties";
 
 	private static final String SAMPLE = "/%s/src/example/Sample.java".formatted(PROJECT);
 
@@ -189,44 +198,178 @@ class McpServerServiceTest {
 	}
 
 	@Test
-	void takesAPortFromTheSystemWithEphemeralPortsOn() throws Exception {
+	void startsWithoutAPersistedPortAndPublishesTheAssignedPort() throws Exception {
 		McpServerService service = McpServerService.getInstance();
-		String previousProperty = System.getProperty(McpServerService.EPHEMERAL_PORT_PROPERTY);
-		int configuredPort = McpPreferences.getPort();
-		service.stop();
-		try (ServerSocket blocker = new ServerSocket(configuredPort, 0, InetAddress.getLoopbackAddress())) {
+		try (ServerTestState ignored = new ServerTestState()) {
+			Files.deleteIfExists(portFile());
+			int configuredPort = McpPreferences.getPort();
+			try (ServerSocket blocker = new ServerSocket(configuredPort, 0, InetAddress.getByName("127.0.0.1"))) {
+				System.setProperty(McpServerService.EPHEMERAL_PORT_PROPERTY, "true");
+				service.start();
+
+				int actualPort = service.getPort();
+				assertTrue(actualPort > 0);
+				assertNotEquals(configuredPort, actualPort);
+				assertEquals(configuredPort, McpPreferences.getPort());
+				assertTrue(service.isPortEphemeral());
+				assertTrue(Files.readString(portFile()).contains("lastPort=" + actualPort));
+				assertEquals("http://127.0.0.1:%d/mcp".formatted(actualPort), endpoint().url());
+				String discovery = Files.readString(McpServerService.getEndpointFile());
+				assertTrue(discovery.contains(endpoint().url()), "The discovery file should advertise the bound port");
+
+				try (McpSyncClient client = connect()) {
+					assertNotNull(client.initialize());
+					assertFalse(client.listTools().tools().isEmpty());
+
+					InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putBoolean(McpPreferences.KEY_ENABLED, true);
+					McpServerLifecycle.reconcile().join();
+					assertEquals(actualPort, service.getPort(),
+							"Applying the preferences must not move an ephemeral port");
+					assertFalse(client.listTools().tools().isEmpty(), "The existing MCP session must remain usable");
+				}
+			}
+		}
+	}
+
+	@Test
+	void reusesTheSavedPortAfterShutdown() throws Exception {
+		McpServerService service = McpServerService.getInstance();
+		try (ServerTestState ignored = new ServerTestState()) {
+			Files.deleteIfExists(portFile());
+			System.setProperty(McpServerService.EPHEMERAL_PORT_PROPERTY, "true");
+			service.start();
+			int previousPort = service.getPort();
+			assertTrue(Files.readString(portFile()).contains("lastPort=" + previousPort));
+
+			service.stop();
+			assertTrue(Files.exists(portFile()), "Normal shutdown must preserve the saved port");
+			service.start();
+
+			assertEquals(previousPort, service.getPort());
+			assertTrue(service.isPortEphemeral());
+			try (McpSyncClient client = connect()) {
+				assertNotNull(client.initialize());
+				assertFalse(client.listTools().tools().isEmpty());
+			}
+		}
+	}
+
+	@Test
+	void fallsBackWhenTheSavedPortIsOccupied() throws Exception {
+		McpServerService service = McpServerService.getInstance();
+		try (ServerTestState ignored = new ServerTestState();
+				ServerSocket blocker = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
+			int occupiedPort = blocker.getLocalPort();
+			Files.writeString(portFile(), "lastPort=" + occupiedPort + System.lineSeparator());
 			System.setProperty(McpServerService.EPHEMERAL_PORT_PROPERTY, "true");
 			service.start();
 
 			int actualPort = service.getPort();
 			assertTrue(actualPort > 0);
-			assertNotEquals(configuredPort, actualPort);
+			assertNotEquals(occupiedPort, actualPort);
 			assertTrue(service.isPortEphemeral());
-			assertEquals("http://127.0.0.1:%d/mcp".formatted(actualPort), endpoint().url());
+			assertTrue(Files.readString(portFile()).contains("lastPort=" + actualPort));
 			String discovery = Files.readString(McpServerService.getEndpointFile());
-			assertTrue(discovery.contains(endpoint().url()), "The discovery file should advertise the bound port");
+			assertTrue(discovery.contains("\"listening\""), discovery);
+			assertFalse(discovery.contains("\"failed\""), discovery);
+			assertTrue(discovery.contains(endpoint().url()), discovery);
 
 			try (McpSyncClient client = connect()) {
 				assertNotNull(client.initialize());
 				assertFalse(client.listTools().tools().isEmpty());
 			}
+		}
+	}
 
-			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putBoolean(McpPreferences.KEY_ENABLED, true);
-			McpServerLifecycle.reconcile().join();
-			assertEquals(actualPort, service.getPort(), "Applying the preferences must not move an ephemeral port");
+	@Test
+	void ignoresCorruptedOrInvalidSavedPorts() throws Exception {
+		McpServerService service = McpServerService.getInstance();
+		int configuredPort = McpPreferences.getPort();
+		List<String> invalidFiles = List.of("lastPort=not-a-number\n", "lastPort=65536\n",
+				"lastPort=" + "\\" + "uZZZZ\n");
+		try (ServerTestState ignored = new ServerTestState();
+				ServerSocket blocker = new ServerSocket(configuredPort, 0, InetAddress.getByName("127.0.0.1"))) {
+			System.setProperty(McpServerService.EPHEMERAL_PORT_PROPERTY, "true");
+			for (String invalidFile : invalidFiles) {
+				Files.writeString(portFile(), invalidFile);
+				service.start();
 
-			service.stop();
-			assertFalse(service.isPortEphemeral(), "A stopped server has no ephemeral port");
-		} finally {
-			service.stop();
-			if (previousProperty == null) {
-				System.clearProperty(McpServerService.EPHEMERAL_PORT_PROPERTY);
-			} else {
-				System.setProperty(McpServerService.EPHEMERAL_PORT_PROPERTY, previousProperty);
+				assertTrue(service.getPort() > 0);
+				assertNotEquals(configuredPort, service.getPort());
+				assertTrue(Files.readString(portFile()).contains("lastPort=" + service.getPort()));
+				service.stop();
 			}
-			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).remove(McpPreferences.KEY_ENABLED);
-			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putInt(McpPreferences.KEY_PORT, configuredPort);
+		}
+	}
+
+	@Test
+	void fixedPortModeIgnoresSavedPortForBinding() throws Exception {
+		McpServerService service = McpServerService.getInstance();
+		int configuredPort = McpPreferences.getPort();
+		int savedPort = McpServerService.findFreePort(configuredPort);
+		assertTrue(savedPort > configuredPort, "Expected a distinct available port for the persisted value");
+		try (ServerTestState ignored = new ServerTestState()) {
+			String savedValue = "lastPort=" + savedPort + System.lineSeparator();
+			Files.writeString(portFile(), savedValue);
+			System.clearProperty(McpServerService.EPHEMERAL_PORT_PROPERTY);
 			service.start();
+
+			assertEquals(configuredPort, service.getPort());
+			assertFalse(service.isPortEphemeral());
+			assertTrue(Files.readString(portFile()).contains("lastPort=" + configuredPort));
+			try (McpSyncClient client = connect()) {
+				assertNotNull(client.initialize());
+				assertFalse(client.listTools().tools().isEmpty());
+			}
+		}
+	}
+
+	@Test
+	void ephemeralModeDoesNotReuseTheConfiguredFixedPort() throws Exception {
+		McpServerService service = McpServerService.getInstance();
+		int configuredPort = McpPreferences.getPort();
+		AtomicBoolean attemptedSavedPort = new AtomicBoolean();
+		ILog log = Platform.getLog(FrameworkUtil.getBundle(McpServerService.class));
+		ILogListener listener = (status, pluginId) -> {
+			if (status.getMessage().startsWith("Saved port ")) {
+				attemptedSavedPort.set(true);
+			}
+		};
+		log.addLogListener(listener);
+		try {
+			try (ServerTestState ignored = new ServerTestState();
+					ServerSocket blocker = new ServerSocket(configuredPort, 0, InetAddress.getByName("127.0.0.1"))) {
+				Files.writeString(portFile(), "lastPort=" + configuredPort + System.lineSeparator());
+				System.setProperty(McpServerService.EPHEMERAL_PORT_PROPERTY, "true");
+				service.start();
+
+				assertFalse(attemptedSavedPort.get(), "The configured port must be skipped without a bind attempt");
+				assertNotEquals(configuredPort, service.getPort());
+				assertTrue(service.isPortEphemeral());
+				assertTrue(Files.readString(portFile()).contains("lastPort=" + service.getPort()));
+				try (McpSyncClient client = connect()) {
+					assertNotNull(client.initialize());
+					assertFalse(client.listTools().tools().isEmpty());
+				}
+			}
+		} finally {
+			log.removeLogListener(listener);
+		}
+	}
+
+	@Test
+	void failedFixedPortStartupDoesNotOverwriteTheSavedPort() throws Exception {
+		McpServerService service = McpServerService.getInstance();
+		try (ServerTestState ignored = new ServerTestState();
+				ServerSocket blocker = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
+			String savedValue = "lastPort=43210" + System.lineSeparator();
+			Files.writeString(portFile(), savedValue);
+			System.clearProperty(McpServerService.EPHEMERAL_PORT_PROPERTY);
+			InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).putInt(McpPreferences.KEY_PORT,
+					blocker.getLocalPort());
+
+			assertThrows(McpServerException.class, service::start);
+			assertEquals(savedValue, Files.readString(portFile()));
 		}
 	}
 
@@ -570,6 +713,77 @@ class McpServerServiceTest {
 						"Bearer " + endpoint().token()))
 				.build();
 		return McpClient.sync(transport).jsonSchemaValidator(schemaValidator()).build();
+	}
+
+	private static Path portFile() {
+		return McpServerService.getEndpointFile().resolveSibling(PORT_FILE_NAME);
+	}
+
+	private static void restoreProperty(String name, String value) {
+		if (value == null) {
+			System.clearProperty(name);
+		} else {
+			System.setProperty(name, value);
+		}
+	}
+
+	private static final class ServerTestState implements AutoCloseable {
+
+		private final McpServerService service = McpServerService.getInstance();
+
+		private final Preferences preferences;
+
+		private final String ephemeralProperty;
+
+		private final String portPreference;
+
+		private final String enabledPreference;
+
+		private final boolean wasRunning;
+
+		private final boolean hadPortFile;
+
+		private final String portFileContents;
+
+		ServerTestState() throws IOException {
+			preferences = InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER);
+			ephemeralProperty = System.getProperty(McpServerService.EPHEMERAL_PORT_PROPERTY);
+			portPreference = preferences.get(McpPreferences.KEY_PORT, null);
+			enabledPreference = preferences.get(McpPreferences.KEY_ENABLED, null);
+			wasRunning = service.isRunning();
+			hadPortFile = Files.exists(portFile());
+			portFileContents = hadPortFile ? Files.readString(portFile()) : null;
+			service.stop();
+		}
+
+		@Override
+		public void close() throws Exception {
+			service.stop();
+			try {
+				restoreProperty(McpServerService.EPHEMERAL_PORT_PROPERTY, ephemeralProperty);
+				restorePreference(McpPreferences.KEY_PORT, portPreference);
+				restorePreference(McpPreferences.KEY_ENABLED, enabledPreference);
+				if (hadPortFile) {
+					Files.writeString(portFile(), portFileContents);
+				} else {
+					Files.deleteIfExists(portFile());
+				}
+				preferences.flush();
+			} finally {
+				if (wasRunning) {
+					service.start();
+				}
+			}
+		}
+
+		private void restorePreference(String key, String value) {
+			if (value == null) {
+				preferences.remove(key);
+			} else {
+				preferences.put(key, value);
+			}
+		}
+
 	}
 
 	/**
