@@ -29,6 +29,7 @@ import com.vogella.eclipse.mcp.server.internal.BearerTokenFilter;
 import com.vogella.eclipse.mcp.server.internal.JsonRpcErrorFilter;
 import com.vogella.eclipse.mcp.server.internal.BundleJsonSchemaValidator;
 import com.vogella.eclipse.mcp.server.internal.EndpointFile;
+import com.vogella.eclipse.mcp.server.internal.LastPortFile;
 import com.vogella.eclipse.mcp.server.internal.McpToolAdapter;
 import com.vogella.eclipse.mcp.server.internal.ReadyGate;
 import com.vogella.eclipse.mcp.server.internal.ToolReferences;
@@ -59,7 +60,7 @@ public final class McpServerService {
 
 	private static final String LOOPBACK = "127.0.0.1"; //$NON-NLS-1$
 
-	/** The system property that lets the operating system choose the port at each start. */
+	/** The system property that enables best-effort reuse of an OS-assigned port. */
 	public static final String EPHEMERAL_PORT_PROPERTY = "com.vogella.eclipse.mcp.server.ephemeralPort"; //$NON-NLS-1$
 
 	/** How long a request waits for the tools to load, kept below the 30 seconds Claude Code gives a connection. */
@@ -214,8 +215,8 @@ public final class McpServerService {
 
 	/**
 	 * Replaces the bearer token and restarts the server when it is running, so that the
-	 * new token takes effect. Every configured client has to be updated afterwards, with
-	 * ephemeral ports also to the new port.
+	 * new token takes effect. Every configured client has to be updated afterwards; in
+	 * ephemeral mode it may also need the endpoint URL if the port changes.
 	 */
 	public synchronized void regenerateToken() throws McpServerException {
 		TokenStore.regenerate();
@@ -226,8 +227,8 @@ public final class McpServerService {
 	}
 
 	/**
-	 * Starts the server on the configured port, or with {@link #EPHEMERAL_PORT_PROPERTY} on one the
-	 * system picks. Does nothing when it is already running.
+	 * Starts the server on the configured port, or with {@link #EPHEMERAL_PORT_PROPERTY} on its last
+	 * port when available and otherwise one the system picks. Does nothing when it is already running.
 	 * Never call this on the UI thread, starting Jetty takes a moment.
 	 */
 	public synchronized void start() throws McpServerException {
@@ -256,8 +257,31 @@ public final class McpServerService {
 					.formatted(Integer.valueOf(port), LOOPBACK, Long.valueOf(PORT_WAIT_MILLIS / 1000)));
 		}
 		try {
-			jetty = createJetty(port, token);
-			jetty.start();
+			if (ephemeralPort) {
+				int savedPort = LastPortFile.read();
+				if (savedPort > 0) {
+					try {
+						jetty = startEphemeralJetty(savedPort, token);
+					} catch (Exception e) {
+						if (!isBindFailure(e)) {
+							throw e;
+						}
+						ILog.get().warn("Saved port %d is unavailable; retrying with an OS-assigned port" //$NON-NLS-1$
+								.formatted(Integer.valueOf(savedPort)), e);
+						try {
+							jetty = startEphemeralJetty(0, token);
+						} catch (Exception fallbackFailure) {
+							fallbackFailure.addSuppressed(e);
+							throw fallbackFailure;
+						}
+					}
+				} else {
+					jetty = startEphemeralJetty(0, token);
+				}
+			} else {
+				jetty = createJetty(port, token);
+				jetty.start();
+			}
 		} catch (Exception e) {
 			stopQuietly();
 			// no other port would help when the system picks it, so the page offers none
@@ -293,6 +317,7 @@ public final class McpServerService {
 			ClientSessions.setProvider(ActiveSessions::count);
 			TracePages.setPublisher((title, html) -> "http://%s:%d%s/%s".formatted(LOOPBACK, Integer.valueOf(listeningPort), //$NON-NLS-1$
 					TRACE_PATH, TracePageStore.add(title, html)));
+			LastPortFile.write(listeningPort);
 			EndpointFile.write(endpoint);
 		} catch (RuntimeException | Error e) {
 			stopQuietly();
@@ -359,6 +384,28 @@ public final class McpServerService {
 		context.addServlet(new ServletHolder(new TraceServlet()), TRACE_PATH + "/*"); //$NON-NLS-1$
 		server.setHandler(context);
 		return server;
+	}
+
+	private Server startEphemeralJetty(int port, String token) throws Exception {
+		Server candidate = createJetty(port, token);
+		try {
+			candidate.start();
+		} catch (Exception failure) {
+			try {
+				candidate.stop();
+			} catch (Exception stopFailure) {
+				failure.addSuppressed(stopFailure);
+				ILog.get().warn("Could not stop a failed Jetty startup attempt", stopFailure); //$NON-NLS-1$
+			}
+			try {
+				candidate.destroy();
+			} catch (Exception destroyFailure) {
+				failure.addSuppressed(destroyFailure);
+				ILog.get().warn("Could not dispose of a failed Jetty startup attempt", destroyFailure); //$NON-NLS-1$
+			}
+			throw failure;
+		}
+		return candidate;
 	}
 
 	private void stopQuietly() {

@@ -96,7 +96,7 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 		addField(new BooleanFieldEditor(McpPreferences.KEY_ENABLED, "&Enable MCP server", getFieldEditorParent()));
 		boolean ephemeral = McpServerService.isEphemeralPortRequested();
 		portField = new IntegerFieldEditor(McpPreferences.KEY_PORT,
-				ephemeral ? "&Port (not used, the system picks one):" : "&Port:", getFieldEditorParent());
+				ephemeral ? "&Port (not used in ephemeral mode):" : "&Port:", getFieldEditorParent());
 		if (!ephemeral) {
 			// a disabled field must not fail on a stored value nobody can correct here
 			portField.setValidRange(1024, 65535);
@@ -151,24 +151,31 @@ public class McpPreferencePage extends FieldEditorPreferencePage implements IWor
 		regenerate.addListener(SWT.Selection, event -> regenerateToken());
 
 		Label hint = new Label(group, SWT.WRAP);
-		hint.setText("Send the token as an Authorization: Bearer header. It is kept across IDE restarts, so a client has to be configured only once. Regenerating it invalidates every configured client.");
+		hint.setText("Send the token as an Authorization: Bearer header. It is kept across IDE restarts; in ephemeral-port mode the endpoint URL can still change. Regenerating the token invalidates every configured client.");
 		GridData hintLayout = new GridData(SWT.FILL, SWT.BEGINNING, true, false, 3, 1);
 		hintLayout.widthHint = FIELD_WIDTH_HINT;
 		hint.setLayoutData(hintLayout);
 	}
 
 	private void regenerateToken() {
-		if (!MessageDialog.openConfirm(getShell(), "Regenerate token",
-				"Every MCP client configured with the current token will be rejected until it is updated."
-						+ (McpServerService.isEphemeralPortRequested()
-								? " The server also comes back on a new port, shown in the URL below and written to the discovery file."
-								: "")
-						+ " Continue?")) {
+		McpServerService service = McpServerService.getInstance();
+		String message = "Every MCP client configured with the current token will be rejected until it is updated.";
+		if (service.isRunning()) {
+			message += " The server will restart with the new token.";
+			if (McpServerService.isEphemeralPortRequested()) {
+				message += " In ephemeral mode it tries to reuse its previous port, but may come back on a different port;"
+						+ " rediscover the URL from endpoint.json.";
+			}
+		} else {
+			message += " The server is stopped and will remain stopped.";
+		}
+
+		if (!MessageDialog.openConfirm(getShell(), "Regenerate token", message + " Continue?")) {
 			return;
 		}
 		Job job = Job.create("Regenerating the MCP token", monitor -> {
 			try {
-				McpServerService.getInstance().regenerateToken();
+				service.regenerateToken();
 			} catch (McpServerException e) {
 				ILog.get().error(e.getMessage(), e.getCause() == null ? e : e.getCause());
 			}
