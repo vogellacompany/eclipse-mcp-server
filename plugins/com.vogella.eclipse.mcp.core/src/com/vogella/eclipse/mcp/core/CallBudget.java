@@ -74,6 +74,18 @@ public final class CallBudget {
 		return (int) Math.max(1, Math.min(left, maxWaitSeconds()));
 	}
 
+	/** What is left of the current call less the margin in milliseconds, or {@link #maxWaitSeconds} as milliseconds outside a call; never negative. */
+	public static long leftMillis() {
+		long max = TimeUnit.SECONDS.toMillis(maxWaitSeconds());
+		Long deadline = DEADLINE.get();
+		if (deadline == null) {
+			return max;
+		}
+		long left = TimeUnit.NANOSECONDS.toMillis(deadline.longValue() - System.nanoTime())
+				- TimeUnit.SECONDS.toMillis(MARGIN_SECONDS);
+		return Math.max(0, Math.min(left, max));
+	}
+
 	/** {@code requested} capped at what is left of the call, so a wait late in a script still answers in time. */
 	public static int boundedWaitSeconds(int requested) {
 		return Math.min(requested, leftSeconds());

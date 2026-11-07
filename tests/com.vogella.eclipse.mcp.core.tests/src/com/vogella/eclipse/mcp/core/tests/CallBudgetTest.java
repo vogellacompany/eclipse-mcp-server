@@ -93,4 +93,26 @@ class CallBudgetTest {
 		}
 		assertEquals(27, CallBudget.boundedWaitSeconds(60), "outside a call the whole timeout applies again");
 	}
+
+	@Test
+	void whatIsLeftInMillisecondsIsTheCallLessTheMargin() {
+		CallBudget.enter(5);
+		try {
+			long left = CallBudget.leftMillis();
+			assertTrue(left >= 0 && left <= 2000, "left " + left);
+		} finally {
+			CallBudget.leave();
+		}
+		assertEquals(CallBudget.maxWaitSeconds() * 1000L, CallBudget.leftMillis());
+	}
+
+	@Test
+	void aCallShorterThanTheMarginHasNoMillisecondsLeft() {
+		CallBudget.enter(1);
+		try {
+			assertEquals(0, CallBudget.leftMillis());
+		} finally {
+			CallBudget.leave();
+		}
+	}
 }
