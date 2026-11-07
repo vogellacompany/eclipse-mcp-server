@@ -22,7 +22,7 @@ https://vogellacompany.github.io/eclipse-mcp-server/
 ```
 
 and install the **Eclipse MCP Server** feature.
-The site carries the newest build only; older versions are available as the repository zip attached to each GitHub release, through *Add > Archive*.
+The site lists the newest build only; older versions are available as the repository zip attached to each GitHub release, through *Add > Archive*.
 
 ## Building
 
