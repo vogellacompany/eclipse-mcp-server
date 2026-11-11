@@ -264,7 +264,7 @@ public final class Screencast {
 		}
 
 		/** Ends the recording; the reason is what the answer reports. */
-		public void stop(String reason) {
+		public synchronized void stop(String reason) {
 			if (running) {
 				running = false;
 				stoppedBy = reason;
@@ -316,17 +316,28 @@ public final class Screencast {
 				stop("error: " + e); //$NON-NLS-1$
 				return;
 			}
+			int segment;
 			synchronized (this) {
+				// a stop from another thread during the paint has shut the encoder down
+				if (!running) {
+					return;
+				}
 				timestamps.add(Long.valueOf(now));
 				paintMillis += System.currentTimeMillis() - correction - now;
 				armedAt = System.currentTimeMillis() - correction;
+				encoder.execute(() -> encode(data, index));
+				segment = segments;
 			}
-			encoder.execute(() -> encode(data, index));
 			if (frames() >= maxFrames) {
 				stop("maxFrames"); //$NON-NLS-1$
 				return;
 			}
-			display.timerExec(intervalMillis, () -> tick(display));
+			display.timerExec(intervalMillis, () -> {
+				// a timer armed before a stop must not paint beside the resumed segment's own
+				if (segment == segments()) {
+					tick(display);
+				}
+			});
 		}
 
 		private void encode(ImageData data, int index) {
