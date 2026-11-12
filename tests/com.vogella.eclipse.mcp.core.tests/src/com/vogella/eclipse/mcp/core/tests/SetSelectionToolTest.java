@@ -54,4 +54,12 @@ class SetSelectionToolTest {
 		String description = TestFixture.tool("eclipse_set_selection").getInputSchema();
 		assertTrue(description.contains("includeRows"), "got " + description);
 	}
+
+	@Test
+	void theDescriptionNamesTheTreeMatchFields() {
+		String description = TestFixture.tool("eclipse_set_selection").getDescription();
+		for (String field : new String[] { "matchedToViewerElements", "selectRevealCalled", "treeSearchTruncated" }) {
+			assertTrue(description.contains(field), "missing " + field + " in " + description);
+		}
+	}
 }

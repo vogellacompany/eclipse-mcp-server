@@ -1,12 +1,15 @@
 package com.vogella.eclipse.mcp.ui.internal;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.Adapters;
+import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.ISelectionProvider;
@@ -17,6 +20,7 @@ import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.IWorkbenchPartReference;
 import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
+import org.eclipse.ui.part.ISetSelectionTarget;
 import org.eclipse.ui.services.IEvaluationService;
 
 import com.vogella.eclipse.mcp.core.IMcpTool;
@@ -196,7 +200,7 @@ public final class SelectionTools {
 
 		@Override
 		public String getDescription() {
-			return "Sets the selection of a view or editor through its own selection provider, the way clicking rows would, so a command's enablement can then be asked for that selection with eclipse_run_workbench_command. CHANGES WHAT IS SELECTED IN THE IDE, which is visible to whoever is at it, and the previous selection is reported so it can be put back. A part whose provider only relays its viewer, the e4 model editor among them, gets its row paths selected on the Tree or Table, and an empty array cleared on its Tree, the way a click does, so the highlight and the details follow, and selectedThroughWidget says so; mixing row paths with workspace paths there falls back to the provider. This is the way to build a selection that no key can reach here: a view may register no Select All handler, and eclipse_press_key cannot deliver Ctrl+A on a backgrounded Wayland session. Elements are addressed as workspace paths ('/org.eclipse.compare'), project names ('g'), or widget tree row paths ('0/0/0/r7') from eclipse_get_widget_tree with includeRows, which is what reaches an element that is not a resource. A closed project resolves like any other, since whether the selection may contain one is exactly what an enablement test is about. THE ANSWER REPORTS WHAT THE SELECTION SERVICE HOLDS AFTERWARDS rather than what was requested, because a viewer silently drops an element it does not have, and a selection that did not take would otherwise be visible only as a wrong enablement answer later."; //$NON-NLS-1$
+			return "Sets the selection of a view or editor through its own selection provider, the way clicking rows would, so a command's enablement can then be asked for that selection with eclipse_run_workbench_command. CHANGES WHAT IS SELECTED IN THE IDE, which is visible to whoever is at it, and the previous selection is reported so it can be put back. A part whose provider only relays its viewer, the e4 model editor among them, gets its row paths selected on the Tree or Table, and an empty array cleared on its Tree, the way a click does, so the highlight and the details follow, and selectedThroughWidget says so; mixing row paths with workspace paths there falls back to the provider. A resource is matched to the item an expanded tree shows for it, and matchedToViewerElements counts those matches; one without an item is handed to the part's own selectReveal when it has one and reveal is on, which expands the tree down to it, and selectRevealCalled says so (after shows whether it took); treeSearchTruncated says the search for items hit its cap. This is the way to build a selection that no key can reach here: a view may register no Select All handler, and eclipse_press_key cannot deliver Ctrl+A on a backgrounded Wayland session. Elements are addressed as workspace paths ('/org.eclipse.compare'), project names ('g'), or widget tree row paths ('0/0/0/r7') from eclipse_get_widget_tree with includeRows, which is what reaches an element that is not a resource. A closed project resolves like any other, since whether the selection may contain one is exactly what an enablement test is about. THE ANSWER REPORTS WHAT THE SELECTION SERVICE HOLDS AFTERWARDS rather than what was requested, because a viewer silently drops an element it does not have, and a selection that did not take would otherwise be visible only as a wrong enablement answer later."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -261,7 +265,8 @@ public final class SelectionTools {
 				}
 				// a viewer selects its own model objects (the Package Explorer holds an IJavaProject for an IProject) and setSelection silently drops
 				// what it does not recognise, so the requested resources are matched against what the viewer shows
-				List<Object> asShown = matchToViewer(elements, part);
+				Matched matched = matchToViewer(elements, part);
+				List<Object> asShown = matched.elements();
 				ISelection selection = asShown.isEmpty() ? StructuredSelection.EMPTY
 						: new StructuredSelection(asShown);
 				// only a Viewer can be told to reveal; a plain provider takes the
@@ -284,16 +289,34 @@ public final class SelectionTools {
 				if (throughWidget && !holds(provider.getSelection(), asShown)) {
 					provider.setSelection(selection);
 				}
+				// the viewer drops an element its tree shows no item for, while the part's own selectReveal expands down to it
+				boolean selectReveal = false;
+				String selectRevealError = null;
+				if (reveal && !asShown.isEmpty() && !holds(provider.getSelection(), asShown)
+						&& Adapters.adapt(part, ISetSelectionTarget.class) instanceof ISetSelectionTarget target) {
+					selectReveal = true;
+					try {
+						target.selectReveal(new StructuredSelection(elements));
+						revealed = true;
+					} catch (RuntimeException | LinkageError e) {
+						selectRevealError = String.valueOf(e);
+					}
+				}
 				JsonObject result = new JsonObject().put("part", part.getSite().getId()) //$NON-NLS-1$
 						.put("revealed", Boolean.valueOf(revealed)) //$NON-NLS-1$
 						.put("selectedThroughWidget", Boolean.valueOf(throughWidget)) //$NON-NLS-1$
+						.put("selectRevealCalled", Boolean.valueOf(selectReveal)) //$NON-NLS-1$
 						.put("requested", Integer.valueOf(specs.size())) //$NON-NLS-1$
 						.put("resolved", Integer.valueOf(elements.size())) //$NON-NLS-1$
-						.put("matchedToViewerElements", Integer.valueOf(asShown.size())) //$NON-NLS-1$
+						.put("matchedToViewerElements", Integer.valueOf(matched.count())) //$NON-NLS-1$
+						.put("treeSearchTruncated", Boolean.valueOf(matched.truncated())) //$NON-NLS-1$
 						.put("unresolved", unresolved) //$NON-NLS-1$
 						.put("previousSelection", before); //$NON-NLS-1$
 				result.put("after", currentState( //$NON-NLS-1$
 						"This is what the selection service and the evaluation context hold now, not what was asked for; a viewer drops an element it does not have.")); //$NON-NLS-1$
+				if (selectRevealError != null) {
+					result.put("selectRevealError", selectRevealError); //$NON-NLS-1$
+				}
 				if (unresolved.size() > 0) {
 					result.put("unresolvedNote", //$NON-NLS-1$
 							"Those could not be resolved and are not in the selection. A workspace path starts with '/', a project name does not, and a row path comes from eclipse_get_widget_tree with includeRows."); //$NON-NLS-1$
@@ -302,46 +325,38 @@ public final class SelectionTools {
 			});
 		}
 
-		/**
-		 * The objects the viewer itself holds for the requested elements.
-		 * <p>
-		 * A resource is matched to the tree item whose data adapts to the same
-		 * resource, so the model object the viewer put there is what gets selected.
-		 * Anything with no item of its own is kept as it was, since a provider that
-		 * is not a tree may well accept it.
-		 */
-		private static List<Object> matchToViewer(List<Object> requested, IWorkbenchPart part) {
-			org.eclipse.swt.widgets.Tree tree = treeOf(part);
-			if (tree == null || requested.isEmpty()) {
-				return requested;
-			}
-			List<Object> shown = new ArrayList<>();
-			for (Object element : requested) {
-				IResource resource = Adapters.adapt(element, IResource.class);
-				Object match = resource == null ? null : findInTree(tree.getItems(), resource, 0);
-				shown.add(match == null ? element : match);
-			}
-			return shown;
+		private record Matched(List<Object> elements, int count, boolean truncated) {
 		}
 
-		/** The data of the item that stands for this resource, searched a few levels deep. */
-		private static Object findInTree(org.eclipse.swt.widgets.TreeItem[] items, IResource resource, int depth) {
-			if (depth > 2) {
-				return null;
+		/**
+		 * The objects the viewer itself holds for the requested elements; one
+		 * without a tree item is kept as it was, since a provider that is not a tree
+		 * may well accept it.
+		 */
+		private static Matched matchToViewer(List<Object> requested, IWorkbenchPart part) {
+			org.eclipse.swt.widgets.Tree tree = treeOf(part);
+			if (tree == null || requested.isEmpty()) {
+				return new Matched(requested, 0, false);
 			}
-			for (org.eclipse.swt.widgets.TreeItem item : items) {
-				IResource shown = item.getData() == null ? null : Adapters.adapt(item.getData(), IResource.class);
-				if (shown != null && shown.getFullPath().equals(resource.getFullPath())) {
-					return item.getData();
+			Set<IPath> wanted = new HashSet<>();
+			for (Object element : requested) {
+				IResource resource = Adapters.adapt(element, IResource.class);
+				if (resource != null) {
+					wanted.add(resource.getFullPath());
 				}
 			}
-			for (org.eclipse.swt.widgets.TreeItem item : items) {
-				Object found = findInTree(item.getItems(), resource, depth + 1);
-				if (found != null) {
-					return found;
+			TreeResources.Found found = TreeResources.find(tree, wanted);
+			List<Object> shown = new ArrayList<>();
+			int count = 0;
+			for (Object element : requested) {
+				IResource resource = Adapters.adapt(element, IResource.class);
+				Object match = resource == null ? null : found.data().get(resource.getFullPath());
+				if (match != null) {
+					count++;
 				}
+				shown.add(match == null ? element : match);
 			}
-			return null;
+			return new Matched(shown, count, found.truncated());
 		}
 
 		private static org.eclipse.swt.widgets.Tree treeOf(IWorkbenchPart part) {
@@ -409,7 +424,7 @@ public final class SelectionTools {
 			if (!(selection instanceof IStructuredSelection structured)) {
 				return elements.isEmpty() && (selection == null || selection.isEmpty());
 			}
-			return structured.size() == elements.size() && new java.util.HashSet<>(structured.toList()).equals(new java.util.HashSet<>(elements));
+			return new HashSet<>(structured.toList()).equals(new HashSet<>(elements));
 		}
 
 		/** Clears the part's tree and tells its viewer as a click on empty space does; {@code false} without a tree. */
