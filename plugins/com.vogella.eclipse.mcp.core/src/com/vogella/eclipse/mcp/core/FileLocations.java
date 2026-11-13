@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.core;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -25,6 +26,19 @@ public final class FileLocations {
 		// the separator rather than os.name: it is what the path parser itself uses,
 		// so it cannot disagree with the thing this class has to get right
 		return java.io.File.separatorChar == '\\';
+	}
+
+	/**
+	 * The path with symbolic links resolved, so two spellings of one place compare
+	 * equal, such as /var and /private/var on macOS. Normalized only when it cannot
+	 * be read.
+	 */
+	public static Path realPath(Path path) {
+		try {
+			return path.toRealPath();
+		} catch (IOException e) {
+			return path.toAbsolutePath().normalize();
+		}
 	}
 
 	/** The local path a {@code file:} URL names, or {@code null} when it names none. */

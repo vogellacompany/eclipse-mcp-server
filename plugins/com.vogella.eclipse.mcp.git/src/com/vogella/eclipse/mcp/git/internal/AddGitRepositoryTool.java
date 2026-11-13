@@ -1,7 +1,6 @@
 package com.vogella.eclipse.mcp.git.internal;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -15,6 +14,7 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.egit.core.RepositoryUtil;
 import org.eclipse.egit.core.op.ConnectProviderOperation;
 
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolException;
 import com.vogella.eclipse.mcp.core.McpToolResult;
@@ -136,13 +136,13 @@ public final class AddGitRepositoryTool implements IMcpTool {
 			return List.of();
 		}
 		// Path, not a string prefix: text comparison is case sensitive, which breaks on Windows
-		Path root = real(workTree.toPath());
+		Path root = FileLocations.realPath(workTree.toPath());
 		List<IProject> inside = new ArrayList<>();
 		for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
 			if (!project.isAccessible() || project.getLocation() == null) {
 				continue;
 			}
-			Path location = real(project.getLocation().toFile().toPath());
+			Path location = FileLocations.realPath(project.getLocation().toFile().toPath());
 			if (location.startsWith(root)) {
 				inside.add(project);
 			}
@@ -150,20 +150,23 @@ public final class AddGitRepositoryTool implements IMcpTool {
 		return inside;
 	}
 
-	/** Resolves symlinks such as macOS's /var to /private/var, so equal places compare equal. */
-	private static Path real(Path path) {
-		Path absolute = path.toAbsolutePath().normalize();
-		try {
-			return absolute.toRealPath();
-		} catch (IOException e) {
-			return absolute;
+	/**
+	 * The git directory spelled the way the project's location is, because EGit
+	 * finds the repository from the project and compares the two as text.
+	 */
+	public static File spelledLike(Path projectLocation, File gitDir) {
+		Path realLocation = FileLocations.realPath(projectLocation);
+		Path realGitDir = FileLocations.realPath(gitDir.toPath());
+		if (realLocation.getRoot() == null || !realLocation.getRoot().equals(realGitDir.getRoot())) {
+			return gitDir;
 		}
+		return projectLocation.resolve(realLocation.relativize(realGitDir)).normalize().toFile();
 	}
 
 	private static void connect(List<IProject> projects, File gitDir, IProgressMonitor monitor)
 			throws McpToolException {
 		Map<IProject, File> mapping = new LinkedHashMap<>();
-		projects.forEach(project -> mapping.put(project, gitDir));
+		projects.forEach(project -> mapping.put(project, spelledLike(project.getLocation().toFile().toPath(), gitDir)));
 		try {
 			new ConnectProviderOperation(mapping).execute(monitor);
 		} catch (CoreException e) {

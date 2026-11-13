@@ -1,7 +1,6 @@
 package com.vogella.eclipse.mcp.ide.internal;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -29,6 +28,7 @@ import org.eclipse.ui.internal.wizards.datatransfer.SmartImportJob;
 import org.eclipse.ui.wizards.datatransfer.ProjectConfigurator;
 
 import com.vogella.eclipse.mcp.core.CallBudget;
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -231,23 +231,14 @@ public final class ImportProjectTool implements IMcpTool {
 
 	/** The project among {@code projects} whose location is {@code directory}, or null. */
 	public static IProject projectAt(Collection<IProject> projects, File directory) {
-		Path wanted = real(directory);
+		Path wanted = FileLocations.realPath(directory.toPath());
 		for (IProject project : projects) {
 			IPath location = project.getLocation();
-			if (location != null && real(location.toFile()).equals(wanted)) {
+			if (location != null && FileLocations.realPath(location.toFile().toPath()).equals(wanted)) {
 				return project;
 			}
 		}
 		return null;
-	}
-
-	/** Resolves symbolic links, since the same directory is reached as /var and /private/var on macOS. */
-	private static Path real(File file) {
-		try {
-			return file.toPath().toRealPath();
-		} catch (IOException e) {
-			return file.toPath().toAbsolutePath().normalize();
-		}
 	}
 
 	/** The name in the directory's .project, or null when it has none yet. */

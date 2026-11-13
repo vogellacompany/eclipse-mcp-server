@@ -21,6 +21,7 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.treewalk.TreeWalk;
 
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -233,8 +234,8 @@ public final class RevertFilesTool implements IMcpTool {
 
 		/** The path relative to the working tree, or {@code null} when it is outside it. */
 		private static String relativize(Repository repository, File file) {
-			Path tree = repository.getWorkTree().toPath().toAbsolutePath().normalize();
-			Path target = file.toPath().toAbsolutePath().normalize();
+			Path tree = FileLocations.realPath(repository.getWorkTree().toPath());
+			Path target = FileLocations.realPath(file.toPath());
 			if (!target.startsWith(tree)) {
 				return null;
 			}

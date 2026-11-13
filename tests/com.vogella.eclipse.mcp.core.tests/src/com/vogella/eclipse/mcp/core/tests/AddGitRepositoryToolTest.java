@@ -3,6 +3,7 @@ package com.vogella.eclipse.mcp.core.tests;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.vogella.eclipse.mcp.core.McpToolResult;
+import com.vogella.eclipse.mcp.git.internal.AddGitRepositoryTool;
 
 /**
  * Registering a repository that is already on disk with EGit.
@@ -156,6 +158,34 @@ class AddGitRepositoryToolTest {
 			assertEquals(List.of(project.getName()), answer.get("projectsToConnect"), "got " + answer);
 		} finally {
 			project.delete(false, true, null);
+		}
+	}
+
+	@Test
+	void aProjectReachedThroughASymlinkIsFoundAndConnectedInItsOwnSpelling() throws Exception {
+		Path real = directory.toRealPath();
+		Path link = real.resolveSibling(real.getFileName() + "-link");
+		try {
+			Files.createSymbolicLink(link, real);
+		} catch (IOException | UnsupportedOperationException e) {
+			assumeTrue(false, "no symbolic links here: " + e.getMessage());
+		}
+		IProject project = ResourcesPlugin.getWorkspace().getRoot().getProject("mcp-git-linked-project");
+		try {
+			IProjectDescription description = ResourcesPlugin.getWorkspace().newProjectDescription(project.getName());
+			description.setLocation(new org.eclipse.core.runtime.Path(link.toString()));
+			project.create(description, null);
+			project.open(null);
+
+			Map<String, Object> answer = TestFixture.callAndParse(NAME,
+					Map.of("directory", real.toString(), "connectProjects", Boolean.TRUE));
+
+			assertEquals(List.of(project.getName()), answer.get("projectsToConnect"), "got " + answer);
+			assertEquals(link.resolve(".git").toFile(),
+					AddGitRepositoryTool.spelledLike(link, real.resolve(".git").toFile()));
+		} finally {
+			project.delete(false, true, null);
+			Files.deleteIfExists(link);
 		}
 	}
 
