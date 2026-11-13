@@ -76,6 +76,12 @@ class McpToolAdapterTest {
 	}
 
 	@Test
+	void aMissingClassReportedAsAnExceptionAlsoNamesADeletedInstallation(@TempDir Path directory) {
+		Throwable failure = new RuntimeException(new ClassNotFoundException("a.B"));
+		assertTrue(McpToolAdapter.missingInstallation(failure, directory.resolve("deleted")).contains("no longer exists"));
+	}
+
+	@Test
 	void aCauseChainThatLoopsEnds(@TempDir Path directory) {
 		Exception first = new IllegalStateException("first");
 		Exception second = new IllegalStateException("second", first);
@@ -84,7 +90,14 @@ class McpToolAdapterTest {
 	}
 
 	@Test
-	void aToolThatCannotLoadAClassStillAnswersWithoutBlamingAnExistingInstallation() {
+	void aToolThatCannotLoadAClassAnswersWithTheDeletedInstallation(@TempDir Path directory) {
+		Path deleted = directory.resolve("deleted");
+		assertTrue(callUnlinked(deleted).contains("no longer exists on disk"), callUnlinked(deleted));
+		String text = callUnlinked(directory);
+		assertTrue(text.contains("'unlinked_tool' failed: a/B") && !text.contains("no longer exists"), text);
+	}
+
+	private static String callUnlinked(Path installation) {
 		IMcpTool tool = new IMcpTool() {
 			@Override
 			public String getName() {
@@ -108,11 +121,11 @@ class McpToolAdapterTest {
 		};
 		ExecutorService tools = Executors.newCachedThreadPool();
 		try {
-			var specification = McpToolAdapter.toSpecification(tool, new JacksonMcpJsonMapperSupplier().get(), tools);
+			var specification = McpToolAdapter.toSpecification(tool, new JacksonMcpJsonMapperSupplier().get(), tools,
+					installation);
 			CallToolResult result = specification.callHandler().apply(null, new CallToolRequest("unlinked_tool", Map.of()));
-			String text = ((TextContent) result.content().get(0)).text();
 			assertEquals(Boolean.TRUE, result.isError());
-			assertTrue(text.contains("'unlinked_tool' failed: a/B") && !text.contains("no longer exists"), text);
+			return ((TextContent) result.content().get(0)).text();
 		} finally {
 			tools.shutdownNow();
 		}

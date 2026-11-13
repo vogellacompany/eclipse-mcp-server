@@ -57,13 +57,20 @@ public final class McpToolAdapter {
 
 	public static SyncToolSpecification toSpecification(IMcpTool tool, McpJsonMapper jsonMapper,
 			ExecutorService executor) {
+		return toSpecification(tool, jsonMapper, executor, INSTALLATION);
+	}
+
+	/** As {@link #toSpecification(IMcpTool, McpJsonMapper, ExecutorService)}, for an installation given by the caller. */
+	public static SyncToolSpecification toSpecification(IMcpTool tool, McpJsonMapper jsonMapper,
+			ExecutorService executor, Path installation) {
 		Tool descriptor = Tool.builder().name(tool.getName()).description(tool.getDescription())
 				.inputSchema(jsonMapper, tool.getInputSchema()).build();
 		return SyncToolSpecification.builder().tool(descriptor)
-				.callHandler((exchange, request) -> call(tool, request.arguments(), executor)).build();
+				.callHandler((exchange, request) -> call(tool, request.arguments(), executor, installation)).build();
 	}
 
-	private static CallToolResult call(IMcpTool tool, Map<String, Object> arguments, ExecutorService executor) {
+	private static CallToolResult call(IMcpTool tool, Map<String, Object> arguments, ExecutorService executor,
+			Path installation) {
 		// read per call, so that changing the preference takes effect without a restart
 		Duration timeout = McpPreferences.getCallTimeout();
 		NullProgressMonitor monitor = new NullProgressMonitor();
@@ -108,7 +115,7 @@ public final class McpToolAdapter {
 			Throwable cause = e.getCause() == null ? e : e.getCause();
 			ILog.get().error("The MCP tool '%s' failed".formatted(tool.getName()), cause); //$NON-NLS-1$
 			return error("The tool '%s' failed: %s%s".formatted(tool.getName(), describe(cause), //$NON-NLS-1$
-					missingInstallation(cause, INSTALLATION)));
+					missingInstallation(cause, installation)));
 		}
 	}
 
