@@ -715,7 +715,7 @@ public final class ScreenshotTools {
 				if (isBlank(data) && !uniformRegion) {
 					return Encoding.done(failure(printable == null
 							? "The capture came back uniform, so this display cannot be captured through the X11 root drawable. A compositing window manager redirects window contents into an offscreen pixmap, so reading the root yields nothing. There is no fallback for an area of the screen; capture a part, a shell or a widget instead, which can be painted directly." //$NON-NLS-1$
-							: "The capture came back uniform through both the X11 root drawable and by painting the widget, so this display cannot be captured at all. Nothing was written; do not trust screenshots here.")); //$NON-NLS-1$
+							: uniformPrintFailure(screenUnreliable, sameTurn, occluded)));
 				}
 				// before the filler is replaced: a half scale paint fills the top left quarter and the rest would then read as plain background
 				String scaleWarning = "widgetPrint".equals(method) ? paintCoverageWarning(data) : null; //$NON-NLS-1$
@@ -936,6 +936,27 @@ public final class ScreenshotTools {
 		 */
 		public static Size compositionSize(int clientWidth, int clientHeight) {
 			return new Size(Math.max(1, clientWidth), Math.max(1, clientHeight));
+		}
+
+		/**
+		 * The failure for a widget capture whose print came back uniform, naming
+		 * whether the screen was read too and, if not, why it was skipped.
+		 */
+		public static String uniformPrintFailure(boolean screenSkipped, boolean sameTurn, boolean occluded) {
+			if (!screenSkipped) {
+				return "The capture came back uniform both from the screen and by painting the widget, so this display cannot be captured at all. Nothing was written; do not trust screenshots here."; //$NON-NLS-1$
+			}
+			String reason = sameTurn
+					? "inside one UI turn the screen has not been painted yet" //$NON-NLS-1$
+					: occluded
+							? "this IDE is not the foreground application (foreground false), so the screen holds whatever window is in front of it" //$NON-NLS-1$
+							: "method print was asked for"; //$NON-NLS-1$
+			return "Painting the widget came back uniform, and the screen was not read because " + reason //$NON-NLS-1$
+					+ ". A print can leave out native children, so this says nothing about whether the display can be captured. Nothing was written; " //$NON-NLS-1$
+					+ (sameTurn ? "capture outside a batch" //$NON-NLS-1$
+							: occluded ? "bring the IDE to the front and capture again" //$NON-NLS-1$
+									: "capture without method print") //$NON-NLS-1$
+					+ " so the screen is read."; //$NON-NLS-1$
 		}
 
 		/** Where a child goes in a composed shell capture, as plain values. */
