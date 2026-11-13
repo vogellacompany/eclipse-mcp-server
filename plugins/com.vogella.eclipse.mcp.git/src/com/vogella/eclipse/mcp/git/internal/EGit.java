@@ -5,6 +5,7 @@ import java.io.IOException;
 
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.egit.core.RepositoryCache;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.RepositoryCache.FileKey;
@@ -14,13 +15,21 @@ import org.eclipse.jgit.util.FS;
  * Finds the repository a request is about.
  * <p>
  * The EGit and JGit bundles are optional: the tools ask {@link #isAvailable()}
- * first and report that EGit is not installed rather than failing to resolve.
+ * first and report why EGit is not usable rather than failing to resolve.
  */
 final class EGit {
 
-	static final String NOT_INSTALLED = "EGit is not installed in this IDE, so the git tools cannot work. Install the 'Git integration for Eclipse' feature, or use eclipse_run_command to drive git directly, which leaves the workspace unaware of the change until it is refreshed."; //$NON-NLS-1$
+	private static final String NOT_INSTALLED = "EGit is not installed in this IDE, so the git tools cannot work. Install the 'Git integration for Eclipse' feature, or use eclipse_run_command to drive git directly, which leaves the workspace unaware of the change until it is refreshed."; //$NON-NLS-1$
 
 	private EGit() {
+	}
+
+	/** Why the git tools cannot work: EGit is missing, or installed in a version this bundle is not wired to. */
+	static String unavailable() {
+		var egit = Platform.getBundle("org.eclipse.egit.core"); //$NON-NLS-1$
+		return egit == null ? NOT_INSTALLED
+				: "EGit %s is installed in this IDE, but the git tools are not wired to it, so they cannot work. They need EGit and JGit 7.0.0 or newer. Use eclipse_run_command to drive git directly, which leaves the workspace unaware of the change until it is refreshed." //$NON-NLS-1$
+						.formatted(egit.getVersion());
 	}
 
 	/** Whether the optional EGit bundles resolved. */

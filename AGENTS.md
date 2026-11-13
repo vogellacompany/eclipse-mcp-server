@@ -263,6 +263,7 @@ Do not undo these without understanding why they are there.
 ### Git
 
 - The git bundle requires EGit and JGit optionally, and every tool checks `EGit.isAvailable()` first.
+  The requirements state the minimum 7.0.0 and no upper bound: the resolver drops an optional requirement whose range excludes the installed EGit without a log entry, and every git tool then refuses. `EGit.unavailable()` tells that case from a missing EGit.
   Verifying a class can load the JGit types its methods use, and a failure there loses the tool with an error at every start; `RevertFilesTool` and `FetchPullRequestTool` keep their JGit code in a nested class for that reason, and `GitToolsWithoutEGitTest` loads every git tool with JGit and EGit hidden.
 - The ide bundle requires `org.eclipse.jgit` with `resolution:=optional` and references it only from `GitContent`, so an IDE without EGit loses only `eclipse_open_compare`'s `revision` argument.
 

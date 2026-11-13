@@ -76,7 +76,7 @@ public final class FetchPullRequestTool implements IMcpTool {
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		if (!EGit.isAvailable()) {
-			return McpToolResult.error(EGit.NOT_INSTALLED);
+			return McpToolResult.error(EGit.unavailable());
 		}
 		// the JGit types live in a nested class, which is only loaded and verified once EGit is known to be there
 		return Fetch.call(arguments, monitor);
