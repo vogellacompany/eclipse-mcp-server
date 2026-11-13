@@ -1,5 +1,7 @@
 package com.vogella.eclipse.mcp.server.internal;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -13,8 +15,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.core.runtime.Platform;
+import org.eclipse.osgi.service.datalocation.Location;
 
 import com.vogella.eclipse.mcp.core.CallBudget;
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.server.McpPreferences;
@@ -38,6 +43,12 @@ public final class McpToolAdapter {
 		final AtomicInteger state = new AtomicInteger(QUEUED);
 	}
 
+	/** Bounds a cause chain that loops. */
+	private static final int MAX_CAUSES = 20;
+
+	/** Resolved while the installation can still load the classes this needs. */
+	private static final Path INSTALLATION = installation();
+
 	/** Calls that outlived their timeout and whose tool body has not returned yet. */
 	private static final Map<String, Running> ABANDONED = new LinkedHashMap<>();
 
@@ -46,13 +57,20 @@ public final class McpToolAdapter {
 
 	public static SyncToolSpecification toSpecification(IMcpTool tool, McpJsonMapper jsonMapper,
 			ExecutorService executor) {
+		return toSpecification(tool, jsonMapper, executor, INSTALLATION);
+	}
+
+	/** As {@link #toSpecification(IMcpTool, McpJsonMapper, ExecutorService)}, for an installation given by the caller. */
+	public static SyncToolSpecification toSpecification(IMcpTool tool, McpJsonMapper jsonMapper,
+			ExecutorService executor, Path installation) {
 		Tool descriptor = Tool.builder().name(tool.getName()).description(tool.getDescription())
 				.inputSchema(jsonMapper, tool.getInputSchema()).build();
 		return SyncToolSpecification.builder().tool(descriptor)
-				.callHandler((exchange, request) -> call(tool, request.arguments(), executor)).build();
+				.callHandler((exchange, request) -> call(tool, request.arguments(), executor, installation)).build();
 	}
 
-	private static CallToolResult call(IMcpTool tool, Map<String, Object> arguments, ExecutorService executor) {
+	private static CallToolResult call(IMcpTool tool, Map<String, Object> arguments, ExecutorService executor,
+			Path installation) {
 		// read per call, so that changing the preference takes effect without a restart
 		Duration timeout = McpPreferences.getCallTimeout();
 		NullProgressMonitor monitor = new NullProgressMonitor();
@@ -96,7 +114,36 @@ public final class McpToolAdapter {
 		} catch (ExecutionException e) {
 			Throwable cause = e.getCause() == null ? e : e.getCause();
 			ILog.get().error("The MCP tool '%s' failed".formatted(tool.getName()), cause); //$NON-NLS-1$
-			return error("The tool '%s' failed: %s".formatted(tool.getName(), describe(cause))); //$NON-NLS-1$
+			return error("The tool '%s' failed: %s%s".formatted(tool.getName(), describe(cause), //$NON-NLS-1$
+					missingInstallation(cause, installation)));
+		}
+	}
+
+	/**
+	 * Says that the installation is gone when a class could not be loaded, which
+	 * otherwise reads as a missing dependency.
+	 */
+	public static String missingInstallation(Throwable failure, Path installation) {
+		// notExists: a directory that merely cannot be checked is not reported as deleted
+		if (installation == null || !Files.notExists(installation)) {
+			return ""; //$NON-NLS-1$
+		}
+		Throwable current = failure;
+		for (int depth = 0; current != null && depth < MAX_CAUSES; depth++, current = current.getCause()) {
+			if (current instanceof LinkageError || current instanceof ClassNotFoundException) {
+				return " The installation this IDE was started from, %s, no longer exists on disk, so it cannot load any class it has not loaded yet. Restart the IDE from an existing installation." //$NON-NLS-1$
+						.formatted(installation);
+			}
+		}
+		return ""; //$NON-NLS-1$
+	}
+
+	private static Path installation() {
+		try {
+			Location location = Platform.getInstallLocation();
+			return location == null ? null : FileLocations.pathOf(location.getURL());
+		} catch (RuntimeException | LinkageError e) {
+			return null;
 		}
 	}
 

@@ -3,6 +3,7 @@ package com.vogella.eclipse.mcp.server.tests;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -12,6 +13,7 @@ import java.util.concurrent.Future;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.preferences.InstanceScope;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.osgi.service.prefs.BackingStoreException;
 import org.osgi.service.prefs.Preferences;
 
@@ -60,6 +62,72 @@ class McpToolAdapterTest {
 					// keeps running, which is what an abandoned call does
 				}
 			}
+		}
+	}
+
+	@Test
+	void aClassThatCannotBeLoadedNamesADeletedInstallation(@TempDir Path directory) {
+		Path deleted = directory.resolve("deleted");
+		Throwable failure = new IllegalStateException(new NoClassDefFoundError("a/B"));
+		String note = McpToolAdapter.missingInstallation(failure, deleted);
+		assertTrue(note.contains(deleted.toString()) && note.contains("no longer exists"), note);
+		assertEquals("", McpToolAdapter.missingInstallation(failure, directory));
+		assertEquals("", McpToolAdapter.missingInstallation(new IllegalStateException("other"), deleted));
+	}
+
+	@Test
+	void aMissingClassReportedAsAnExceptionAlsoNamesADeletedInstallation(@TempDir Path directory) {
+		Throwable failure = new RuntimeException(new ClassNotFoundException("a.B"));
+		assertTrue(McpToolAdapter.missingInstallation(failure, directory.resolve("deleted")).contains("no longer exists"));
+	}
+
+	@Test
+	void aCauseChainThatLoopsEnds(@TempDir Path directory) {
+		Exception first = new IllegalStateException("first");
+		Exception second = new IllegalStateException("second", first);
+		first.initCause(second);
+		assertEquals("", McpToolAdapter.missingInstallation(first, directory.resolve("deleted")));
+	}
+
+	@Test
+	void aToolThatCannotLoadAClassAnswersWithTheDeletedInstallation(@TempDir Path directory) {
+		Path deleted = directory.resolve("deleted");
+		assertTrue(callUnlinked(deleted).contains("no longer exists on disk"), callUnlinked(deleted));
+		String text = callUnlinked(directory);
+		assertTrue(text.contains("'unlinked_tool' failed: a/B") && !text.contains("no longer exists"), text);
+	}
+
+	private static String callUnlinked(Path installation) {
+		IMcpTool tool = new IMcpTool() {
+			@Override
+			public String getName() {
+				return "unlinked_tool";
+			}
+
+			@Override
+			public String getDescription() {
+				return "Fails to load a class.";
+			}
+
+			@Override
+			public String getInputSchema() {
+				return "{\"type\":\"object\",\"properties\":{}}";
+			}
+
+			@Override
+			public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
+				throw new NoClassDefFoundError("a/B");
+			}
+		};
+		ExecutorService tools = Executors.newCachedThreadPool();
+		try {
+			var specification = McpToolAdapter.toSpecification(tool, new JacksonMcpJsonMapperSupplier().get(), tools,
+					installation);
+			CallToolResult result = specification.callHandler().apply(null, new CallToolRequest("unlinked_tool", Map.of()));
+			assertEquals(Boolean.TRUE, result.isError());
+			return ((TextContent) result.content().get(0)).text();
+		} finally {
+			tools.shutdownNow();
 		}
 	}
 
