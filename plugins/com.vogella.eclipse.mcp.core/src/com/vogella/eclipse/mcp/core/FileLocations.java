@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.core;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -25,6 +26,29 @@ public final class FileLocations {
 		// the separator rather than os.name: it is what the path parser itself uses,
 		// so it cannot disagree with the thing this class has to get right
 		return java.io.File.separatorChar == '\\';
+	}
+
+	/**
+	 * The path with symbolic links resolved, so two spellings of one place compare
+	 * equal, such as /var and /private/var on macOS. A part that does not exist yet,
+	 * such as a deleted file, is appended to its nearest existing ancestor.
+	 */
+	public static Path realPath(Path path) {
+		try {
+			// unnormalized first, so a .. after a link is resolved where the link points
+			return path.toAbsolutePath().toRealPath();
+		} catch (IOException e) {
+			// a missing part is handled below
+		}
+		Path absolute = path.toAbsolutePath().normalize();
+		for (Path existing = absolute; existing != null; existing = existing.getParent()) {
+			try {
+				return existing.toRealPath().resolve(existing.relativize(absolute));
+			} catch (IOException e) {
+				// try the parent
+			}
+		}
+		return absolute;
 	}
 
 	/** The local path a {@code file:} URL names, or {@code null} when it names none. */

@@ -2,6 +2,7 @@ package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.util.Comparator;
@@ -82,6 +83,35 @@ class RevertFilesToolTest {
 		Map<String, Object> file = ((List<Map<String, Object>>) answer.get("files")).get(0);
 		assertEquals("wouldRevert", file.get("state"), "got " + file);
 		assertEquals("local edit\n", Files.readString(tracked), "a dry run must not write");
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void aFileNamedThroughASymlinkIsInsideTheWorkingTree() throws Exception {
+		Path real = directory.toRealPath();
+		Path link = real.resolveSibling(real.getFileName() + "-link");
+		try {
+			Files.createSymbolicLink(link, real);
+		} catch (IOException | UnsupportedOperationException e) {
+			assumeTrue(false, "no symbolic links here: " + e.getMessage());
+		}
+		try {
+			Files.writeString(tracked, "local edit\n");
+
+			Map<String, Object> answer = TestFixture.callAndParse(NAME, Map.of("paths",
+					List.of(link.resolve("tracked.txt").toString()), "directory", real.toString()));
+
+			Map<String, Object> file = ((List<Map<String, Object>>) answer.get("files")).get(0);
+			assertEquals("tracked.txt", file.get("repositoryPath"), "got " + file);
+
+			Files.delete(tracked);
+			Map<String, Object> deleted = ((List<Map<String, Object>>) TestFixture.callAndParse(NAME,
+					Map.of("paths", List.of(link.resolve("tracked.txt").toString()), "directory", real.toString()))
+					.get("files")).get(0);
+			assertEquals("wouldRevert", deleted.get("state"), "a deleted file is put back, got " + deleted);
+		} finally {
+			Files.deleteIfExists(link);
+		}
 	}
 
 	@Test

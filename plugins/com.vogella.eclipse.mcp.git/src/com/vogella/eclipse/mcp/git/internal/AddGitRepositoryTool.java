@@ -14,6 +14,7 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.egit.core.RepositoryUtil;
 import org.eclipse.egit.core.op.ConnectProviderOperation;
 
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolException;
 import com.vogella.eclipse.mcp.core.McpToolResult;
@@ -135,13 +136,13 @@ public final class AddGitRepositoryTool implements IMcpTool {
 			return List.of();
 		}
 		// Path, not a string prefix: text comparison is case sensitive, which breaks on Windows
-		Path root = workTree.toPath().toAbsolutePath().normalize();
+		Path root = FileLocations.realPath(workTree.toPath());
 		List<IProject> inside = new ArrayList<>();
 		for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
 			if (!project.isAccessible() || project.getLocation() == null) {
 				continue;
 			}
-			Path location = project.getLocation().toFile().toPath().toAbsolutePath().normalize();
+			Path location = FileLocations.realPath(project.getLocation().toFile().toPath());
 			if (location.startsWith(root)) {
 				inside.add(project);
 			}
@@ -149,10 +150,25 @@ public final class AddGitRepositoryTool implements IMcpTool {
 		return inside;
 	}
 
+	/**
+	 * The git directory spelled the way the project's location is, because EGit
+	 * finds the repository from the project and compares the two as text.
+	 */
+	public static File spelledLike(Path projectLocation, File gitDir) {
+		Path realLocation = FileLocations.realPath(projectLocation);
+		Path realGitDir = FileLocations.realPath(gitDir.toPath());
+		if (realLocation.getRoot() == null || !realLocation.getRoot().equals(realGitDir.getRoot())) {
+			return gitDir;
+		}
+		Path spelled = projectLocation.resolve(realLocation.relativize(realGitDir)).normalize();
+		// normalize drops a .. across a symlinked project directory, which leads elsewhere
+		return FileLocations.realPath(spelled).equals(realGitDir) ? spelled.toFile() : gitDir;
+	}
+
 	private static void connect(List<IProject> projects, File gitDir, IProgressMonitor monitor)
 			throws McpToolException {
 		Map<IProject, File> mapping = new LinkedHashMap<>();
-		projects.forEach(project -> mapping.put(project, gitDir));
+		projects.forEach(project -> mapping.put(project, spelledLike(project.getLocation().toFile().toPath(), gitDir)));
 		try {
 			new ConnectProviderOperation(mapping).execute(monitor);
 		} catch (CoreException e) {

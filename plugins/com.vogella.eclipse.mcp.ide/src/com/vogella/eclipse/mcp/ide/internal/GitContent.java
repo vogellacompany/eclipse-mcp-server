@@ -11,6 +11,8 @@ import org.eclipse.jgit.lib.ObjectLoader;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 
+import com.vogella.eclipse.mcp.core.FileLocations;
+
 /**
  * Reads a workspace file as it was at a Git revision.
  * <p>
@@ -86,20 +88,12 @@ final class GitContent {
 	 * no revision contains.
 	 */
 	private static String relativize(Repository repository, File onDisk) throws IOException {
-		Path workTree = real(repository.getWorkTree().toPath());
-		Path target = real(onDisk.toPath());
+		Path workTree = FileLocations.realPath(repository.getWorkTree().toPath());
+		Path target = FileLocations.realPath(onDisk.toPath());
 		if (!target.startsWith(workTree)) {
 			throw new IOException("'%s' is outside the work tree of '%s'.".formatted(target, workTree));
 		}
 		return workTree.relativize(target).toString().replace(File.separatorChar, '/');
-	}
-
-	private static Path real(Path path) {
-		try {
-			return path.toRealPath();
-		} catch (IOException e) {
-			return path.toAbsolutePath().normalize();
-		}
 	}
 
 	private static Blob fail(String message, Object... arguments) throws IOException {
