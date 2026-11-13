@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.util.List;
 import java.util.Set;
 
 import org.eclipse.core.resources.IResource;
@@ -104,11 +105,13 @@ class TreeResourcesTest {
 
 	@Test
 	void theShallowestItemWins() {
-		IResource file = file("/p/src/a/B.java");
-		packageWith(file);
-		TreeItem top = item(tree, file);
+		IResource deep = file("/p/src/a/B.java");
+		packageWith(deep);
+		// an equal but distinct handle, so the assertion tells the two items apart
+		IResource shallow = file("/p/src/a/B.java");
+		item(tree, shallow);
 
-		assertSame(top.getData(), TreeResources.find(tree, Set.of(file.getFullPath())).data().get(file.getFullPath()));
+		assertSame(shallow, TreeResources.find(tree, Set.of(deep.getFullPath())).data().get(deep.getFullPath()));
 	}
 
 	@Test
@@ -120,5 +123,45 @@ class TreeResourcesTest {
 
 		assertTrue(found.truncated());
 		assertTrue(found.data().isEmpty());
+	}
+
+	@Test
+	void walkingAVirtualTreeFiresNoSetData() {
+		Tree virtual = new Tree(tree.getShell(), SWT.VIRTUAL);
+		int[] setData = { 0 };
+		virtual.addListener(SWT.SetData, event -> setData[0]++);
+		virtual.setItemCount(3);
+
+		TreeResources.Found found = TreeResources.find(virtual, Set.of(file("/p/src/a/B.java").getFullPath()));
+
+		assertTrue(found.data().isEmpty());
+		assertEquals(0, setData[0], "reading the tree must not fill a virtual row");
+	}
+
+	@Test
+	void withoutATreeNothingIsSearchedOrCounted() {
+		List<Object> requested = List.of(file("/p/src/a/B.java"));
+
+		TreeResources.Matched matched = TreeResources.match(requested, null);
+
+		assertFalse(matched.searched());
+		assertSame(requested, matched.elements());
+	}
+
+	@Test
+	void aMatchReplacesItsResourceAndOnlyResourcesCountAsUnmatched() {
+		IResource shown = file("/p/src/a/B.java");
+		TreeItem leaf = packageWith(shown);
+		IResource missing = file("/p/src/a/Missing.java");
+		Object notAResource = "row";
+
+		TreeResources.Matched matched = TreeResources.match(List.of(file("/p/src/a/B.java"), missing, notAResource), tree);
+
+		assertTrue(matched.searched());
+		assertEquals(1, matched.count());
+		assertEquals(1, matched.unmatched());
+		assertSame(leaf.getData(), matched.elements().get(0));
+		assertSame(missing, matched.elements().get(1));
+		assertSame(notAResource, matched.elements().get(2));
 	}
 }
