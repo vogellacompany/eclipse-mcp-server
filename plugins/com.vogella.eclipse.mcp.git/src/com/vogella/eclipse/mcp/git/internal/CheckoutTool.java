@@ -52,7 +52,7 @@ public final class CheckoutTool implements IMcpTool {
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		if (!EGit.isAvailable()) {
-			return McpToolResult.error(EGit.NOT_INSTALLED);
+			return McpToolResult.error(EGit.unavailable());
 		}
 		ToolArguments args = ToolArguments.of(arguments);
 		String target = args.getString("target"); //$NON-NLS-1$

@@ -158,7 +158,7 @@ public final class CompareTool implements IMcpTool {
 				blob = GitContent.read(left, revision, MAX_BYTES);
 			} catch (LinkageError e) {
 				return McpToolResult.error(
-						"Comparing against a Git revision needs the org.eclipse.jgit bundle, which is not installed in this IDE. Install EGit, or pass 'content' with the text to compare against."); //$NON-NLS-1$
+						"Comparing against a Git revision needs the org.eclipse.jgit bundle in version 7.0.0 or newer, which this IDE does not provide. Install EGit, or pass 'content' with the text to compare against."); //$NON-NLS-1$
 			} catch (IOException | RuntimeException e) {
 				return McpToolResult.error("Could not read '%s' at '%s': %s".formatted(leftPath, revision, //$NON-NLS-1$
 						e.getMessage() == null ? e.toString() : e.getMessage()));

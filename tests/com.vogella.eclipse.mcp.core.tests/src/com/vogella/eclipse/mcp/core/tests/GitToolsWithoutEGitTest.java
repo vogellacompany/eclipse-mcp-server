@@ -15,13 +15,13 @@ import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolRegistry;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 
-/** Loads the git tools the way an IDE without EGit does, where JGit and EGit do not resolve. */
+/** Loads the git tools with JGit and EGit hidden from their class loader, the way an IDE whose EGit did not wire does. */
 class GitToolsWithoutEGitTest {
 
 	private static final String GIT_BUNDLE = "com.vogella.eclipse.mcp.git.";
 
 	@Test
-	void everyGitToolLoadsAndAnswersThatEGitIsMissing() throws Exception {
+	void everyGitToolLoadsAndAnswersThatEGitIsNotWired() throws Exception {
 		List<IMcpTool> tools = McpToolRegistry.getInstance().getTools().stream()
 				.filter(tool -> tool.getClass().getName().startsWith(GIT_BUNDLE)).toList();
 		assertFalse(tools.isEmpty(), "No git tools are registered");
@@ -30,7 +30,8 @@ class GitToolsWithoutEGitTest {
 			IMcpTool isolated = (IMcpTool) Class.forName(tool.getClass().getName(), true, loader)
 					.getDeclaredConstructor().newInstance();
 			McpToolResult answer = isolated.call(Map.of(), new NullProgressMonitor());
-			assertTrue(answer.isError() && answer.text().contains("EGit is not installed"),
+			// the EGit bundle is in this runtime, only hidden from the tool, which is the unwired case
+			assertTrue(answer.isError() && answer.text().contains("not wired to it"),
 					tool.getName() + " answered " + answer.text());
 		}
 	}
