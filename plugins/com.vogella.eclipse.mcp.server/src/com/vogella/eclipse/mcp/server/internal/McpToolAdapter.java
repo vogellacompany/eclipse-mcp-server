@@ -1,5 +1,7 @@
 package com.vogella.eclipse.mcp.server.internal;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -13,8 +15,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.core.runtime.Platform;
+import org.eclipse.osgi.service.datalocation.Location;
 
 import com.vogella.eclipse.mcp.core.CallBudget;
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.server.McpPreferences;
@@ -96,7 +101,38 @@ public final class McpToolAdapter {
 		} catch (ExecutionException e) {
 			Throwable cause = e.getCause() == null ? e : e.getCause();
 			ILog.get().error("The MCP tool '%s' failed".formatted(tool.getName()), cause); //$NON-NLS-1$
-			return error("The tool '%s' failed: %s".formatted(tool.getName(), describe(cause))); //$NON-NLS-1$
+			return error("The tool '%s' failed: %s%s".formatted(tool.getName(), describe(cause), //$NON-NLS-1$
+					missingInstallation(cause, installation())));
+		}
+	}
+
+	/**
+	 * Says that the installation is gone when a class could not be loaded, which
+	 * otherwise reads as a missing dependency. Stays in this class, since a new
+	 * one could not be loaded from a deleted installation either.
+	 */
+	public static String missingInstallation(Throwable failure, Path installation) {
+		if (installation == null || Files.exists(installation)) {
+			return ""; //$NON-NLS-1$
+		}
+		for (Throwable current = failure; current != null; current = current.getCause()) {
+			if (current instanceof LinkageError || current instanceof ClassNotFoundException) {
+				return " The installation this IDE was started from, %s, no longer exists on disk, so it cannot load any class it has not loaded yet. Restart the IDE from an existing installation." //$NON-NLS-1$
+						.formatted(installation);
+			}
+			if (current.getCause() == current) {
+				break;
+			}
+		}
+		return ""; //$NON-NLS-1$
+	}
+
+	private static Path installation() {
+		try {
+			Location location = Platform.getInstallLocation();
+			return location == null ? null : FileLocations.pathOf(location.getURL());
+		} catch (RuntimeException | LinkageError e) {
+			return null;
 		}
 	}
 

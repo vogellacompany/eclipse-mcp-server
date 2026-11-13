@@ -3,6 +3,7 @@ package com.vogella.eclipse.mcp.server.tests;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -12,6 +13,7 @@ import java.util.concurrent.Future;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.preferences.InstanceScope;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.osgi.service.prefs.BackingStoreException;
 import org.osgi.service.prefs.Preferences;
 
@@ -61,6 +63,16 @@ class McpToolAdapterTest {
 				}
 			}
 		}
+	}
+
+	@Test
+	void aClassThatCannotBeLoadedNamesADeletedInstallation(@TempDir Path directory) {
+		Path deleted = directory.resolve("deleted");
+		Throwable failure = new IllegalStateException(new NoClassDefFoundError("a/B"));
+		String note = McpToolAdapter.missingInstallation(failure, deleted);
+		assertTrue(note.contains(deleted.toString()) && note.contains("no longer exists"), note);
+		assertEquals("", McpToolAdapter.missingInstallation(failure, directory));
+		assertEquals("", McpToolAdapter.missingInstallation(new IllegalStateException("other"), deleted));
 	}
 
 	@Test
