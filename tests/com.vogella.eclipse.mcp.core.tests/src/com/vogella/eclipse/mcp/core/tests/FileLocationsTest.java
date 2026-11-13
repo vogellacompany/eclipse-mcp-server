@@ -2,10 +2,14 @@ package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import com.vogella.eclipse.mcp.core.FileLocations;
 
@@ -66,5 +70,19 @@ class FileLocationsTest {
 		assertNull(FileLocations.pathOf((String) null));
 		assertNull(FileLocations.pathOf("  "));
 		assertNull(FileLocations.pathOf((java.net.URL) null));
+	}
+
+	@Test
+	void aRealPathResolvesALinkAndKeepsAMissingTail(@TempDir Path directory) throws IOException {
+		Path target = Files.createDirectory(directory.resolve("target"));
+		Path link = directory.resolve("link");
+		try {
+			Files.createSymbolicLink(link, target);
+		} catch (IOException | UnsupportedOperationException e) {
+			assumeTrue(false, "no symbolic links here: " + e.getMessage());
+		}
+		Path realTarget = target.toRealPath();
+		assertEquals(realTarget, FileLocations.realPath(link));
+		assertEquals(realTarget.resolve("deleted/A.txt"), FileLocations.realPath(link.resolve("deleted/A.txt")));
 	}
 }

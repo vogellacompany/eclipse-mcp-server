@@ -30,15 +30,25 @@ public final class FileLocations {
 
 	/**
 	 * The path with symbolic links resolved, so two spellings of one place compare
-	 * equal, such as /var and /private/var on macOS. Normalized only when it cannot
-	 * be read.
+	 * equal, such as /var and /private/var on macOS. A part that does not exist yet,
+	 * such as a deleted file, is appended to its nearest existing ancestor.
 	 */
 	public static Path realPath(Path path) {
 		try {
-			return path.toRealPath();
+			// unnormalized first, so a .. after a link is resolved where the link points
+			return path.toAbsolutePath().toRealPath();
 		} catch (IOException e) {
-			return path.toAbsolutePath().normalize();
+			// a missing part is handled below
 		}
+		Path absolute = path.toAbsolutePath().normalize();
+		for (Path existing = absolute; existing != null; existing = existing.getParent()) {
+			try {
+				return existing.toRealPath().resolve(existing.relativize(absolute));
+			} catch (IOException e) {
+				// try the parent
+			}
+		}
+		return absolute;
 	}
 
 	/** The local path a {@code file:} URL names, or {@code null} when it names none. */

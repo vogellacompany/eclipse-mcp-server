@@ -160,7 +160,9 @@ public final class AddGitRepositoryTool implements IMcpTool {
 		if (realLocation.getRoot() == null || !realLocation.getRoot().equals(realGitDir.getRoot())) {
 			return gitDir;
 		}
-		return projectLocation.resolve(realLocation.relativize(realGitDir)).normalize().toFile();
+		Path spelled = projectLocation.resolve(realLocation.relativize(realGitDir)).normalize();
+		// normalize drops a .. across a symlinked project directory, which leads elsewhere
+		return FileLocations.realPath(spelled).equals(realGitDir) ? spelled.toFile() : gitDir;
 	}
 
 	private static void connect(List<IProject> projects, File gitDir, IProgressMonitor monitor)

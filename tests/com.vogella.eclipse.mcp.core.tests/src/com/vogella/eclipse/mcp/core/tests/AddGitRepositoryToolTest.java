@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -183,6 +184,18 @@ class AddGitRepositoryToolTest {
 			assertEquals(List.of(project.getName()), answer.get("projectsToConnect"), "got " + answer);
 			assertEquals(link.resolve(".git").toFile(),
 					AddGitRepositoryTool.spelledLike(link, real.resolve(".git").toFile()));
+			Path nested = Files.createDirectory(real.resolve("nested"));
+			assertEquals(link.resolve(".git").toFile(),
+					AddGitRepositoryTool.spelledLike(link.resolve("nested"), real.resolve(".git").toFile()));
+			Path linkedProject = real.resolveSibling(real.getFileName() + "-nested-link");
+			Files.createSymbolicLink(linkedProject, nested);
+			try {
+				File gitDir = real.resolve(".git").toFile();
+				assertEquals(gitDir, AddGitRepositoryTool.spelledLike(linkedProject, gitDir),
+						"a symlinked project directory cannot reach the repository by spelling");
+			} finally {
+				Files.deleteIfExists(linkedProject);
+			}
 		} finally {
 			project.delete(false, true, null);
 			Files.deleteIfExists(link);
