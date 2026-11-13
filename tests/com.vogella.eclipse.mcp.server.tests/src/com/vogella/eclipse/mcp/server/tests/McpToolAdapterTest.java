@@ -76,6 +76,49 @@ class McpToolAdapterTest {
 	}
 
 	@Test
+	void aCauseChainThatLoopsEnds(@TempDir Path directory) {
+		Exception first = new IllegalStateException("first");
+		Exception second = new IllegalStateException("second", first);
+		first.initCause(second);
+		assertEquals("", McpToolAdapter.missingInstallation(first, directory.resolve("deleted")));
+	}
+
+	@Test
+	void aToolThatCannotLoadAClassStillAnswersWithoutBlamingAnExistingInstallation() {
+		IMcpTool tool = new IMcpTool() {
+			@Override
+			public String getName() {
+				return "unlinked_tool";
+			}
+
+			@Override
+			public String getDescription() {
+				return "Fails to load a class.";
+			}
+
+			@Override
+			public String getInputSchema() {
+				return "{\"type\":\"object\",\"properties\":{}}";
+			}
+
+			@Override
+			public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
+				throw new NoClassDefFoundError("a/B");
+			}
+		};
+		ExecutorService tools = Executors.newCachedThreadPool();
+		try {
+			var specification = McpToolAdapter.toSpecification(tool, new JacksonMcpJsonMapperSupplier().get(), tools);
+			CallToolResult result = specification.callHandler().apply(null, new CallToolRequest("unlinked_tool", Map.of()));
+			String text = ((TextContent) result.content().get(0)).text();
+			assertEquals(Boolean.TRUE, result.isError());
+			assertTrue(text.contains("'unlinked_tool' failed: a/B") && !text.contains("no longer exists"), text);
+		} finally {
+			tools.shutdownNow();
+		}
+	}
+
+	@Test
 	void countsEveryCallThatKeepsRunningAfterItsTimeout() throws Exception {
 		Preferences node = InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER);
 		String previous = node.get(McpPreferences.KEY_CALL_TIMEOUT_SECONDS, null);

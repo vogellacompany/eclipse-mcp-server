@@ -43,6 +43,12 @@ public final class McpToolAdapter {
 		final AtomicInteger state = new AtomicInteger(QUEUED);
 	}
 
+	/** Bounds a cause chain that loops. */
+	private static final int MAX_CAUSES = 20;
+
+	/** Resolved while the installation can still load the classes this needs. */
+	private static final Path INSTALLATION = installation();
+
 	/** Calls that outlived their timeout and whose tool body has not returned yet. */
 	private static final Map<String, Running> ABANDONED = new LinkedHashMap<>();
 
@@ -102,26 +108,24 @@ public final class McpToolAdapter {
 			Throwable cause = e.getCause() == null ? e : e.getCause();
 			ILog.get().error("The MCP tool '%s' failed".formatted(tool.getName()), cause); //$NON-NLS-1$
 			return error("The tool '%s' failed: %s%s".formatted(tool.getName(), describe(cause), //$NON-NLS-1$
-					missingInstallation(cause, installation())));
+					missingInstallation(cause, INSTALLATION)));
 		}
 	}
 
 	/**
 	 * Says that the installation is gone when a class could not be loaded, which
-	 * otherwise reads as a missing dependency. Stays in this class, since a new
-	 * one could not be loaded from a deleted installation either.
+	 * otherwise reads as a missing dependency.
 	 */
 	public static String missingInstallation(Throwable failure, Path installation) {
-		if (installation == null || Files.exists(installation)) {
+		// notExists: a directory that merely cannot be checked is not reported as deleted
+		if (installation == null || !Files.notExists(installation)) {
 			return ""; //$NON-NLS-1$
 		}
-		for (Throwable current = failure; current != null; current = current.getCause()) {
+		Throwable current = failure;
+		for (int depth = 0; current != null && depth < MAX_CAUSES; depth++, current = current.getCause()) {
 			if (current instanceof LinkageError || current instanceof ClassNotFoundException) {
 				return " The installation this IDE was started from, %s, no longer exists on disk, so it cannot load any class it has not loaded yet. Restart the IDE from an existing installation." //$NON-NLS-1$
 						.formatted(installation);
-			}
-			if (current.getCause() == current) {
-				break;
 			}
 		}
 		return ""; //$NON-NLS-1$
