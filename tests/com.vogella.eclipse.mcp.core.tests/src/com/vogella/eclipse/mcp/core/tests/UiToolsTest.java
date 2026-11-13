@@ -18,6 +18,7 @@ import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.SWTError;
+import org.eclipse.swt.SWTException;
 import org.eclipse.swt.custom.CCombo;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.Combo;
@@ -263,7 +264,7 @@ class UiToolsTest {
 		Display display;
 		try {
 			display = new Display();
-		} catch (SWTError | UnsatisfiedLinkError e) {
+		} catch (SWTError | SWTException | LinkageError e) {
 			assumeTrue(false, "no display: " + e.getMessage());
 			return;
 		}
@@ -307,7 +308,7 @@ class UiToolsTest {
 		Display display;
 		try {
 			display = new Display();
-		} catch (SWTError | UnsatisfiedLinkError e) {
+		} catch (SWTError | SWTException | LinkageError e) {
 			assumeTrue(false, "no display: " + e.getMessage());
 			return;
 		}

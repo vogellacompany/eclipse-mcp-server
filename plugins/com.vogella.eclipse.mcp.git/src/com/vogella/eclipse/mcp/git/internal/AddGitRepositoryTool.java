@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.git.internal;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -135,18 +136,28 @@ public final class AddGitRepositoryTool implements IMcpTool {
 			return List.of();
 		}
 		// Path, not a string prefix: text comparison is case sensitive, which breaks on Windows
-		Path root = workTree.toPath().toAbsolutePath().normalize();
+		Path root = real(workTree.toPath());
 		List<IProject> inside = new ArrayList<>();
 		for (IProject project : ResourcesPlugin.getWorkspace().getRoot().getProjects()) {
 			if (!project.isAccessible() || project.getLocation() == null) {
 				continue;
 			}
-			Path location = project.getLocation().toFile().toPath().toAbsolutePath().normalize();
+			Path location = real(project.getLocation().toFile().toPath());
 			if (location.startsWith(root)) {
 				inside.add(project);
 			}
 		}
 		return inside;
+	}
+
+	/** Resolves symlinks such as macOS's /var to /private/var, so equal places compare equal. */
+	private static Path real(Path path) {
+		Path absolute = path.toAbsolutePath().normalize();
+		try {
+			return absolute.toRealPath();
+		} catch (IOException e) {
+			return absolute;
+		}
 	}
 
 	private static void connect(List<IProject> projects, File gitDir, IProgressMonitor monitor)
