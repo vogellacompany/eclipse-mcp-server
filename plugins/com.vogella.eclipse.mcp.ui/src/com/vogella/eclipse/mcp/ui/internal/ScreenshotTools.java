@@ -715,6 +715,7 @@ public final class ScreenshotTools {
 				if (isBlank(data) && !uniformRegion) {
 					return Encoding.done(failure(printable == null
 							? "The capture came back uniform, so this display cannot be captured through the X11 root drawable. A compositing window manager redirects window contents into an offscreen pixmap, so reading the root yields nothing. There is no fallback for an area of the screen; capture a part, a shell or a widget instead, which can be painted directly." //$NON-NLS-1$
+									+ (windowFailure == null ? "" : " The window capture was not used: " + windowFailure) //$NON-NLS-1$ //$NON-NLS-2$
 							: uniformPrintFailure(printOnly, sameTurn, occluded, windowFailure)));
 				}
 				// before the filler is replaced: a half scale paint fills the top left quarter and the rest would then read as plain background
@@ -955,7 +956,7 @@ public final class ScreenshotTools {
 				remedies.add("capture outside an atomic eclipse_run_script batch"); //$NON-NLS-1$
 			}
 			if (occluded) {
-				reasons.add("this IDE is not the foreground application (foreground false), so the screen holds whatever window is in front of it"); //$NON-NLS-1$
+				reasons.add("this IDE is not the foreground application (foreground false), so a screen read would show whatever window is in front of it"); //$NON-NLS-1$
 				remedies.add("bring the IDE to the front"); //$NON-NLS-1$
 			}
 			String window = windowFailure == null ? "" : " The window capture was not used: " + windowFailure; //$NON-NLS-1$ //$NON-NLS-2$

@@ -42,6 +42,15 @@ class ScreenshotFailureTest {
 	}
 
 	@Test
+	void aFailedWindowCaptureIsNamedBesideTheSkipReasons() {
+		String failure = ScreenshotTools.Capture.uniformPrintFailure(false, false, true,
+				"The window capture came back uniform.");
+		assertTrue(failure.contains("bring the IDE to the front."), failure);
+		assertTrue(failure.endsWith(" The window capture was not used: The window capture came back uniform."),
+				failure);
+	}
+
+	@Test
 	void aFailedWindowCaptureIsNamed() {
 		String failure = ScreenshotTools.Capture.uniformPrintFailure(false, false, false,
 				"The window capture came back uniform.");
