@@ -300,7 +300,7 @@ public final class MonitorPlacement {
 		}
 	}
 
-	private static boolean isWayland() {
+	static boolean isWayland() {
 		if (!"gtk".equals(SWT.getPlatform())) { //$NON-NLS-1$
 			return false;
 		}

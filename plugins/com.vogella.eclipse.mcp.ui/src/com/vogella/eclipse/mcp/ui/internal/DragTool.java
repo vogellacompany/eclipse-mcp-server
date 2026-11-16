@@ -61,7 +61,7 @@ public final class DragTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Drags with a real mouse button: moves the pointer onto 'from', presses, moves in small interpolated steps through the optional 'via' waypoints to 'to', and releases there, through the X server's XTest extension on GTK, or Display.post elsewhere, so the toolkit's own drag detection and drag and drop run exactly as for a person. CHANGES WHAT THE IDE DOES, which is whatever the drop does, and MOVES THE MOUSE POINTER, which stays where it was released. Each point is addressed like eclipse_click: part or shell plus a path from eclipse_get_widget_tree, including row paths such as 0/r3 and 0/r1/r0, with optional x and y inside the widget, or displayX and displayY. On arriving at each point the pointer wiggles by two pixels, since GTK starts the drag partway along the line and a drop target only reacts to motion after that. 'to', or the first waypoint, is resolved before the press, and every later one only when the pointer heads for it, because hovering over a collapsed tree row during a drag expands it after about a second and moves every row below; dwellMillis on a waypoint pauses there so drop feedback shows in a screencast. Before pressing, the pointer is read back over 'from' and nothing is pressed when it did not arrive or something covers the widget, which on macOS reports pointerWaitMillis or pointerWaitSkipped like eclipse_click; a button the X server still holds down from an earlier gesture is released first, and a press is delayed until the double click time has passed since this tool's last release. Once pressed, the button is always released, also when a later waypoint fails to resolve, in which case it is released where the pointer is and the answer says so. dragDetected reports whether SWT raised DragDetect, which only a control with a DragSource or a DragDetect listener does; onTarget says whether the pointer was inside the bounds of 'to', the row itself for a row path, or at the point for displayX and displayY, just before the release. pointerDisturbed says the pointer was not where this tool put it when read at the end of a point's dwell, and pointerDisturbedAt names those points, as when a physical mouse moves during a gesture on Windows. Only a disturbance at 'to' moves the drop, which then lands at 'pointer' rather than at releasedAt. A move between two points is overwritten by this tool's next step and is not seen. A gesture that would outlast the call is cut short and released where it got to, and a second drag is refused while one runs, since there is one pointer. The drop is dispatched after the release, so verify it with eclipse_screenshot or eclipse_get_widget_tree. Like eclipse_click it needs an X11 display without a compositor, such as Xvfb, and it refuses on the UI thread, as inside an atomic eclipse_run_script, because the drag needs the event loop running between its events."; //$NON-NLS-1$
+		return "Drags with a real mouse button: moves the pointer onto 'from', presses, moves in small interpolated steps through the optional 'via' waypoints to 'to', and releases there, through the X server's XTest extension on GTK, or Display.post elsewhere, so the toolkit's own drag detection and drag and drop run exactly as for a person. CHANGES WHAT THE IDE DOES, which is whatever the drop does, and MOVES THE MOUSE POINTER, which stays where it was released. Each point is addressed like eclipse_click: part or shell plus a path from eclipse_get_widget_tree, including row paths such as 0/r3 and 0/r1/r0, with optional x and y inside the widget, or displayX and displayY. On arriving at each point the pointer wiggles by two pixels, since GTK starts the drag partway along the line and a drop target only reacts to motion after that. 'to', or the first waypoint, is resolved before the press, and every later one only when the pointer heads for it, because hovering over a collapsed tree row during a drag expands it after about a second and moves every row below; dwellMillis on a waypoint pauses there so drop feedback shows in a screencast. Before pressing, the pointer is read back over 'from' and nothing is pressed when it did not arrive or something covers the widget, which on macOS reports pointerWaitMillis or pointerWaitSkipped like eclipse_click; a button the X server still holds down from an earlier gesture is released first, and a press is delayed until the double click time has passed since this tool's last release. Once pressed, the button is always released, also when a later waypoint fails to resolve, in which case it is released where the pointer is and the answer says so. dragDetected reports whether SWT raised DragDetect, which only a control with a DragSource or a DragDetect listener does; onTarget says whether the pointer was inside the bounds of 'to', the row itself for a row path, or at the point for displayX and displayY, just before the release. pointerDisturbed says the pointer was not where this tool put it when read at the end of a point's dwell, and pointerDisturbedAt names those points, as when a physical mouse moves during a gesture on Windows. Only a disturbance at 'to' moves the drop, which then lands at 'pointer' rather than at releasedAt. A move between two points is overwritten by this tool's next step and is not seen. A gesture that would outlast the call is cut short and released where it got to, and a second drag is refused while one runs, since there is one pointer. The drop is dispatched after the release, so verify it with eclipse_screenshot or eclipse_get_widget_tree. Like eclipse_click it needs an X11 display without a compositor, such as Xvfb, or GNOME's native Wayland, where it MOVES THE USER'S REAL POINTER through mutter's RemoteDesktop session (method mutter-remote-desktop) by relative moves from a read back 'from'; there the IDE cannot read the pointer during the drag, so pointerDisturbed is null with pointerDisturbedNote and onTarget is read after the release (pointerAfterRelease), which after a drop outside this IDE's windows is the last position Wayland reported over them. It refuses on the UI thread, as inside an atomic eclipse_run_script, because the drag needs the event loop running between its events."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -187,10 +187,15 @@ public final class DragTool implements IMcpTool {
 	private static McpToolResult drag(List<Target> targets, int button, int holdMillis, int stepPixels, long deadline,
 			IProgressMonitor monitor) {
 		JsonObject result = new JsonObject();
-		boolean xtest = XTestInput.unavailableReason() == null;
-		result.put("method", xtest ? "xtest" : "displayPost"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		Input input = MutterRemoteDesktop.applies() ? Input.MUTTER
+				: XTestInput.unavailableReason() == null ? Input.XTEST : Input.POST;
+		boolean xtest = input == Input.XTEST;
+		result.put("method", input.method); //$NON-NLS-1$
 		if (xtest && Boolean.TRUE.equals(XTestInput.isDown(button))) {
 			result.put("releasedStuckButton", Boolean.valueOf(XTestInput.button(button, false) == null)); //$NON-NLS-1$
+		}
+		if (input == Input.MUTTER && MutterRemoteDesktop.isDown(button)) {
+			result.put("releasedStuckButton", Boolean.valueOf(MutterRemoteDesktop.button(button, false) == null)); //$NON-NLS-1$
 		}
 		AtomicInteger detected = new AtomicInteger();
 		AtomicReference<String> detectedOn = new AtomicReference<>();
@@ -200,14 +205,17 @@ public final class DragTool implements IMcpTool {
 		};
 		AtomicReference<Point> pressAt = new AtomicReference<>();
 		JsonObject from = new JsonObject();
+		Resolved mutterFrom = input == Input.MUTTER ? resolveOnUiThread(targets.get(0)) : null;
+		MutterRemoteDesktop.Arrival mutterArrival = mutterFrom != null && mutterFrom.failure() == null
+				? MutterRemoteDesktop.moveTo(mutterFrom.point(), from) : null;
 		UiThread.Outcome start = UiThread.run(10, () -> {
-			Resolved resolved = resolve(targets.get(0));
+			Resolved resolved = mutterFrom != null ? mutterFrom : resolve(targets.get(0));
 			if (resolved.failure() != null) {
 				return from.put("reason", "'from': " + resolved.failure()); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 			Display display = Workbenches.display();
-			WidgetTools.Click.Warp warp = WidgetTools.Click.warp(display, resolved.point(), from, "nothing was pressed", //$NON-NLS-1$
-					"dragging"); //$NON-NLS-1$
+			WidgetTools.Click.Warp warp = mutterArrival != null ? mutterWarp(mutterArrival, resolved.point(), from)
+					: WidgetTools.Click.warp(display, resolved.point(), from, "nothing was pressed", "dragging"); //$NON-NLS-1$ //$NON-NLS-2$
 			if (warp.failure() != null) {
 				return from.put("reason", warp.failure()); //$NON-NLS-1$
 			}
@@ -236,6 +244,7 @@ public final class DragTool implements IMcpTool {
 		JsonArray disturbances = new JsonArray();
 		AtomicInteger pointerReads = new AtomicInteger();
 		AtomicBoolean droppedOffPoint = new AtomicBoolean();
+		AtomicReference<Rectangle> dropBounds = new AtomicReference<>();
 		Point current = pressAt.get();
 		String failure = null;
 		try {
@@ -257,7 +266,7 @@ public final class DragTool implements IMcpTool {
 						.toString());
 			}
 			pause(Math.max(PRESS_DELAY_MILLIS, doubleClickMillis() + 50 - (System.currentTimeMillis() - lastRelease)), monitor);
-			String pressFailure = xtest ? XTestInput.button(button, true) : postButton(SWT.MouseDown, button);
+			String pressFailure = press(input, button, true);
 			if (pressFailure != null) {
 				return McpToolResult.of(result.put("dragged", Boolean.FALSE) //$NON-NLS-1$
 						.put("reason", "The press failed: " + pressFailure).toString()); //$NON-NLS-1$ //$NON-NLS-2$
@@ -274,7 +283,7 @@ public final class DragTool implements IMcpTool {
 						failure = name + ": " + where.failure(); //$NON-NLS-1$
 						break;
 					}
-					failure = moveTo(current, where.point(), stepPixels, i == 1, xtest, zoom, deadline, monitor);
+					failure = moveTo(current, where.point(), stepPixels, i == 1, input, zoom, deadline, monitor);
 					if (failure != null) {
 						failure = name + ": " + failure; //$NON-NLS-1$
 						break;
@@ -285,6 +294,13 @@ public final class DragTool implements IMcpTool {
 					pause(Math.min(last ? Math.max(150, target.dwellMillis()) : target.dwellMillis(),
 							deadline - System.currentTimeMillis()), monitor);
 					Rectangle bounds = where.bounds();
+					if (input == Input.MUTTER) {
+						// during a Wayland drag the pointer goes to the data device, so the IDE reads a stale position
+						if (last) {
+							dropBounds.set(bounds);
+						}
+						continue;
+					}
 					// the first leg is over by now, so this hop no longer delays SWT's drag detection
 					UiThread.run(5, () -> {
 						// the cursor control reads null while GTK holds the drag grab, so compare bounds
@@ -303,7 +319,7 @@ public final class DragTool implements IMcpTool {
 					});
 				}
 			} finally {
-				String releaseFailure = xtest ? XTestInput.button(button, false) : postButton(SWT.MouseUp, button);
+				String releaseFailure = press(input, button, false);
 				lastRelease = System.currentTimeMillis();
 				result.put("releasedAt", current.x + "," + current.y); //$NON-NLS-1$ //$NON-NLS-2$
 				if (releaseFailure != null) {
@@ -311,6 +327,15 @@ public final class DragTool implements IMcpTool {
 				}
 			}
 			pause(AFTER_RELEASE_MILLIS);
+			if (input == Input.MUTTER && failure == null) {
+				Point expected = current;
+				UiThread.run(5, () -> {
+					Point pointer = Workbenches.display().getCursorLocation();
+					Rectangle bounds = dropBounds.get();
+					return result.put("pointerAfterRelease", pointer.x + "," + pointer.y) //$NON-NLS-1$ //$NON-NLS-2$
+							.put("onTarget", Boolean.valueOf(bounds != null ? bounds.contains(pointer) : !disturbed(expected, pointer))); //$NON-NLS-1$
+				});
+			}
 		} finally {
 			UiThread.run(5, () -> {
 				Workbenches.display().removeFilter(SWT.DragDetect, filter);
@@ -319,6 +344,9 @@ public final class DragTool implements IMcpTool {
 		}
 		if (pointerReads.get() > 0) {
 			result.put("pointerDisturbed", Boolean.valueOf(disturbances.size() > 0)); //$NON-NLS-1$
+		} else if (input == Input.MUTTER) {
+			result.put("pointerDisturbed", null) //$NON-NLS-1$
+					.put("pointerDisturbedNote", "Not known on Wayland, where the IDE cannot read the pointer during a drag; onTarget and pointerAfterRelease are read after the release, and after a drop outside this IDE's windows they hold the last position Wayland reported over them."); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		if (disturbances.size() > 0) {
 			result.put("pointerDisturbedAt", disturbances) //$NON-NLS-1$
@@ -427,30 +455,76 @@ public final class DragTool implements IMcpTool {
 	 * Moves the pointer along an interpolated line. On X11 the moves go through XTest, since GTK starts no drag
 	 * from the pointer warps SWT posts.
 	 */
-	private static String moveTo(Point from, Point to, int step, boolean gentleStart, boolean xtest, int zoom,
+	private static String moveTo(Point from, Point to, int step, boolean gentleStart, Input input, int zoom,
 			long deadline, IProgressMonitor monitor) {
+		Point previous = from;
 		for (Point point : interpolate(from, to, step, gentleStart)) {
 			if (System.currentTimeMillis() > deadline || monitor != null && monitor.isCanceled()) {
 				return "the call ran out of time before reaching %d,%d; raise stepPixels or shorten dwellMillis" //$NON-NLS-1$
 						.formatted(Integer.valueOf(point.x), Integer.valueOf(point.y));
 			}
-			String failure = xtest ? XTestInput.move(DeviceScale.pixels(point.x, zoom), DeviceScale.pixels(point.y, zoom))
-					: post(SWT.MouseMove, 0, point);
+			String failure = move(input, previous, point, zoom);
 			if (failure != null) {
 				return failure;
 			}
+			previous = point;
 			pause(STEP_MILLIS);
 		}
 		// GTK starts its drag partway along the line, and a drop target only answers motion after that
 		for (int dx : WIGGLE) {
-			String failure = xtest ? XTestInput.move(DeviceScale.pixels(to.x + dx, zoom), DeviceScale.pixels(to.y, zoom))
-					: post(SWT.MouseMove, 0, new Point(to.x + dx, to.y));
+			Point point = new Point(to.x + dx, to.y);
+			String failure = move(input, previous, point, zoom);
 			if (failure != null) {
 				return failure;
 			}
+			previous = point;
 			pause(50);
 		}
 		return null;
+	}
+
+	/** How the pointer and its buttons are driven. */
+	private enum Input {
+		XTEST("xtest"), MUTTER(MutterRemoteDesktop.METHOD), POST("displayPost"); //$NON-NLS-1$ //$NON-NLS-2$
+
+		final String method;
+
+		Input(String method) {
+			this.method = method;
+		}
+	}
+
+	/** Moves the pointer from one point to the next; mutter only takes the distance. */
+	private static String move(Input input, Point previous, Point point, int zoom) {
+		return switch (input) {
+		case XTEST -> XTestInput.move(DeviceScale.pixels(point.x, zoom), DeviceScale.pixels(point.y, zoom));
+		case MUTTER -> MutterRemoteDesktop.motion(point.x - previous.x, point.y - previous.y);
+		case POST -> post(SWT.MouseMove, 0, point);
+		};
+	}
+
+	private static String press(Input input, int button, boolean down) {
+		return switch (input) {
+		case XTEST -> XTestInput.button(button, down);
+		case MUTTER -> MutterRemoteDesktop.button(button, down);
+		case POST -> postButton(down ? SWT.MouseDown : SWT.MouseUp, button);
+		};
+	}
+
+	/** Turns mutter's arrival into the warp the X11 path reports, on the UI thread. */
+	private static WidgetTools.Click.Warp mutterWarp(MutterRemoteDesktop.Arrival arrival, Point point, JsonObject from) {
+		from.put("point", point.x + "," + point.y); //$NON-NLS-1$ //$NON-NLS-2$
+		if (arrival.pointer() != null) {
+			from.put("pointer", arrival.pointer().x + "," + arrival.pointer().y); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		if (arrival.failure() != null) {
+			from.put("moved", Boolean.FALSE); //$NON-NLS-1$
+			return new WidgetTools.Click.Warp(null, "The pointer did not arrive, so nothing was pressed: %s.".formatted(arrival.failure())); //$NON-NLS-1$
+		}
+		from.put("moved", Boolean.TRUE); //$NON-NLS-1$
+		Control under = arrival.under() == null || arrival.under().isDisposed() ? null : arrival.under();
+		from.put("controlUnderPointer", under == null ? null : under.getClass().getSimpleName()); //$NON-NLS-1$
+		return new WidgetTools.Click.Warp(under, null);
 	}
 
 	private static String postButton(int type, int button) {
