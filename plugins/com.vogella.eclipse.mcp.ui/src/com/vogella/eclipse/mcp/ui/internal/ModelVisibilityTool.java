@@ -7,6 +7,10 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.e4.core.contexts.IEclipseContext;
 import org.eclipse.e4.ui.model.application.MApplication;
 import org.eclipse.e4.ui.model.application.ui.MUIElement;
+import org.eclipse.e4.ui.model.application.ui.basic.MPart;
+import org.eclipse.e4.ui.model.application.ui.menu.MMenuElement;
+import org.eclipse.e4.ui.model.application.ui.menu.MToolBar;
+import org.eclipse.e4.ui.model.application.ui.menu.MToolBarElement;
 import org.eclipse.e4.ui.workbench.modeling.EModelService;
 import org.eclipse.ui.PlatformUI;
 
@@ -37,7 +41,7 @@ public final class ModelVisibilityTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Shows or hides an element of the e4 application model by its id, which is what reaches the things no other tool here can: the status line and other trim bars, the main menu, and one window out of several. CHANGES WHAT THE USER SEES AND IS REMEMBERED: unlike eclipse_set_ide_visibility, which only calls Shell.setVisible for the session, this writes the model, and the workbench saves the model on exit, so an element hidden here is still hidden after a restart and there is no menu entry to undo it with. Runs as a dry run unless dryRun is set to false, and the dry run lists what the id matches. Two flags exist and they are not the same: 'visible' takes the element out of the layout while the renderer keeps it, and 'toBeRendered' throws the widget away entirely, which is harder to reason about and is refused for a window. HIDING THE ONLY WINDOW THIS WAY IS A TRAP: it persists, so the IDE starts invisible next time; use eclipse_set_ide_visibility for that, which forgets."; //$NON-NLS-1$
+		return "Shows or hides an element of the e4 application model by its id, which is what reaches the things no other tool here can: the status line and other trim bars, the main menu, the menu and toolbar items in a part's e4 model (not actions a 3.x view adds through IActionBars), and one window out of several. CHANGES WHAT THE USER SEES AND IS REMEMBERED: unlike eclipse_set_ide_visibility, which only calls Shell.setVisible for the session, this writes the model, and the workbench saves the model on exit, so an element hidden here is still hidden after a restart and there is no menu entry to undo it with. Runs as a dry run unless dryRun is set to false, and the dry run lists what the id matches. Two flags exist and they are not the same: 'visible' takes the element out of the layout while the renderer keeps it, and 'toBeRendered' throws the widget away entirely, which is harder to reason about and is refused for a window. HIDING THE ONLY WINDOW THIS WAY IS A TRAP: it persists, so the IDE starts invisible next time; use eclipse_set_ide_visibility for that, which forgets."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -94,8 +98,7 @@ public final class ModelVisibilityTool implements IMcpTool {
 			return new JsonObject().put("ok", Boolean.FALSE) //$NON-NLS-1$
 					.put("error", "This workbench exposes no e4 model service."); //$NON-NLS-1$ //$NON-NLS-2$
 		}
-		List<MUIElement> found = modelService.findElements(application, elementId, MUIElement.class, null,
-				EModelService.ANYWHERE | EModelService.IN_MAIN_MENU | EModelService.IN_TRIM);
+		List<MUIElement> found = find(modelService, application, elementId);
 		if (found.isEmpty()) {
 			return new JsonObject().put("ok", Boolean.FALSE) //$NON-NLS-1$
 					.put("error", //$NON-NLS-1$
@@ -112,6 +115,10 @@ public final class ModelVisibilityTool implements IMcpTool {
 							: element.getClass().getInterfaces()[0].getSimpleName())
 					.put("wasVisible", Boolean.valueOf(element.isVisible())) //$NON-NLS-1$
 					.put("wasToBeRendered", Boolean.valueOf(element.isToBeRendered())); //$NON-NLS-1$
+			String part = owningPart(modelService, element);
+			if (part != null) {
+				entry.put("part", part); //$NON-NLS-1$
+			}
 			boolean isWindow = element instanceof org.eclipse.e4.ui.model.application.ui.basic.MWindow;
 			if (rendered != null && !rendered.booleanValue() && isWindow) {
 				if (report) {
@@ -142,6 +149,25 @@ public final class ModelVisibilityTool implements IMcpTool {
 				.put("truncated", Boolean.valueOf(found.size() > elements.size())) //$NON-NLS-1$
 				.put("elements", elements) //$NON-NLS-1$
 				.put("note", note(dryRun, visible)); //$NON-NLS-1$
+	}
+
+	/** Every element with the id, including the menus and toolbars of parts. */
+	public static List<MUIElement> find(EModelService modelService, MApplication application, String elementId) {
+		return modelService.findElements(application, elementId, MUIElement.class, null,
+				EModelService.ANYWHERE | EModelService.IN_MAIN_MENU | EModelService.IN_PART);
+	}
+
+	/** The id of the part whose menu or toolbar holds the element, or {@code null}. */
+	public static String owningPart(EModelService modelService, MUIElement element) {
+		for (MUIElement e = modelService.getContainer(element); e != null; e = modelService.getContainer(e)) {
+			if (e instanceof MPart part) {
+				return part.getElementId();
+			}
+			if (!(e instanceof MMenuElement || e instanceof MToolBarElement || e instanceof MToolBar)) {
+				return null;
+			}
+		}
+		return null;
 	}
 
 	private static String note(boolean dryRun, Boolean visible) {
