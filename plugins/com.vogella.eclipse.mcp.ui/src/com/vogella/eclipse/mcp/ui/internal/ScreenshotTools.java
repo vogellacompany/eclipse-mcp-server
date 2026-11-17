@@ -620,7 +620,9 @@ public final class ScreenshotTools {
 			ImageData windowData = null;
 			if (osWindow) {
 				if (printable == null) {
-					windowFailure = "An area of the screen has no window of its own; capture a shell or a part."; //$NON-NLS-1$
+					windowFailure = grewOverPopups
+							? "includePopups grew the area over a native popup, which the shell's own window does not hold." //$NON-NLS-1$
+							: "An area of the screen has no window of its own; capture a shell or a part."; //$NON-NLS-1$
 				} else if (sameTurn) {
 					windowFailure = "Inside one UI turn the window system has not composited this batch's changes yet."; //$NON-NLS-1$
 				} else {
@@ -714,8 +716,8 @@ public final class ScreenshotTools {
 				boolean uniformRegion = region != null && isBlank(data);
 				if (isBlank(data) && !uniformRegion) {
 					return Encoding.done(failure(printable == null
-							? "The capture came back uniform, so this display cannot be captured through the X11 root drawable. A compositing window manager redirects window contents into an offscreen pixmap, so reading the root yields nothing. There is no fallback for an area of the screen; capture a part, a shell or a widget instead, which can be painted directly." //$NON-NLS-1$
-							: "The capture came back uniform through both the X11 root drawable and by painting the widget, so this display cannot be captured at all. Nothing was written; do not trust screenshots here.")); //$NON-NLS-1$
+							? uniformScreenFailure(grewOverPopups, windowFailure, pixbufFailure)
+							: uniformPrintFailure(printOnly, sameTurn, !foreground, windowFailure, pixbufFailure)));
 				}
 				// before the filler is replaced: a half scale paint fills the top left quarter and the rest would then read as plain background
 				String scaleWarning = "widgetPrint".equals(method) ? paintCoverageWarning(data) : null; //$NON-NLS-1$
@@ -936,6 +938,53 @@ public final class ScreenshotTools {
 		 */
 		public static Size compositionSize(int clientWidth, int clientHeight) {
 			return new Size(Math.max(1, clientWidth), Math.max(1, clientHeight));
+		}
+
+		/**
+		 * The failure for a screen read that came back uniform with no print to fall back on,
+		 * either because the target is an area of the screen or because popups were added.
+		 */
+		public static String uniformScreenFailure(boolean grewOverPopups, String windowFailure, String pixbufFailure) {
+			String text = grewOverPopups
+					? "The capture came back uniform from the screen, and the widgets were not painted instead because includePopups grew the area over a native popup, which only the screen shows. Capture without includePopups to have the widgets painted." //$NON-NLS-1$
+					: "The capture came back uniform, so this display cannot be captured through the X11 root drawable. A compositing window manager redirects window contents into an offscreen pixmap, so reading the root yields nothing. There is no fallback for an area of the screen; capture a part, a shell or a widget instead, which can be painted directly."; //$NON-NLS-1$
+			return text + otherReads(windowFailure, pixbufFailure);
+		}
+
+		/**
+		 * The failure for a widget capture whose print came back uniform, naming
+		 * every reason the screen was not read and what would have it read.
+		 */
+		public static String uniformPrintFailure(boolean printOnly, boolean sameTurn, boolean background,
+				String windowFailure, String pixbufFailure) {
+			List<String> reasons = new ArrayList<>();
+			List<String> remedies = new ArrayList<>();
+			if (printOnly) {
+				reasons.add("method print was asked for"); //$NON-NLS-1$
+				remedies.add("drop method print"); //$NON-NLS-1$
+			}
+			if (sameTurn) {
+				reasons.add("inside one UI turn the screen has not been painted yet"); //$NON-NLS-1$
+				remedies.add("capture outside an atomic eclipse_run_script batch"); //$NON-NLS-1$
+			}
+			if (background) {
+				reasons.add("this IDE is not the foreground application, so a screen read would show whatever window is in front of it"); //$NON-NLS-1$
+				remedies.add("bring the IDE to the front"); //$NON-NLS-1$
+			}
+			if (reasons.isEmpty()) {
+				return "The capture came back uniform from the screen and by painting the widget, so this display cannot be captured at all. Nothing was written; do not trust screenshots here." //$NON-NLS-1$
+						+ otherReads(windowFailure, pixbufFailure);
+			}
+			return "Painting the widget came back uniform, and the screen was not read because " //$NON-NLS-1$
+					+ String.join(" and ", reasons) //$NON-NLS-1$
+					+ ". A print can leave out native children, so this says nothing about whether the display can be captured. Nothing was written. To have the screen read, " //$NON-NLS-1$
+					+ String.join(" and ", remedies) + "." + otherReads(windowFailure, pixbufFailure); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+
+		/** Why the window capture and the pixbuf read gave nothing, appended to a uniform failure. */
+		private static String otherReads(String windowFailure, String pixbufFailure) {
+			return (windowFailure == null ? "" : " The window capture was not used: " + windowFailure) //$NON-NLS-1$ //$NON-NLS-2$
+					+ (pixbufFailure == null ? "" : " The direct screen read failed, so copyArea read it: " + pixbufFailure); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 
 		/** Where a child goes in a composed shell capture, as plain values. */
