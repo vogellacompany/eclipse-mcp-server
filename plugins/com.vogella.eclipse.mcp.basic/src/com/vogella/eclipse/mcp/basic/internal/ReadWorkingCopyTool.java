@@ -6,6 +6,7 @@ import java.util.concurrent.TimeoutException;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 
@@ -29,7 +30,7 @@ public final class ReadWorkingCopyTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Reads the working copy of a workspace file: the shared text buffer that an open editor, a compare view or a refactoring holds, UNSAVED CHANGES INCLUDED. Read-only. eclipse_read_file reads the file as saved and says unsavedInEditor when the two differ; this is the tool that then returns what the user actually sees. The edit and write tools work on the saved file, so do not build an edit's oldText from unsaved text. When nothing holds a working copy of the file the answer says workingCopy false and eclipse_read_file is the one to use. dirty says the text differs from the saved file; synchronized false says the file changed on disk after the working copy was loaded, so the text is neither the disk nor necessarily what the user typed. The buffer is read on the UI thread, so a modal dialog or a busy IDE can make this time out while eclipse_read_file still works."; //$NON-NLS-1$
+		return "Reads the working copy of a workspace file: the shared text buffer that an open editor, a compare view or a refactoring holds, UNSAVED CHANGES INCLUDED. Read-only. eclipse_read_file reads the file as saved and says unsavedInEditor when the two differ; this is the tool that then returns what the user actually sees. The edit and write tools work on the saved file, so do not build an edit's oldText from unsaved text. When nothing holds a working copy of the file the answer says workingCopy false and eclipse_read_file is the one to use. The file is refreshed first, so a working copy without unsaved changes picks up edits made outside Eclipse, for example through a shell. dirty says the text differs from the saved file; synchronized false says the file changed on disk while the working copy had unsaved changes, which the refresh does not overwrite, so the text and the disk have diverged. The buffer is read on the UI thread, so a modal dialog or a busy IDE can make this time out while eclipse_read_file still works."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -42,7 +43,8 @@ public final class ReadWorkingCopyTool implements IMcpTool {
 				    "path":     {"type":"string","description":"Workspace path of the file, e.g. /app/src/com/example/Main.java"},
 				    "offset":   {"type":"integer","minimum":1,"description":"First line to return, 1 based. Omit for the start of the file."},
 				    "limit":    {"type":"integer","minimum":1,"maximum":100000,"description":"How many lines to return. Omit for the rest of the file."},
-				    "maxBytes": {"type":"integer","minimum":1,"maximum":10000000,"default":1000000,"description":"Refuse rather than return more than this."}
+				    "maxBytes": {"type":"integer","minimum":1,"maximum":10000000,"default":1000000,"description":"Refuse rather than return more than this."},
+				    "refresh":  {"type":"boolean","default":true,"description":"Read outside changes into the workspace first."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -61,6 +63,13 @@ public final class ReadWorkingCopyTool implements IMcpTool {
 		if (file == null) {
 			return McpToolResult.error("'%s' is not a workspace file path; it needs a project and a file.".formatted(path)); //$NON-NLS-1$
 		}
+		if (args.getBoolean("refresh", true)) { //$NON-NLS-1$
+			try {
+				FileSupport.refresh(file, monitor);
+			} catch (CoreException e) {
+				// the working copy is still readable, and stale content beats no content
+			}
+		}
 		int maxBytes = args.getInt("maxBytes", DEFAULT_MAX_BYTES, 1, 10_000_000); //$NON-NLS-1$
 		int offset = args.getInt("offset", 1, 1, Integer.MAX_VALUE); //$NON-NLS-1$
 		int limit = args.getInt("limit", -1, -1, 100_000); //$NON-NLS-1$
@@ -77,6 +86,9 @@ public final class ReadWorkingCopyTool implements IMcpTool {
 		}
 		JsonObject result = new JsonObject().put("path", file.getFullPath().toString()); //$NON-NLS-1$
 		if (workingCopy == null) {
+			if (!file.exists()) {
+				return McpToolResult.error("No file at the workspace path '%s'.".formatted(path)); //$NON-NLS-1$
+			}
 			return McpToolResult.of(result.put("read", Boolean.FALSE) //$NON-NLS-1$
 					.put("workingCopy", Boolean.FALSE) //$NON-NLS-1$
 					.put("reason", "Nothing holds a working copy of this file, so the saved file is all there is. Read it with eclipse_read_file.") //$NON-NLS-1$ //$NON-NLS-2$

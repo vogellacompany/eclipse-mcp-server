@@ -11,6 +11,8 @@ import org.eclipse.core.resources.IFile;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import com.vogella.eclipse.mcp.core.McpToolResult;
+
 /**
  * Reading the working copy gives the text the user sees, unsaved changes included, and says when
  * there is none or when it no longer matches the disk.
@@ -76,15 +78,40 @@ class ReadWorkingCopyToolTest {
 	}
 
 	@Test
-	void reportsAWorkingCopyTheDiskHasMovedAwayFrom() throws Exception {
-		IFile file = fixture.write("Moved.java", "class Moved {\n}\n");
+	void reportsAMissingFile() throws Exception {
+		IFile file = fixture.write("Present.java", "class Present {\n}\n");
+		String missing = file.getProject().getFullPath().append("Missing.java").toString();
+
+		McpToolResult result = TestFixture.call(TOOL, Map.of("path", missing));
+
+		assertTrue(result.isError(), "got " + result.text());
+		assertTrue(result.text().contains("No file at the workspace path"), "got " + result.text());
+	}
+
+	@Test
+	void picksUpAnOutsideChangeToACleanWorkingCopy() throws Exception {
+		IFile file = fixture.write("Shell.java", "class Shell {\n}\n");
 		fixture.connect(file);
 		// a client editing through its own shell, behind the workspace's back
+		Files.writeString(file.getLocation().toPath(), "class Shell {\n\tint onDisk;\n}\n", StandardCharsets.UTF_8);
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("path", file.getFullPath().toString()));
+
+		assertEquals(Boolean.FALSE, result.get("dirty"), "got " + result);
+		assertEquals(Boolean.TRUE, result.get("synchronized"), "got " + result);
+		assertEquals("class Shell {\n\tint onDisk;\n}\n", result.get("content"), "got " + result);
+	}
+
+	@Test
+	void keepsUnsavedTextTheDiskHasMovedAwayFrom() throws Exception {
+		IFile file = fixture.write("Moved.java", "class Moved {\n}\n");
+		fixture.connect(file).getDocument().set("class Moved {\n\tint unsaved;\n}\n");
 		Files.writeString(file.getLocation().toPath(), "class Moved {\n\tint onDisk;\n}\n", StandardCharsets.UTF_8);
 
 		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("path", file.getFullPath().toString()));
 
+		assertEquals(Boolean.TRUE, result.get("dirty"), "got " + result);
 		assertEquals(Boolean.FALSE, result.get("synchronized"), "got " + result);
-		assertEquals("class Moved {\n}\n", result.get("content"), "got " + result);
+		assertEquals("class Moved {\n\tint unsaved;\n}\n", result.get("content"), "got " + result);
 	}
 }
