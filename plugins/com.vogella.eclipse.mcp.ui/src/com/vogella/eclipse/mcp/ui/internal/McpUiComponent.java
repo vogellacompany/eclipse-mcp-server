@@ -47,5 +47,6 @@ public final class McpUiComponent {
 		VisibilityTool.restoreIfHidden();
 		// the same reasoning for an ad-hoc stylesheet: it can leave the IDE unreadable
 		CssStyling.dropIfApplied();
+		MutterRemoteDesktop.stop();
 	}
 }
