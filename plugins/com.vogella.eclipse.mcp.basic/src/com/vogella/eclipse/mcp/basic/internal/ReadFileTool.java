@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.Map;
 
+import org.eclipse.core.filebuffers.ITextFileBuffer;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
@@ -30,7 +31,7 @@ public final class ReadFileTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Reads a workspace file by workspace path, the same path form eclipse_open takes. Read-only. This exists because a client is not always on the same machine as the IDE, and once the window is hidden there is no filesystem to fall back on; it is also the only way to look at the plugin.xml or .exsd that eclipse_list_declarations cites as evidence, in the same IDE the verdict came from rather than in your own copy of the tree. The file is read through the workspace, so it uses the encoding Eclipse has for it, which a naive read of the bytes gets wrong silently for properties files and anything not UTF-8. Binary files are reported as binary rather than returned as a mangled string."; //$NON-NLS-1$
+		return "Reads a workspace file by workspace path, the same path form eclipse_open takes. Read-only. This exists because a client is not always on the same machine as the IDE, and once the window is hidden there is no filesystem to fall back on; it is also the only way to look at the plugin.xml or .exsd that eclipse_list_declarations cites as evidence, in the same IDE the verdict came from rather than in your own copy of the tree. The file is read through the workspace, so it uses the encoding Eclipse has for it, which a naive read of the bytes gets wrong silently for properties files and anything not UTF-8. Binary files are reported as binary rather than returned as a mangled string. The file is read as saved: when a working copy of it has unsaved changes, for example in an open editor, the answer says unsavedInEditor and eclipse_read_working_copy returns that text instead."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -97,6 +98,17 @@ public final class ReadFileTool implements IMcpTool {
 
 		String charset = FileSupport.charset(file);
 		String content = new String(bytes, Charset.forName(charset));
+		result.put("charset", charset); //$NON-NLS-1$
+		ITextFileBuffer workingCopy = WorkingCopies.find(file);
+		if (workingCopy != null && workingCopy.isDirty()) {
+			result.put("unsavedInEditor", Boolean.TRUE) //$NON-NLS-1$
+					.put("note", "A working copy of this file has unsaved changes, so this is not the text the user sees. eclipse_read_working_copy returns it."); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		return McpToolResult.of(putLines(result, content, offset, limit).toString());
+	}
+
+	/** Puts the requested line range of the content into the result, with its position in the whole. */
+	static JsonObject putLines(JsonObject result, String content, int offset, int limit) {
 		String[] lines = content.split("\n", -1); //$NON-NLS-1$
 		int total = lines.length;
 		int from = Math.min(offset - 1, total);
@@ -108,13 +120,11 @@ public final class ReadFileTool implements IMcpTool {
 				text.append('\n');
 			}
 		}
-		return McpToolResult.of(result.put("read", Boolean.TRUE) //$NON-NLS-1$
-				.put("charset", charset) //$NON-NLS-1$
+		return result.put("read", Boolean.TRUE) //$NON-NLS-1$
 				.put("totalLines", Integer.valueOf(total)) //$NON-NLS-1$
 				.put("firstLine", Integer.valueOf(from + 1)) //$NON-NLS-1$
 				.put("lastLine", Integer.valueOf(to)) //$NON-NLS-1$
 				.put("truncated", Boolean.valueOf(to < total || from > 0)) //$NON-NLS-1$
-				.put("content", text.toString()) //$NON-NLS-1$
-				.toString());
+				.put("content", text.toString()); //$NON-NLS-1$
 	}
 }
