@@ -172,6 +172,13 @@ sealed type fixes (`SealedMissingSealedModifier`,
 module Javadoc tags (`JavadocMissingUsesTag`, `JavadocMissingProvidesTag`),
 whose subprocessor methods are bound but not dispatched.
 
+The base subprocessors take no progress monitor, and JDT UI and JDT LS call
+them the same way, so computing one problem's fixes cannot be cancelled.
+`eclipse_get_quick_fixes` checks the call's time between problems and answers
+with what it has (`outOfTime`), but a single slow problem, such as an
+unresolved name in a large workspace, can still outlast the call's timeout.
+Not filed upstream.
+
 ### JDT: no code template store without JDT UI
 
 `StubUtility.getCodeTemplate` reads `JavaManipulation.getCodeTemplateStore()`,
