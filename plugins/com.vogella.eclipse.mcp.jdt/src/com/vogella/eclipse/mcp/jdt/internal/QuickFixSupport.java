@@ -9,6 +9,7 @@ import org.eclipse.core.filebuffers.ITextFileBuffer;
 import org.eclipse.core.filebuffers.LocationKind;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IJavaElement;
@@ -192,20 +193,31 @@ final class QuickFixSupport {
 	}
 
 	/** The files of the change whose buffer is still dirty, because an editor held unsaved edits to them. */
-	static List<String> unsavedFiles(Change change) {
+	static List<String> unsavedFiles(List<IPath> textFiles) {
 		List<String> unsaved = new ArrayList<>();
-		if (change instanceof CompositeChange composite) {
-			for (Change child : composite.getChildren()) {
-				unsaved.addAll(unsavedFiles(child));
-			}
-		} else if (change instanceof TextFileChange file) {
-			ITextFileBuffer buffer = FileBuffers.getTextFileBufferManager()
-					.getTextFileBuffer(file.getFile().getFullPath(), LocationKind.IFILE);
+		for (IPath path : textFiles) {
+			ITextFileBuffer buffer = FileBuffers.getTextFileBufferManager().getTextFileBuffer(path, LocationKind.IFILE);
 			if (buffer != null && buffer.isDirty()) {
-				unsaved.add(file.getFile().getFullPath().toString());
+				unsaved.add(path.toString());
 			}
 		}
 		return unsaved;
+	}
+
+	/**
+	 * The workspace paths of the files the change edits as text. Read before performing, since a performed
+	 * {@link CompositeChange} drops its children.
+	 */
+	static List<IPath> textFiles(Change change) {
+		List<IPath> paths = new ArrayList<>();
+		if (change instanceof CompositeChange composite) {
+			for (Change child : composite.getChildren()) {
+				paths.addAll(textFiles(child));
+			}
+		} else if (change instanceof TextFileChange file) {
+			paths.add(file.getFile().getFullPath());
+		}
+		return paths;
 	}
 
 	private static JsonObject describe(TextEdit edit, String content, SourceText lines) {

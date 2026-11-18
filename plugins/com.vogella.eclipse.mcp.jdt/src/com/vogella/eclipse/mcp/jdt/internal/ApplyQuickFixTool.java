@@ -7,6 +7,7 @@ import java.util.Objects;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.ILog;
+import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.compiler.IProblem;
@@ -155,6 +156,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				.put("problem", QuickFixSupport.describe(problem)) //$NON-NLS-1$
 				.put("fix", fix.getName()); //$NON-NLS-1$
 		Change change = null;
+		List<IPath> textFiles = List.of();
 		try {
 			change = fix.getChange();
 			if (change == null) {
@@ -181,6 +183,9 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				change.dispose();
 				return McpToolResult.error("The request was cancelled before the fix was applied."); //$NON-NLS-1$
 			}
+			// a performed composite change drops its children, so read the files first
+			List<String> touched = QuickFixSupport.files(change);
+			textFiles = QuickFixSupport.textFiles(change);
 			PerformChangeOperation operation = new PerformChangeOperation(change);
 			try {
 				ResourcesPlugin.getWorkspace().run(operation, monitor);
@@ -188,12 +193,12 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				// a cancel or failure while performing does not undo the edits already written
 				return McpToolResult.error("JDT could not finish '%s' (%s), and may have applied part of it. Check %s.".formatted( //$NON-NLS-1$
 						label, Objects.requireNonNullElse(e.getMessage(), e.getClass().getName()),
-						QuickFixSupport.files(change)));
+						touched));
 			}
 			if (operation.changeExecutionFailed()) {
 				// the change may have written some of its edits before it failed; LTK has disposed it
 				return McpToolResult.error("JDT could not apply '%s', and may have applied part of it. Check %s.".formatted( //$NON-NLS-1$
-						label, QuickFixSupport.files(change)));
+						label, touched));
 			}
 			if (!operation.changeExecuted()) {
 				// LTK validates once more before performing and skips the change when that turns fatal
@@ -219,7 +224,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 
 		// the fix is applied: whatever fails from here on must not read as a failed apply
 		try {
-			List<String> unsaved = QuickFixSupport.unsavedFiles(change);
+			List<String> unsaved = QuickFixSupport.unsavedFiles(textFiles);
 			if (!unsaved.isEmpty()) {
 				JsonArray files = new JsonArray();
 				unsaved.forEach(files::add);
