@@ -6,6 +6,7 @@ import java.util.Objects;
 
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.compiler.IProblem;
@@ -153,7 +154,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		JsonObject result = new JsonObject().put("dryRun", Boolean.valueOf(dryRun)) //$NON-NLS-1$
 				.put("problem", QuickFixSupport.describe(problem)) //$NON-NLS-1$
 				.put("fix", fix.getName()); //$NON-NLS-1$
-		Change change;
+		Change change = null;
 		try {
 			change = fix.getChange();
 			if (change == null) {
@@ -208,9 +209,11 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			return failed("apply the quick fix", new IllegalStateException(QuickFixSupport.mismatch(e), e)); //$NON-NLS-1$
 		} catch (CoreException e) {
 			// performing reports its own failures above, so this is before anything was written
+			disposeQuietly(change);
 			throw new McpToolException("Could not prepare the quick fix's change; nothing was changed", e); //$NON-NLS-1$
 		} catch (RuntimeException e) {
 			// performing reports its own failures above, so this is before anything was written
+			disposeQuietly(change);
 			return failed("prepare the quick fix's change, and nothing was changed", e); //$NON-NLS-1$
 		}
 
@@ -245,6 +248,18 @@ public final class ApplyQuickFixTool implements IMcpTool {
 	}
 
 	/** JDT's correction code throws unchecked exceptions for setups it does not expect; answer them rather than fail. */
+	/** Releases the validation state of a change that was never performed, without hiding the original failure. */
+	private static void disposeQuietly(Change change) {
+		if (change == null) {
+			return;
+		}
+		try {
+			change.dispose();
+		} catch (RuntimeException e) {
+			ILog.get().warn("Could not dispose a quick fix's change", e); //$NON-NLS-1$
+		}
+	}
+
 	private static McpToolResult failed(String what, RuntimeException e) {
 		return McpToolResult.error("JDT failed to %s: %s".formatted(what, //$NON-NLS-1$
 				Objects.requireNonNullElse(e.getMessage(), e.getClass().getName())));
