@@ -434,7 +434,8 @@ final class SubProcessors {
 				public void addEdits(IDocument document, TextEdit editRoot) throws CoreException {
 					// an ambiguous name takes JDT's first candidate, as the other fixes take its first suggestion
 					OrganizeImportsOperation operation = new OrganizeImportsOperation(cu, null, true, false, true,
-							(openChoices, ranges) -> Arrays.stream(openChoices).map(choices -> choices[0])
+							(openChoices, ranges) -> Arrays.stream(openChoices).filter(choices -> choices.length > 0)
+									.map(choices -> choices[0])
 									.toArray(TypeNameMatch[]::new));
 					TextEdit edit = operation.createTextEdit(new NullProgressMonitor());
 					if (edit != null) {

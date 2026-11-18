@@ -179,6 +179,9 @@ final class QuickFixSupport {
 			}
 		} else if (change instanceof TextFileChange file) {
 			files.add(file.getFile().getFullPath().toString());
+		} else if (change instanceof ProjectOptionsChange options) {
+			// the project's compiler options live in its JDT core preference file
+			files.add("/" + options.projectName() + "/.settings/org.eclipse.jdt.core.prefs"); //$NON-NLS-1$ //$NON-NLS-2$
 		} else if (change.getModifiedElement() instanceof IJavaElement element && element.getResource() != null) {
 			// a move, rename or new file
 			files.add(element.getResource().getFullPath().toString());
