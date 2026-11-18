@@ -124,8 +124,9 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		JsonObject result = new JsonObject().put("dryRun", Boolean.valueOf(dryRun)) //$NON-NLS-1$
 				.put("problem", QuickFixSupport.describe(problem)) //$NON-NLS-1$
 				.put("fix", fix.getName()); //$NON-NLS-1$
+		Change change;
 		try {
-			Change change = fix.getChange();
+			change = fix.getChange();
 			if (change == null) {
 				return McpToolResult.error("JDT produced no change for '%s'.".formatted(label)); //$NON-NLS-1$
 			}
@@ -148,6 +149,14 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				return McpToolResult.error("JDT could not apply '%s', and may have applied part of it. Check %s.".formatted( //$NON-NLS-1$
 						label, QuickFixSupport.files(change)));
 			}
+		} catch (CoreException e) {
+			throw new McpToolException("Could not apply the quick fix", e); //$NON-NLS-1$
+		} catch (RuntimeException e) {
+			return failed("apply the quick fix", e); //$NON-NLS-1$
+		}
+
+		// the fix is applied: whatever fails from here on must not read as a failed apply
+		try {
 			List<String> unsaved = QuickFixSupport.unsavedFiles(change);
 			if (!unsaved.isEmpty()) {
 				JsonArray files = new JsonArray();
@@ -155,19 +164,18 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				result.put("unsavedFiles", files).put("note", //$NON-NLS-1$ //$NON-NLS-2$
 						"These files had unsaved edits in an open editor, so the fix is in the editor and not yet on disk."); //$NON-NLS-1$
 			}
-		} catch (CoreException e) {
-			throw new McpToolException("Could not apply the quick fix", e); //$NON-NLS-1$
+			// what is left tells the caller whether to look for another fix
+			List<IProblem> left = QuickFixSupport.problems(QuickFixSupport.parse(unit, monitor), false);
+			JsonArray remaining = new JsonArray();
+			left.stream().limit(maxResults).forEach(error -> remaining.add(QuickFixSupport.describe(error)));
+			result.put("remainingErrors", remaining) //$NON-NLS-1$
+					.put("remainingErrorsTotal", Integer.valueOf(left.size())) //$NON-NLS-1$
+					.put("truncated", Boolean.valueOf(left.size() > remaining.size())); //$NON-NLS-1$
 		} catch (RuntimeException e) {
-			return failed("apply the quick fix", e); //$NON-NLS-1$
+			result.put("checkError", "The fix was applied, but the file could not be checked again: " //$NON-NLS-1$ //$NON-NLS-2$
+					+ Objects.requireNonNullElse(e.getMessage(), e.getClass().getName()));
 		}
-
-		// what is left tells the caller whether to look for another fix
-		List<IProblem> left = QuickFixSupport.problems(QuickFixSupport.parse(unit, monitor), false);
-		JsonArray remaining = new JsonArray();
-		left.stream().limit(maxResults).forEach(error -> remaining.add(QuickFixSupport.describe(error)));
-		return McpToolResult.of(result.put("remainingErrors", remaining) //$NON-NLS-1$
-				.put("remainingErrorsTotal", Integer.valueOf(left.size())) //$NON-NLS-1$
-				.put("truncated", Boolean.valueOf(left.size() > remaining.size())).toString()); //$NON-NLS-1$
+		return McpToolResult.of(result.toString());
 	}
 
 	/** JDT's correction code throws unchecked exceptions for setups it does not expect; answer them rather than fail. */

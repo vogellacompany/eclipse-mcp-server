@@ -101,9 +101,12 @@ final class QuickFixSupport {
 			}
 			if (text.getEdit() != null) {
 				String content = Objects.requireNonNullElse(text.getCurrentContent(monitor), ""); //$NON-NLS-1$
+				SourceText lines = SourceText.of(content);
 				JsonArray edits = new JsonArray();
 				for (TextEdit edit : leaves(text.getEdit())) {
-					edits.add(describe(edit, content));
+					if (edit.getOffset() >= 0) {
+						edits.add(describe(edit, content, lines));
+					}
 				}
 				entry.put("edits", edits); //$NON-NLS-1$
 			}
@@ -163,16 +166,16 @@ final class QuickFixSupport {
 		return unsaved;
 	}
 
-	private static JsonObject describe(TextEdit edit, String content) {
+	private static JsonObject describe(TextEdit edit, String content, SourceText lines) {
 		int offset = edit.getOffset();
-		int length = edit.getLength();
+		int length = Math.max(0, edit.getLength());
 		String newText = switch (edit) {
 			case ReplaceEdit replace -> replace.getText();
 			case InsertEdit insert -> insert.getText();
 			case DeleteEdit delete -> ""; //$NON-NLS-1$
 			default -> null;
 		};
-		JsonObject entry = new JsonObject().put("line", Integer.valueOf(lineOf(content, offset))) //$NON-NLS-1$
+		JsonObject entry = new JsonObject().put("line", Integer.valueOf(lines.lineOf(Math.min(offset, content.length())))) //$NON-NLS-1$
 				.put("offset", Integer.valueOf(offset)) //$NON-NLS-1$
 				.put("oldText", content.substring(Math.min(content.length(), offset), Math.min(content.length(), offset + length))); //$NON-NLS-1$
 		if (newText != null) {
@@ -198,13 +201,4 @@ final class QuickFixSupport {
 		return leaves;
 	}
 
-	private static int lineOf(String content, int offset) {
-		int line = 1;
-		for (int i = 0; i < offset && i < content.length(); i++) {
-			if (content.charAt(i) == '\n') {
-				line++;
-			}
-		}
-		return line;
-	}
 }

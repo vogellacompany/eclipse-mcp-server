@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Map;
 import java.util.Set;
 
@@ -90,26 +91,17 @@ public final class QuickFixProcessor {
 		CodeTemplates.ensureInstalled();
 		IProblemLocation location = new ProblemLocation(problem);
 		IInvocationContext context = new InvocationContext(unit, astRoot, location.getOffset(), location.getLength());
-		List<ChangeCorrectionProposalCore> proposals = new NonNullList();
+		List<ChangeCorrectionProposalCore> proposals = new ArrayList<>();
 		process(context, location, proposals);
 		suppressWarnings.getSuppressWarningsProposals(context, location, proposals);
 
 		List<ChangeCorrectionProposalCore> sorted = new ArrayList<>(proposals);
+		// a factory returns null for a fix that needs JDT UI, and the subprocessors also hand lists over with addAll
+		sorted.removeIf(Objects::isNull);
 		sorted.sort(Comparator.comparingInt(ChangeCorrectionProposalCore::getRelevance).reversed());
 		Set<String> labels = new HashSet<>();
 		sorted.removeIf(proposal -> !labels.add(proposal.getName()));
 		return sorted;
-	}
-
-	/** Collects proposals, silently skipping the {@code null} a factory returns for a fix that needs JDT UI. */
-	private static final class NonNullList extends ArrayList<ChangeCorrectionProposalCore> {
-
-		private static final long serialVersionUID = 1L;
-
-		@Override
-		public boolean add(ChangeCorrectionProposalCore proposal) {
-			return proposal != null && super.add(proposal);
-		}
 	}
 
 	private void process(IInvocationContext context, IProblemLocation problem,
