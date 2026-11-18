@@ -42,6 +42,7 @@ import org.eclipse.core.runtime.preferences.InstanceScope;
 import org.eclipse.jdt.core.IClasspathEntry;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.JavaCore;
+import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.launching.JavaRuntime;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -82,6 +83,8 @@ class McpServerServiceTest {
 	private static final String PORT_FILE_NAME = "port.properties";
 
 	private static final String SAMPLE = "/%s/src/example/Sample.java".formatted(PROJECT);
+
+	private static final String QUICK_FIX_SAMPLE = "/%s/src/example/QuickFixSample.java".formatted(PROJECT);
 
 	private static final Set<String> WRITES_FILES = Set.of("eclipse_organize_imports", "eclipse_format",
 			"eclipse_write_file");
@@ -152,6 +155,16 @@ class McpServerServiceTest {
 						public class Sample {
 							void run() {
 							}
+						}
+						""", false, new NullProgressMonitor());
+		// one unused import, so the quick fix smoke test has a problem to fix
+		javaProject.getPackageFragmentRoot(source).getPackageFragment("example").createCompilationUnit(
+				"QuickFixSample.java", """
+						package example;
+
+						import java.util.Map;
+
+						public class QuickFixSample {
 						}
 						""", false, new NullProgressMonitor());
 		Path empty = Files.createTempDirectory("mcp-endpoint-test");
@@ -684,6 +697,10 @@ class McpServerServiceTest {
 		case "eclipse_set_target_platform" -> Map.of("file", TARGET, "resolveOnly", Boolean.TRUE, "timeoutSeconds", 60);
 		// dryRun defaults true, so the smoke test rewrites nothing
 		case "eclipse_remove_unused_imports" -> Map.of("path", SAMPLE);
+		// dryRun defaults true, so the smoke test removes nothing
+		case "eclipse_apply_quick_fix" -> Map.of("path", QUICK_FIX_SAMPLE, "problemId", IProblem.UnusedImport,
+				"line", 3, "fix", "Remove unused import");
+		case "eclipse_get_quick_fixes" -> Map.of("path", QUICK_FIX_SAMPLE);
 		// dryRun defaults true, so the smoke test transforms nothing
 		case "eclipse_clean_up" -> Map.of("path", SAMPLE, "cleanUps", List.of("cleanup.remove_unused_imports"));
 		// dryRun defaults true, so the smoke test deletes nothing; naming the fixture

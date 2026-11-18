@@ -148,17 +148,38 @@ Not seen here once both managers are refreshed.
 
 ## API gaps rather than defects
 
-### JDT: no headless quick fix API
+### JDT: quick fixes are headless only through internal API
 
-The concrete fixes live in `org.eclipse.jdt.internal.corext.fix`, exported
-`x-friends:="org.eclipse.jdt.ui,..."`, so they are a compile error outside JDT UI.
-`org.eclipse.jdt.core.manipulation` exports only the framework types
-(`ICleanUpFixCore`, `CleanUpContextCore`, `CUCorrectionProposalCore`) and nothing
-that maps a marker to proposals.
+The subprocessors behind Ctrl+1 live in `org.eclipse.jdt.core.manipulation` as
+`*BaseSubProcessor<T>` and `*ProposalCore` classes in
+`org.eclipse.jdt.internal.ui.text.correction`, exported
+`x-friends:="org.eclipse.jdt.ui,..."`, so using them is discouraged access that may
+change between releases. The dispatcher that maps a problem id to them,
+`QuickFixProcessor`, stays in JDT UI, so JDT LS and this project each keep a copy.
 
-Consequence: `eclipse_get_quick_fixes` cannot be built headlessly. It would need
-`org.eclipse.jdt.ui` and therefore the UI thread, which is wrong for bulk
-application.
+`corrections.QuickFixProcessor` follows JDT LS's copy. Not ported, because JDT UI
+implements them as wizards or dialogs with no core counterpart: creating a new
+type for an unresolved name, adding a library or project to the build path,
+self encapsulate field, generating `hashCode`/`equals`, and the catch clause
+quick assists JDT LS takes from its own `QuickAssistProcessor`.
+
+### JDT: no code template store without JDT UI
+
+`StubUtility.getCodeTemplate` reads `JavaManipulation.getCodeTemplateStore()`,
+which only JDT UI sets, so every quick fix that writes a method, constructor or
+catch block throws a `NullPointerException` in `ProjectTemplateStore.load` when
+JDT UI has not started. `corrections.CodeTemplates` installs JDT UI's default
+body templates when the store is missing, as JDT LS does in its
+`PreferenceManager`; the user's own code templates apply only once JDT UI has
+started and installed its store. Not filed upstream.
+
+### JDT: correction proposals leave their edits unsaved
+
+`CUCorrectionProposalCore.createTextChange` sets `TextFileChange.LEAVE_DIRTY`,
+because a proposal is meant to edit an open editor. Performed headlessly the
+edit goes to a buffer nobody holds and is lost when the buffer is released.
+`QuickFixSupport.saveFiles` switches every text change to `KEEP_SAVE_STATE`
+before `eclipse_apply_quick_fix` performs it. As designed for an editor, not filed.
 
 ### JDT: `SearchMatch.getResource()` attributes a binary match to the wrong project
 
