@@ -9,7 +9,6 @@ pipeline {
 		label 'built-in'
 	}
 	tools {
-		maven 'Maven 3.9'
 		// JavaSE-25 is the BREE of every bundle here, so an older JDK does not compile
 		jdk 'Java 25 Temurin'
 	}
@@ -25,7 +24,7 @@ pipeline {
 				// request its own workspace, and each would otherwise download the
 				// whole Eclipse SDK again for the Tycho target platform
 				sh '''
-					mvn clean verify \
+					./mvnw clean verify \
 						--batch-mode --no-transfer-progress --show-version --errors
 				'''
 			}
