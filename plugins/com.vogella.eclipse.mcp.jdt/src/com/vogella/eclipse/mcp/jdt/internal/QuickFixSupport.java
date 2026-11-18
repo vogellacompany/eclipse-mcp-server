@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +94,9 @@ final class QuickFixSupport {
 				problems.add(problem);
 			}
 		}
-		problems.sort((a, b) -> Integer.compare(a.getSourceStart(), b.getSourceStart()));
+		// a problem without a position (start -1) has no fix, so it goes last rather than use up maxResults
+		problems.sort(Comparator.comparing((IProblem problem) -> Boolean.valueOf(problem.getSourceStart() < 0))
+				.thenComparingInt(IProblem::getSourceStart));
 		return problems;
 	}
 
