@@ -147,12 +147,21 @@ public final class ApplyQuickFixTool implements IMcpTool {
 						+ status.getMessageMatchingSeverity(RefactoringStatus.FATAL));
 			}
 			PerformChangeOperation operation = new PerformChangeOperation(change);
-			ResourcesPlugin.getWorkspace().run(operation, monitor);
+			try {
+				ResourcesPlugin.getWorkspace().run(operation, monitor);
+			} catch (CoreException | RuntimeException e) {
+				// a cancel or failure while performing does not undo the edits already written
+				return McpToolResult.error("JDT could not finish '%s' (%s), and may have applied part of it. Check %s.".formatted( //$NON-NLS-1$
+						label, Objects.requireNonNullElse(e.getMessage(), e.getClass().getName()),
+						QuickFixSupport.files(change)));
+			}
 			if (operation.changeExecutionFailed()) {
 				// the change may have written some of its edits before it failed
 				return McpToolResult.error("JDT could not apply '%s', and may have applied part of it. Check %s.".formatted( //$NON-NLS-1$
 						label, QuickFixSupport.files(change)));
 			}
+		} catch (LinkageError e) {
+			return failed("apply the quick fix", new IllegalStateException(QuickFixSupport.mismatch(e), e)); //$NON-NLS-1$
 		} catch (CoreException e) {
 			throw new McpToolException(dryRun ? "Could not describe the quick fix's change" : "Could not apply the quick fix", e); //$NON-NLS-1$ //$NON-NLS-2$
 		} catch (RuntimeException e) {
@@ -168,8 +177,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				result.put("unsavedFiles", files).put("note", //$NON-NLS-1$ //$NON-NLS-2$
 						"These files had unsaved edits in an open editor, so the fix is in the editor and not yet on disk."); //$NON-NLS-1$
 			}
-			// what is left tells the caller whether to look for another fix
-			CompilationUnit after = QuickFixSupport.parse(unit, monitor);
+			// what is left tells the caller whether to look for another fix; a move leaves the old unit behind
+			CompilationUnit after = unit.exists() ? QuickFixSupport.parse(unit, monitor) : null;
 			List<IProblem> left = after == null ? List.of() : QuickFixSupport.problems(after, false);
 			JsonArray remaining = new JsonArray();
 			left.stream().limit(maxResults).forEach(error -> remaining.add(QuickFixSupport.describe(error)));

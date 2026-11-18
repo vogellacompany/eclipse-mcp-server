@@ -68,7 +68,18 @@ final class QuickFixSupport {
 			throws CoreException {
 		// headless, the jdt.ui preference node the code style is read from is missing
 		OrganizeImportsTool.ensureCodeStylePreferences();
-		return new QuickFixProcessor().getCorrections(unit, astRoot, problem);
+		try {
+			return new QuickFixProcessor().getCorrections(unit, astRoot, problem);
+		} catch (LinkageError e) {
+			// the port subclasses internal classes whose abstract methods change between releases
+			throw new IllegalStateException(mismatch(e), e);
+		}
+	}
+
+	/** Explains a linkage error from the internal subprocessors the port is compiled against. */
+	static String mismatch(LinkageError e) {
+		return "The installed org.eclipse.jdt.core.manipulation does not match the one these quick fixes were built against: " //$NON-NLS-1$
+				+ e;
 	}
 
 	static JsonObject describe(IProblem problem) {
@@ -114,10 +125,14 @@ final class QuickFixSupport {
 			JsonObject changed = new JsonObject();
 			options.changedOptions().forEach(changed::put);
 			entry.put("project", options.projectName()).put("options", changed); //$NON-NLS-1$ //$NON-NLS-2$
-		} else if (change.getModifiedElement() instanceof IJavaElement element) {
-			entry.put("element", element.getElementName()); //$NON-NLS-1$
-		} else if (change.getModifiedElement() instanceof IResource resource) {
-			entry.put("element", resource.getFullPath().toString()); //$NON-NLS-1$
+		} else {
+			// a move, rename or new file: name what it is, since it changes more than text
+			entry.put("kind", change.getClass().getSimpleName()); //$NON-NLS-1$
+			if (change.getModifiedElement() instanceof IJavaElement element) {
+				entry.put("element", element.getElementName()); //$NON-NLS-1$
+			} else if (change.getModifiedElement() instanceof IResource resource) {
+				entry.put("element", resource.getFullPath().toString()); //$NON-NLS-1$
+			}
 		}
 		changes.add(entry);
 	}
