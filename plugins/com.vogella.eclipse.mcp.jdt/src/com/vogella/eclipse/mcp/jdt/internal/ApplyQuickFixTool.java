@@ -162,15 +162,19 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			change.initializeValidationData(monitor);
 			RefactoringStatus status = change.isValid(monitor);
 			if (status.hasFatalError()) {
+				change.dispose();
 				return McpToolResult.error("The fix can no longer be applied: " //$NON-NLS-1$
 						+ status.getMessageMatchingSeverity(RefactoringStatus.FATAL));
 			}
 			if (dryRun) {
 				result.put("note", "Nothing was changed. Pass dryRun false to apply it."); //$NON-NLS-1$ //$NON-NLS-2$
+				// releases the validation state; performing the change disposes it on the other path
+				change.dispose();
 				return McpToolResult.of(result.toString());
 			}
 			if (monitor.isCanceled()) {
 				// the caller gave up: change nothing it can no longer see
+				change.dispose();
 				return McpToolResult.error("The request was cancelled before the fix was applied."); //$NON-NLS-1$
 			}
 			PerformChangeOperation operation = new PerformChangeOperation(change);

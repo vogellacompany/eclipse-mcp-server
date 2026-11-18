@@ -116,7 +116,7 @@ public final class QuickFixProcessor {
 				}
 				throw runtimeFailure;
 			}
-			ILog.get().error("A quick fix subprocessor failed for problem " + problem.getID() //$NON-NLS-1$
+			ILog.get().warn("A quick fix subprocessor failed for problem " + problem.getID() //$NON-NLS-1$
 					+ "; the fixes the others found are kept.", failure); //$NON-NLS-1$
 		}
 

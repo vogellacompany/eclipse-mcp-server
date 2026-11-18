@@ -1,6 +1,8 @@
 package com.vogella.eclipse.mcp.jdt.internal.corrections;
 
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Objects;
 
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.CoreException;
@@ -31,7 +33,9 @@ import org.eclipse.jdt.core.dom.rewrite.ImportRewrite.TypeLocation;
 import org.eclipse.jdt.core.dom.rewrite.ImportRewrite;
 import org.eclipse.jdt.core.manipulation.CUCorrectionProposalCore;
 import org.eclipse.jdt.core.manipulation.ChangeCorrectionProposalCore;
+import org.eclipse.jdt.core.manipulation.OrganizeImportsOperation;
 import org.eclipse.jdt.core.refactoring.CompilationUnitChange;
+import org.eclipse.jdt.core.search.TypeNameMatch;
 import org.eclipse.jdt.internal.core.manipulation.dom.ASTResolving;
 import org.eclipse.jdt.internal.core.manipulation.util.BasicElementLabels;
 import org.eclipse.jdt.internal.corext.codemanipulation.ContextSensitiveImportRewriteContext;
@@ -103,8 +107,10 @@ import org.eclipse.jdt.ui.cleanup.ICleanUp;
 import org.eclipse.jdt.ui.text.java.IInvocationContext;
 import org.eclipse.jdt.ui.text.java.IProblemLocation;
 import org.eclipse.jdt.ui.text.java.correction.ASTRewriteCorrectionProposalCore;
+import org.eclipse.jface.text.IDocument;
 import org.eclipse.ltk.core.refactoring.Change;
 import org.eclipse.ltk.core.refactoring.CompositeChange;
+import org.eclipse.text.edits.TextEdit;
 
 /**
  * The quick fix subprocessors of {@code org.eclipse.jdt.core.manipulation}, bound to plain
@@ -419,7 +425,23 @@ final class SubProcessors {
 		@Override
 		protected ChangeCorrectionProposalCore createOrganizeImportsProposal(String label, Change change,
 				ICompilationUnit cu, int relevance) {
-			return new ChangeCorrectionProposalCore(label, change, relevance);
+			if (change != null) {
+				return new ChangeCorrectionProposalCore(label, change, relevance);
+			}
+			// the base hands over no change and leaves building it to the proposal, as JDT UI's does from the unit
+			return new CUCorrectionProposalCore(label, cu, relevance) {
+				@Override
+				public void addEdits(IDocument document, TextEdit editRoot) throws CoreException {
+					// an ambiguous name takes JDT's first candidate, as the other fixes take its first suggestion
+					OrganizeImportsOperation operation = new OrganizeImportsOperation(cu, null, true, false, true,
+							(openChoices, ranges) -> Arrays.stream(openChoices).map(choices -> choices[0])
+									.toArray(TypeNameMatch[]::new));
+					TextEdit edit = operation.createTextEdit(new NullProgressMonitor());
+					if (edit != null) {
+						editRoot.addChild(edit);
+					}
+				}
+			};
 		}
 
 		@Override
@@ -680,7 +702,7 @@ final class SubProcessors {
 		@Override
 		protected boolean alreadyHasProposal(Collection<ChangeCorrectionProposalCore> proposals, String token) {
 			for (ChangeCorrectionProposalCore proposal : proposals) {
-				if (proposal instanceof SuppressWarningsProposal suppress && token.equals(suppress.token)) {
+				if (proposal instanceof SuppressWarningsProposal suppress && Objects.equals(token, suppress.token)) {
 					return true;
 				}
 			}

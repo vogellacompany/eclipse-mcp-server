@@ -135,6 +135,25 @@ class QuickFixToolsTest {
 	}
 
 	@Test
+	void organizesTheImportsForAnUnusedImport() throws Exception {
+		IFile file = holder("""
+				package example;
+				import java.util.Map;
+				public class Holder {
+				}
+				""");
+
+		Map<String, Object> problem = problem(IProblem.UnusedImport);
+		String label = fixContaining(problem, "Organize imports");
+		Map<String, Object> dry = apply(problem, label, true);
+		assertTrue(String.valueOf(dry.get("changes")).contains("import java.util.Map;"),
+				"the dry run should list the edit: " + dry);
+		apply(problem, label, false);
+
+		assertFalse(TestFixture.read(file).contains("java.util.Map"), TestFixture.read(file));
+	}
+
+	@Test
 	void refusesAnUnknownFixWithTheOffered() throws Exception {
 		holder("""
 				package example;
