@@ -269,6 +269,20 @@ class QuickFixToolsTest {
 		assertTrue(TestFixture.read(file).contains("@param x"), TestFixture.read(file));
 	}
 
+	@Test
+	void renamesTheTypeToMatchItsFile() throws Exception {
+		IFile file = holder("""
+				package example;
+				public class Other {
+				}
+				""");
+
+		Map<String, Object> problem = problem(IProblem.PublicClassMustMatchFileName);
+		apply(problem, fixContaining(problem, "Holder"), false);
+
+		assertTrue(TestFixture.read(file).contains("public class Holder"), TestFixture.read(file));
+	}
+
 	private IFile holder(String source) throws Exception {
 		IJavaProject project = fixture.createJavaProject(PROJECT);
 		IFile file = TestFixture.addType(project, "example", "Holder", source);
