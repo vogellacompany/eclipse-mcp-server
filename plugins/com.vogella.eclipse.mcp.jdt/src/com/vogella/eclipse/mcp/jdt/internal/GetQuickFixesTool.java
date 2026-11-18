@@ -2,6 +2,7 @@ package com.vogella.eclipse.mcp.jdt.internal;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -92,7 +93,7 @@ public final class GetQuickFixesTool implements IMcpTool {
 				}
 			} catch (CoreException | RuntimeException e) {
 				// one subprocessor failing must not hide the other problems' fixes
-				entry.put("error", String.valueOf(e.getMessage())); //$NON-NLS-1$
+				entry.put("error", Objects.requireNonNullElse(e.getMessage(), e.getClass().getName())); //$NON-NLS-1$
 			}
 			listed.add(entry.put("fixes", fixes)); //$NON-NLS-1$
 		}

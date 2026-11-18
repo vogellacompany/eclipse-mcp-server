@@ -2,6 +2,7 @@ package com.vogella.eclipse.mcp.jdt.internal;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -93,7 +94,7 @@ final class QuickFixSupport {
 				entry.put("file", fileChange.getFile().getFullPath().toString()); //$NON-NLS-1$
 			}
 			if (text.getEdit() != null) {
-				String content = text.getCurrentContent(monitor);
+				String content = Objects.requireNonNullElse(text.getCurrentContent(monitor), ""); //$NON-NLS-1$
 				JsonArray edits = new JsonArray();
 				for (TextEdit edit : leaves(text.getEdit())) {
 					edits.add(describe(edit, content));
@@ -131,7 +132,7 @@ final class QuickFixSupport {
 		};
 		JsonObject entry = new JsonObject().put("line", Integer.valueOf(lineOf(content, offset))) //$NON-NLS-1$
 				.put("offset", Integer.valueOf(offset)) //$NON-NLS-1$
-				.put("oldText", content.substring(offset, Math.min(content.length(), offset + length))); //$NON-NLS-1$
+				.put("oldText", content.substring(Math.min(content.length(), offset), Math.min(content.length(), offset + length))); //$NON-NLS-1$
 		if (newText != null) {
 			entry.put("newText", newText); //$NON-NLS-1$
 		} else {
