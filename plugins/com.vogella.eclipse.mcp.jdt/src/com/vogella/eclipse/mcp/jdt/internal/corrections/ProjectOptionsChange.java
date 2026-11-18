@@ -19,30 +19,36 @@ public final class ProjectOptionsChange extends Change {
 
 	private final String name;
 	private final IJavaProject project;
-	private final Map<String, String> options;
+	/** The options to set, applied to the project's options as they are when the change runs. */
+	private final Map<String, String> updates;
 
-	private ProjectOptionsChange(String name, IJavaProject project, Map<String, String> options) {
+	/** Whether {@link #updates} replace all project options, as the undo of a change does. */
+	private final boolean replace;
+
+	private ProjectOptionsChange(String name, IJavaProject project, Map<String, String> updates, boolean replace) {
 		this.name = name;
 		this.project = project;
-		this.options = options;
+		this.updates = updates;
+		this.replace = replace;
 	}
 
 	/** Raises the project's compliance, source and target level to {@code version}, optionally with preview features. */
 	static ProjectOptionsChange compliance(String name, IJavaProject project, String version, boolean enablePreviews) {
-		Map<String, String> options = new HashMap<>(project.getOptions(false));
-		JavaCore.setComplianceOptions(version, options);
+		// only the keys the compliance level decides, so options changed after the proposal are kept
+		Map<String, String> updates = new HashMap<>();
+		JavaCore.setComplianceOptions(version, updates);
 		if (enablePreviews) {
-			options.put(JavaCore.COMPILER_PB_ENABLE_PREVIEW_FEATURES, JavaCore.ENABLED);
-			options.put(JavaCore.COMPILER_PB_REPORT_PREVIEW_FEATURES, JavaCore.IGNORE);
+			updates.put(JavaCore.COMPILER_PB_ENABLE_PREVIEW_FEATURES, JavaCore.ENABLED);
+			updates.put(JavaCore.COMPILER_PB_REPORT_PREVIEW_FEATURES, JavaCore.IGNORE);
 		}
-		return new ProjectOptionsChange(name, project, options);
+		return new ProjectOptionsChange(name, project, updates, false);
 	}
 
 	/** The project options this change sets to a value they do not have now, by key. */
 	public Map<String, String> changedOptions() {
 		Map<String, String> current = project.getOptions(false);
 		Map<String, String> changed = new TreeMap<>();
-		options.forEach((key, value) -> {
+		updates.forEach((key, value) -> {
 			if (!Objects.equals(current.get(key), value)) {
 				changed.put(key, value);
 			}
@@ -62,7 +68,7 @@ public final class ProjectOptionsChange extends Change {
 
 	@Override
 	public void initializeValidationData(IProgressMonitor monitor) {
-		// the options are read when the change runs
+		// the project's options are read when the change runs
 	}
 
 	@Override
@@ -73,9 +79,13 @@ public final class ProjectOptionsChange extends Change {
 
 	@Override
 	public Change perform(IProgressMonitor monitor) {
-		ProjectOptionsChange undo = new ProjectOptionsChange(name, project, new HashMap<>(project.getOptions(false)));
-		project.setOptions(options);
-		return undo;
+		Map<String, String> before = new HashMap<>(project.getOptions(false));
+		Map<String, String> after = replace ? new HashMap<>(updates) : new HashMap<>(before);
+		if (!replace) {
+			after.putAll(updates);
+		}
+		project.setOptions(after);
+		return new ProjectOptionsChange(name, project, before, true);
 	}
 
 	@Override
