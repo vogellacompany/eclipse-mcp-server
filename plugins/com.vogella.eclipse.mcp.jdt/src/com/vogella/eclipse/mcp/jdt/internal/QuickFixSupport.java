@@ -1,8 +1,10 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import org.eclipse.core.filebuffers.FileBuffers;
 import org.eclipse.core.filebuffers.ITextFileBuffer;
@@ -64,11 +66,17 @@ final class QuickFixSupport {
 		}
 	}
 
-	/** The unit's errors and, optionally, warnings and infos, in source order. */
+	/**
+	 * The unit's errors and, optionally, warnings and infos, in source order. A problem the compiler reports twice, with
+	 * the same id, range and message, is listed once, so a caller cannot take the copy for a second problem.
+	 */
 	static List<IProblem> problems(CompilationUnit astRoot, boolean includeWarnings) {
 		List<IProblem> problems = new ArrayList<>();
+		Set<List<Object>> seen = new HashSet<>();
 		for (IProblem problem : astRoot.getProblems()) {
-			if (problem.isError() || includeWarnings) {
+			if ((problem.isError() || includeWarnings) && seen.add(List.of(Integer.valueOf(problem.getID()),
+					Integer.valueOf(problem.getSourceStart()), Integer.valueOf(problem.getSourceEnd()),
+					String.valueOf(problem.getMessage())))) {
 				problems.add(problem);
 			}
 		}

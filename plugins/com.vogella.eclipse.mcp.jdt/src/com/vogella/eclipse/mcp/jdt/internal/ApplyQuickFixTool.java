@@ -137,7 +137,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 					Integer.valueOf(matching.size()), Integer.valueOf(problemId),
 					Integer.valueOf(matching.get(0).getSourceStart()), messages));
 		}
-		// what is left is one problem, possibly reported twice
+		// what is left is one problem; problems() drops a copy the compiler reports twice
 		IProblem problem = matching.get(0);
 		if (problem.getSourceStart() < 0) {
 			return McpToolResult.error("JDT reports this problem without a position in the file, so it has no quick fix here."); //$NON-NLS-1$
