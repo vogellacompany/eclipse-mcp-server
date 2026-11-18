@@ -432,7 +432,9 @@ final class SubProcessors {
 			return new CUCorrectionProposalCore(label, cu, relevance) {
 				@Override
 				public void addEdits(IDocument document, TextEdit editRoot) throws CoreException {
-					// an ambiguous name takes JDT's first candidate, as the other fixes take its first suggestion
+					// unlike eclipse_organize_imports, which saves and refuses an ambiguous name, this builds an edit
+					// for the proposal's change (save false), and an ambiguous name takes JDT's first candidate, as the
+					// other fixes take its first suggestion
 					OrganizeImportsOperation operation = new OrganizeImportsOperation(cu, null, true, false, true,
 							(openChoices, ranges) -> Arrays.stream(openChoices)
 									// the answer is read by position, so an empty choice stays as a null
