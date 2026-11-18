@@ -141,7 +141,9 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			PerformChangeOperation operation = new PerformChangeOperation(change);
 			ResourcesPlugin.getWorkspace().run(operation, monitor);
 			if (operation.changeExecutionFailed()) {
-				return McpToolResult.error("JDT could not apply '%s'.".formatted(label)); //$NON-NLS-1$
+				// the change may have written some of its edits before it failed
+				return McpToolResult.error("JDT could not apply '%s', and may have applied part of it. Check %s.".formatted( //$NON-NLS-1$
+						label, QuickFixSupport.files(change)));
 			}
 			List<String> unsaved = QuickFixSupport.unsavedFiles(change);
 			if (!unsaved.isEmpty()) {

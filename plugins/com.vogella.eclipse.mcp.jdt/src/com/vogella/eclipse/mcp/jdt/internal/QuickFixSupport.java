@@ -124,6 +124,19 @@ final class QuickFixSupport {
 		}
 	}
 
+	/** The workspace paths of the files the change edits. */
+	static List<String> files(Change change) {
+		List<String> files = new ArrayList<>();
+		if (change instanceof CompositeChange composite) {
+			for (Change child : composite.getChildren()) {
+				files.addAll(files(child));
+			}
+		} else if (change instanceof TextFileChange file) {
+			files.add(file.getFile().getFullPath().toString());
+		}
+		return files;
+	}
+
 	/** The files of the change whose buffer is still dirty, because an editor held unsaved edits to them. */
 	static List<String> unsavedFiles(Change change) {
 		List<String> unsaved = new ArrayList<>();

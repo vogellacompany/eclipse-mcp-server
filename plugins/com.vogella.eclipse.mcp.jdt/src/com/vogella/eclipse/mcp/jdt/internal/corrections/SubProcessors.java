@@ -652,7 +652,8 @@ final class SubProcessors {
 		@Override
 		protected ChangeCorrectionProposalCore createSuppressWarningsProposal(IProposableFix fix, ICleanUp cleanUp,
 				int relevance, IInvocationContext context) {
-			return new FixCorrectionProposalCore(fix, cleanUp, relevance, context);
+			String token = fix instanceof SuppressWarningsFixCore suppress ? suppress.getWarningToken() : null;
+			return new SuppressWarningsProposal(fix, cleanUp, relevance, context, token);
 		}
 
 		@Override
@@ -670,13 +671,23 @@ final class SubProcessors {
 		@Override
 		protected boolean alreadyHasProposal(Collection<ChangeCorrectionProposalCore> proposals, String token) {
 			for (ChangeCorrectionProposalCore proposal : proposals) {
-				if (proposal instanceof FixCorrectionProposalCore fix
-						&& fix.getCleanUp() instanceof SuppressWarningsFixCore suppress
-						&& token.equals(suppress.getWarningToken())) {
+				if (proposal instanceof SuppressWarningsProposal suppress && token.equals(suppress.token)) {
 					return true;
 				}
 			}
 			return false;
+		}
+	}
+
+	/** A suppress warnings proposal that remembers its token, as JDT UI's own proposal does. */
+	private static final class SuppressWarningsProposal extends FixCorrectionProposalCore {
+
+		final String token;
+
+		SuppressWarningsProposal(IProposableFix fix, ICleanUp cleanUp, int relevance, IInvocationContext context,
+				String token) {
+			super(fix, cleanUp, relevance, context);
+			this.token = token;
 		}
 	}
 
