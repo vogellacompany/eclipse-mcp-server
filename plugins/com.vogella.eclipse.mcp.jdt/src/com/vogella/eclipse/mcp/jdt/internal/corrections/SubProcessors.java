@@ -126,6 +126,10 @@ final class SubProcessors {
 		}
 		try {
 			CompilationUnitChange change = fix.createChange(new NullProgressMonitor());
+			if (change == null) {
+				// a fix that does not cover this AST answers no change
+				return null;
+			}
 			return new CUCorrectionProposalCore(change.getName(), change.getCompilationUnit(), change, relevance);
 		} catch (CoreException e) {
 			ILog.get().log(e.getStatus());
