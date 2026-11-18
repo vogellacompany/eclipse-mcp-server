@@ -52,7 +52,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				    "message":   {"type":"string","description":"The problem's message exactly as listed, needed only when several problems share the id and offset, such as one per unhandled exception of a call."},
 				    "fix":       {"type":"string","description":"The fix's label exactly as eclipse_get_quick_fixes lists it."},
 				    "dryRun":    {"type":"boolean","default":true},
-				    "maxResults": {"type":"integer","default":50,"minimum":1,"maximum":500,"description":"Most remaining errors to list after applying."}
+				    "maxResults": {"type":"integer","default":50,"minimum":1,"maximum":500,"description":"Most remaining errors to list after a real apply; a dry run lists none."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$

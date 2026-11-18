@@ -121,7 +121,7 @@ public final class GetQuickFixesTool implements IMcpTool {
 				.put("truncated", Boolean.valueOf(problems.size() > listed.size())) //$NON-NLS-1$
 				.put("problems", listed); //$NON-NLS-1$
 		if (line > 0) {
-			// 'total' counts the problems on the asked line, so also say how many the whole file has
+			// 'total' counts the problems on the asked line, so also say how many of the same kinds the whole file has
 			result.put("totalInFile", Integer.valueOf(inFile)); //$NON-NLS-1$
 		}
 		if (outOfTime) {
