@@ -190,8 +190,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			PerformChangeOperation operation = new PerformChangeOperation(change);
 			try {
 				ResourcesPlugin.getWorkspace().run(operation, monitor);
-			} catch (CoreException | RuntimeException e) {
-				// a cancel or failure while performing does not undo the edits already written
+			} catch (CoreException | RuntimeException | LinkageError e) {
+				// a cancel or failure while performing, a missing internal JDT class included, does not undo the edits already written
 				return McpToolResult.error("JDT could not finish '%s' (%s), and may have applied part of it. Check %s.".formatted( //$NON-NLS-1$
 						label, Objects.requireNonNullElse(e.getMessage(), e.getClass().getName()),
 						touched));

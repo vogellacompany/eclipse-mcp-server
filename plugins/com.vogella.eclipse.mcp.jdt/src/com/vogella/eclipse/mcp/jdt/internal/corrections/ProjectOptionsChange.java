@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.jdt.internal.corrections;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
@@ -78,12 +79,17 @@ public final class ProjectOptionsChange extends Change {
 		if (!project.getProject().isAccessible()) {
 			return RefactoringStatus.createFatalErrorStatus("The project " + project.getElementName() + " is closed or no longer exists."); //$NON-NLS-1$ //$NON-NLS-2$
 		}
-		String target = updates.get(JavaCore.COMPILER_COMPLIANCE);
-		String current = project.getOption(JavaCore.COMPILER_COMPLIANCE, true);
-		if (!replace && target != null && current != null && JavaCore.compareJavaVersions(current, target) > 0) {
-			// raised since the problem was found: writing the fix's level now would lower it
-			return RefactoringStatus.createFatalErrorStatus("The project " + project.getElementName() //$NON-NLS-1$
-					+ " is already at compliance " + current + ", above the fix's " + target + "."); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		if (!replace) {
+			for (String key : List.of(JavaCore.COMPILER_COMPLIANCE, JavaCore.COMPILER_SOURCE,
+					JavaCore.COMPILER_CODEGEN_TARGET_PLATFORM)) {
+				String target = updates.get(key);
+				String current = project.getOption(key, true);
+				if (target != null && current != null && JavaCore.compareJavaVersions(current, target) > 0) {
+					// raised since the problem was found: writing the fix's level now would lower it
+					return RefactoringStatus.createFatalErrorStatus("The project " + project.getElementName() //$NON-NLS-1$
+							+ " already has " + key + " " + current + ", above the fix's " + target + "."); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+				}
+			}
 		}
 		return new RefactoringStatus();
 	}
