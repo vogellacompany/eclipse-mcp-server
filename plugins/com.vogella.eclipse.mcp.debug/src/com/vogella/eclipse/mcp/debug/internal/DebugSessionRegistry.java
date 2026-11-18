@@ -273,18 +273,21 @@ public final class DebugSessionRegistry {
 	}
 
 	public synchronized Session find(String id) {
+		listen();
 		prune();
 		return sessions.get(id);
 	}
 
 	/** The known ids, oldest first, for refusals that name what exists. */
 	public synchronized List<String> ids() {
+		listen();
 		prune();
 		return List.copyOf(sessions.keySet());
 	}
 
 	/** Every session, oldest first. */
 	public synchronized List<Session> all() {
+		listen();
 		prune();
 		return List.copyOf(sessions.values());
 	}
@@ -294,6 +297,7 @@ public final class DebugSessionRegistry {
 	 * a caller facing several names them out of {@link #all()} in a refusal.
 	 */
 	public synchronized Session singleLive() {
+		listen();
 		prune();
 		Session found = null;
 		for (Session session : sessions.values()) {
@@ -320,6 +324,7 @@ public final class DebugSessionRegistry {
 
 	/** How many sessions are not terminated. */
 	public synchronized int liveCount() {
+		listen();
 		int count = 0;
 		for (Session session : sessions.values()) {
 			if (!session.terminated()) {
@@ -470,6 +475,12 @@ public final class DebugSessionRegistry {
 		eventListener = DebugSessionRegistry::handleDebugEvents;
 		DebugPlugin.getDefault().addDebugEventListener(eventListener);
 		listening = true;
+		// a session started from the UI before the first tool call raised its launch event unheard
+		for (ILaunch existing : DebugPlugin.getDefault().getLaunchManager().getLaunches()) {
+			if (!existing.isTerminated()) {
+				adopt(existing);
+			}
+		}
 	}
 
 	/** Attaches a launch the launch job got back, for one that produced no launch event. */
@@ -491,6 +502,10 @@ public final class DebugSessionRegistry {
 		String name = configuration == null ? null : configuration.getName();
 		Session session;
 		synchronized (this) {
+			// the listener and the adoption of existing launches can both see one launch
+			if (byLaunch(launchValue) != null) {
+				return;
+			}
 			session = name == null ? null : pending.remove(name);
 			if (session == null) {
 				String id = "debug-" + ids.incrementAndGet(); //$NON-NLS-1$

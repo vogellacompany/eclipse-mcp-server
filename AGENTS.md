@@ -111,7 +111,7 @@ A tool that needs editors, views, perspectives or commands refuses with `Workben
 **Optional dependencies live in one class each.**
 `CssStyling` (e4 CSS engine), `GitContent` (jgit, in the ide bundle) and `FlightRecording` (`jdk.jfr`) are imported optionally and callers catch `LinkageError`; never let one of their types into a signature a tool touches.
 `PaintRecording` reaches an optional SWT paint recorder and its renderer bundle by name only; nothing here compiles against them or ships them, and without either `auto` records frames.
-`DisplayScaling`, `NativeAppKit`, `NativeComboList`, `NativeDialogs`, `NativeForeground`, `NativeScreen`, `NativeStacking` and `NativeWindowState` reach SWT internals (`DPIUtil`, `cocoa.NSApplication`, `gtk.GTK`, `win32.OS`) by name, so the bundle stays cross platform.
+`CocoaKeys`, `DisplayScaling`, `NativeAppKit`, `NativeComboList`, `NativeDialogs`, `NativeForeground`, `NativeScreen`, `NativeStacking` and `NativeWindowState` reach SWT internals (`DPIUtil`, `cocoa.NSApplication`, `gtk.GTK`, `win32.OS`) by name, so the bundle stays cross platform.
 
 **Answers.**
 Every list-returning tool honours `maxResults` and reports `total` and `truncated`.
