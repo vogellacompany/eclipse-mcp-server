@@ -75,8 +75,17 @@ public final class ProjectOptionsChange extends Change {
 	@Override
 	public RefactoringStatus isValid(IProgressMonitor monitor) {
 		// a closed project still exists, but its options cannot be written
-		return project.getProject().isAccessible() ? new RefactoringStatus()
-				: RefactoringStatus.createFatalErrorStatus("The project " + project.getElementName() + " is closed or no longer exists."); //$NON-NLS-1$ //$NON-NLS-2$
+		if (!project.getProject().isAccessible()) {
+			return RefactoringStatus.createFatalErrorStatus("The project " + project.getElementName() + " is closed or no longer exists."); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		String target = updates.get(JavaCore.COMPILER_COMPLIANCE);
+		String current = project.getOption(JavaCore.COMPILER_COMPLIANCE, true);
+		if (!replace && target != null && current != null && JavaCore.compareJavaVersions(current, target) > 0) {
+			// raised since the problem was found: writing the fix's level now would lower it
+			return RefactoringStatus.createFatalErrorStatus("The project " + project.getElementName() //$NON-NLS-1$
+					+ " is already at compliance " + current + ", above the fix's " + target + "."); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		}
+		return new RefactoringStatus();
 	}
 
 	@Override

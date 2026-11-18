@@ -230,7 +230,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				JsonArray files = new JsonArray();
 				unsaved.forEach(files::add);
 				result.put("unsavedFiles", files).put("note", //$NON-NLS-1$ //$NON-NLS-2$
-						"These files had unsaved edits in an open editor, so the fix is in the editor and not yet on disk."); //$NON-NLS-1$
+						"These files had unsaved edits in an open editor, so the fix is in the editor and not yet on disk; the remaining errors are those of the editor's content."); //$NON-NLS-1$
 			}
 			// what is left tells the caller whether to look for another fix; a move leaves the old unit behind
 			// with the call's time used up, report the applied fix rather than let the check turn it into a timeout

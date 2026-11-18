@@ -139,7 +139,7 @@ final class QuickFixSupport {
 				}
 				entry.put("edits", edits); //$NON-NLS-1$
 				if (total > edits.size()) {
-					entry.put("editsTotal", Integer.valueOf(total)).put("truncated", Boolean.TRUE); //$NON-NLS-1$ //$NON-NLS-2$
+					entry.put("editsTotal", Integer.valueOf(total)).put("editsTruncated", Boolean.TRUE); //$NON-NLS-1$ //$NON-NLS-2$
 				}
 			}
 		} else if (change instanceof ProjectOptionsChange options) {
