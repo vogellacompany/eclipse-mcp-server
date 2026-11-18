@@ -116,6 +116,8 @@ public final class GetQuickFixesTool implements IMcpTool {
 				.put("truncated", Boolean.valueOf(problems.size() > listed.size())) //$NON-NLS-1$
 				.put("problems", listed); //$NON-NLS-1$
 		if (outOfTime) {
+			// a larger maxResults would not help here, so say why the list is short apart from 'truncated'
+			result.put("outOfTime", Boolean.TRUE); //$NON-NLS-1$
 			IProblem last = problems.get(listed.size() - 1);
 			result.put("waitNote", ("Computing the fixes was cancelled or ran out of the call's time after %d of %d problems, the last on line %d. " //$NON-NLS-1$ //$NON-NLS-2$
 					+ "Ask again with 'line' for each later line to list the rest.").formatted(Integer.valueOf(listed.size()), //$NON-NLS-1$

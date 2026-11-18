@@ -118,20 +118,20 @@ final class QuickFixSupport {
 				SourceText lines = SourceText.of(content);
 				JsonArray edits = new JsonArray();
 				List<TextEdit> leaves = leaves(text.getEdit());
-				boolean truncated = false;
+				// an edit without a position changes nothing in the file, so it is neither listed nor counted
+				int total = 0;
 				for (TextEdit edit : leaves) {
 					if (edit.getOffset() < 0) {
 						continue;
 					}
-					if (edits.size() >= MAX_EDITS) {
-						truncated = true;
-						break;
+					total++;
+					if (edits.size() < MAX_EDITS) {
+						edits.add(describe(edit, content, lines));
 					}
-					edits.add(describe(edit, content, lines));
 				}
 				entry.put("edits", edits); //$NON-NLS-1$
-				if (truncated) {
-					entry.put("editsTotal", Integer.valueOf(leaves.size())).put("truncated", Boolean.TRUE); //$NON-NLS-1$ //$NON-NLS-2$
+				if (total > edits.size()) {
+					entry.put("editsTotal", Integer.valueOf(total)).put("truncated", Boolean.TRUE); //$NON-NLS-1$ //$NON-NLS-2$
 				}
 			}
 		} else if (change instanceof ProjectOptionsChange options) {

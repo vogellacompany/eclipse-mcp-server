@@ -101,9 +101,20 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				.filter(problem -> message == null || message.equals(problem.getMessage()))
 				.toList();
 		if (matching.isEmpty()) {
+			String where = offset >= 0 ? "offset " + offset : "line " + line; //$NON-NLS-1$ //$NON-NLS-2$
+			if (message != null) {
+				List<String> there = QuickFixSupport.problems(astRoot, true).stream()
+						.filter(problem -> problem.getID() == problemId)
+						.filter(problem -> offset < 0 || problem.getSourceStart() == offset)
+						.filter(problem -> line < 1 || problem.getSourceLineNumber() == line)
+						.map(IProblem::getMessage).distinct().toList();
+				if (!there.isEmpty()) {
+					return McpToolResult.error("No problem %d at %s has that message. Its messages are: %s".formatted( //$NON-NLS-1$
+							Integer.valueOf(problemId), where, there));
+				}
+			}
 			return McpToolResult.error(("The file has no problem %d at %s. It may already be fixed, or the file changed; " //$NON-NLS-1$
-					+ "list the current ones with eclipse_get_quick_fixes.").formatted(Integer.valueOf(problemId), //$NON-NLS-1$
-							offset >= 0 ? "offset " + offset : "line " + line)); //$NON-NLS-1$ //$NON-NLS-2$
+					+ "list the current ones with eclipse_get_quick_fixes.").formatted(Integer.valueOf(problemId), where)); //$NON-NLS-1$
 		}
 		if (offset < 0 && matching.stream().map(IProblem::getSourceStart).distinct().count() > 1) {
 			return McpToolResult.error("Line %d has %d problems with id %d. Name one by its 'offset': %s".formatted( //$NON-NLS-1$
@@ -145,16 +156,17 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				return McpToolResult.error("JDT produced no change for '%s'.".formatted(label)); //$NON-NLS-1$
 			}
 			result.put("changes", QuickFixSupport.describe(change, monitor)); //$NON-NLS-1$
-			if (dryRun) {
-				result.put("note", "Nothing was changed. Pass dryRun false to apply it."); //$NON-NLS-1$ //$NON-NLS-2$
-				return McpToolResult.of(result.toString());
-			}
+			// validate in the dry run too, so that it does not offer a fix the apply would refuse
 			QuickFixSupport.saveFiles(change);
 			change.initializeValidationData(monitor);
 			RefactoringStatus status = change.isValid(monitor);
 			if (status.hasFatalError()) {
 				return McpToolResult.error("The fix can no longer be applied: " //$NON-NLS-1$
 						+ status.getMessageMatchingSeverity(RefactoringStatus.FATAL));
+			}
+			if (dryRun) {
+				result.put("note", "Nothing was changed. Pass dryRun false to apply it."); //$NON-NLS-1$ //$NON-NLS-2$
+				return McpToolResult.of(result.toString());
 			}
 			if (monitor.isCanceled()) {
 				// the caller gave up: change nothing it can no longer see

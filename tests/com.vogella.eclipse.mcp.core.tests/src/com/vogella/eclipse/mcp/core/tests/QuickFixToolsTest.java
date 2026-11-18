@@ -308,6 +308,12 @@ class QuickFixToolsTest {
 				second.get("problemId"), "offset", second.get("offset"), "fix", label)));
 		assertTrue(ambiguous.isError() && ambiguous.text().contains("message"), ambiguous.text());
 
+		Map<String, Object> stale = new HashMap<>(target(second));
+		stale.put("message", "Unhandled exception type NoSuchException");
+		stale.put("fix", label);
+		McpToolResult unknown = TestFixture.call(APPLY, stale);
+		assertTrue(unknown.isError() && unknown.text().contains(String.valueOf(second.get("message"))), unknown.text());
+
 		Map<String, Object> arguments = new HashMap<>(target(second));
 		arguments.put("message", second.get("message"));
 		arguments.put("fix", label);

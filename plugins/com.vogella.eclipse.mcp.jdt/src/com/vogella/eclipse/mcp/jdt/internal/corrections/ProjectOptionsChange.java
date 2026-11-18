@@ -73,8 +73,9 @@ public final class ProjectOptionsChange extends Change {
 
 	@Override
 	public RefactoringStatus isValid(IProgressMonitor monitor) {
-		return project.exists() ? new RefactoringStatus()
-				: RefactoringStatus.createFatalErrorStatus("The project " + project.getElementName() + " no longer exists."); //$NON-NLS-1$ //$NON-NLS-2$
+		// a closed project still exists, but its options cannot be written
+		return project.getProject().isAccessible() ? new RefactoringStatus()
+				: RefactoringStatus.createFatalErrorStatus("The project " + project.getElementName() + " is closed or no longer exists."); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	@Override
