@@ -2,6 +2,8 @@ package com.vogella.eclipse.mcp.jdt.internal.corrections;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.IJavaProject;
@@ -13,7 +15,7 @@ import org.eclipse.ltk.core.refactoring.RefactoringStatus;
  * Replaces a Java project's compiler options, the headless stand-in for JDT UI's "Change project compliance" fix,
  * which writes the same options from inside a dialog.
  */
-final class ProjectOptionsChange extends Change {
+public final class ProjectOptionsChange extends Change {
 
 	private final String name;
 	private final IJavaProject project;
@@ -34,6 +36,23 @@ final class ProjectOptionsChange extends Change {
 			options.put(JavaCore.COMPILER_PB_REPORT_PREVIEW_FEATURES, JavaCore.IGNORE);
 		}
 		return new ProjectOptionsChange(name, project, options);
+	}
+
+	/** The project options this change sets to a value they do not have now, by key. */
+	public Map<String, String> changedOptions() {
+		Map<String, String> current = project.getOptions(false);
+		Map<String, String> changed = new TreeMap<>();
+		options.forEach((key, value) -> {
+			if (!Objects.equals(current.get(key), value)) {
+				changed.put(key, value);
+			}
+		});
+		return changed;
+	}
+
+	/** The name of the project whose options change. */
+	public String projectName() {
+		return project.getElementName();
 	}
 
 	@Override

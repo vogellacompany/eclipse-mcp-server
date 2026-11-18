@@ -11,6 +11,7 @@ import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.jdt.core.IJavaProject;
+import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.search.IJavaSearchConstants;
 import org.eclipse.jdt.core.search.SearchEngine;
@@ -192,6 +193,51 @@ class QuickFixToolsTest {
 		Map<String, Object> errorsOnly = TestFixture.callAndParse(LIST,
 				Map.of("path", PATH, "includeWarnings", Boolean.FALSE));
 		assertEquals(List.of(), errorsOnly.get("problems"), "the unused import is a warning: " + errorsOnly);
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void raisesTheProjectComplianceForANewerFeature() throws Exception {
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		Map<String, String> options = new HashMap<>(project.getOptions(false));
+		JavaCore.setComplianceOptions(JavaCore.VERSION_1_8, options);
+		project.setOptions(options);
+		TestFixture.addType(project, "example", "Holder", """
+				package example;
+				public class Holder {
+					int size(int x) {
+						switch (x) {
+						case 1, 2:
+							return 1;
+						default:
+							return 0;
+						}
+					}
+				}
+				""");
+
+		Map<String, Object> listed = TestFixture.callAndParse(LIST, Map.of("path", PATH));
+		Map<String, Object> problem = null;
+		String label = null;
+		for (Object entry : (List<Object>) listed.get("problems")) {
+			for (Object fix : (List<Object>) ((Map<String, Object>) entry).get("fixes")) {
+				String candidate = String.valueOf(((Map<String, Object>) fix).get("label"));
+				if (candidate.startsWith("Change project compliance to ")) {
+					problem = (Map<String, Object>) entry;
+					label = candidate;
+				}
+			}
+		}
+		assertNotNull(label, "a compliance fix should be offered: " + listed);
+		assertFalse(String.valueOf(listed).contains("workspace compliance"), "got " + listed);
+
+		Map<String, Object> dry = apply(problem, label, true);
+		String changes = String.valueOf(dry.get("changes"));
+		assertTrue(changes.contains(JavaCore.COMPILER_COMPLIANCE) && changes.contains(PROJECT), "got " + dry);
+
+		apply(problem, label, false);
+		assertFalse(JavaCore.VERSION_1_8.equals(project.getOption(JavaCore.COMPILER_COMPLIANCE, false)),
+				"the project compliance should have been raised");
 	}
 
 	private IFile holder(String source) throws Exception {

@@ -70,6 +70,9 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		if (path == null || label == null || !args.has("problemId")) { //$NON-NLS-1$
 			return McpToolResult.error("The arguments 'path', 'problemId' and 'fix' are required."); //$NON-NLS-1$
 		}
+		if (args.has("offset") && offset < 0 || args.has("line") && line < 1) { //$NON-NLS-1$ //$NON-NLS-2$
+			return McpToolResult.error("'offset' must be 0 or more, and 'line' 1 or more."); //$NON-NLS-1$
+		}
 		if (offset < 0 && line < 1) {
 			return McpToolResult.error("Give the problem's 'offset', or its 'line'."); //$NON-NLS-1$
 		}

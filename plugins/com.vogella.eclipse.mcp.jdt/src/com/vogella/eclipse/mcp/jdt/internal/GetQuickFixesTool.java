@@ -59,6 +59,9 @@ public final class GetQuickFixesTool implements IMcpTool {
 			return McpToolResult.error("The argument 'path' is required."); //$NON-NLS-1$
 		}
 		int line = args.getInt("line", 0, 0, Integer.MAX_VALUE); //$NON-NLS-1$
+		if (args.has("line") && line < 1) { //$NON-NLS-1$
+			return McpToolResult.error("'line' is 1-based, so it must be 1 or more."); //$NON-NLS-1$
+		}
 		boolean includeWarnings = args.getBoolean("includeWarnings", true); //$NON-NLS-1$
 		int maxResults = args.getInt("maxResults", 50, 1, 500); //$NON-NLS-1$
 

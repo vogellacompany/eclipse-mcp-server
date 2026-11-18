@@ -7,9 +7,11 @@ import java.util.Objects;
 import org.eclipse.core.filebuffers.FileBuffers;
 import org.eclipse.core.filebuffers.ITextFileBuffer;
 import org.eclipse.core.filebuffers.LocationKind;
+import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.ICompilationUnit;
+import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTParser;
@@ -28,6 +30,7 @@ import org.eclipse.text.edits.TextEdit;
 
 import com.vogella.eclipse.mcp.core.json.JsonArray;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
+import com.vogella.eclipse.mcp.jdt.internal.corrections.ProjectOptionsChange;
 import com.vogella.eclipse.mcp.jdt.internal.corrections.QuickFixProcessor;
 
 /**
@@ -104,8 +107,14 @@ final class QuickFixSupport {
 				}
 				entry.put("edits", edits); //$NON-NLS-1$
 			}
-		} else if (change.getModifiedElement() != null) {
-			entry.put("element", String.valueOf(change.getModifiedElement())); //$NON-NLS-1$
+		} else if (change instanceof ProjectOptionsChange options) {
+			JsonObject changed = new JsonObject();
+			options.changedOptions().forEach(changed::put);
+			entry.put("project", options.projectName()).put("options", changed); //$NON-NLS-1$ //$NON-NLS-2$
+		} else if (change.getModifiedElement() instanceof IJavaElement element) {
+			entry.put("element", element.getElementName()); //$NON-NLS-1$
+		} else if (change.getModifiedElement() instanceof IResource resource) {
+			entry.put("element", resource.getFullPath().toString()); //$NON-NLS-1$
 		}
 		changes.add(entry);
 	}

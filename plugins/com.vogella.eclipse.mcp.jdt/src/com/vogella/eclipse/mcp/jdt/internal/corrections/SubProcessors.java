@@ -437,7 +437,9 @@ final class SubProcessors {
 				// changing every project's compliance is not something a fix for one file should do unasked
 				return null;
 			}
-			return new ChangeCorrectionProposalCore(label, ProjectOptionsChange.compliance(label, project, version,
+			// JDT's label also promises a JRE change, which needs the build path dialog
+			String name = "Change project compliance to " + version; //$NON-NLS-1$
+			return new ChangeCorrectionProposalCore(name, ProjectOptionsChange.compliance(name, project, version,
 					false), relevance);
 		}
 
@@ -447,7 +449,9 @@ final class SubProcessors {
 			if (workspace) {
 				return null;
 			}
-			return new ChangeCorrectionProposalCore(label, ProjectOptionsChange.compliance(label, project, version,
+			String name = "Change project compliance to " + version //$NON-NLS-1$
+					+ (enablePreviews ? " and enable preview features" : ""); //$NON-NLS-1$ //$NON-NLS-2$
+			return new ChangeCorrectionProposalCore(name, ProjectOptionsChange.compliance(name, project, version,
 					enablePreviews), relevance);
 		}
 
