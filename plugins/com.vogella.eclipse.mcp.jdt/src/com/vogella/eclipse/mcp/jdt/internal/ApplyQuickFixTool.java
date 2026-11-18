@@ -76,12 +76,12 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		if (path == null || label == null || !args.has("problemId")) { //$NON-NLS-1$
 			return McpToolResult.error("The arguments 'path', 'problemId' and 'fix' are required."); //$NON-NLS-1$
 		}
-		if (problemId == Integer.MIN_VALUE || problemId == 0 || QuickFixSupport.fractional(arguments, "problemId")) { //$NON-NLS-1$
+		if (problemId == Integer.MIN_VALUE || problemId == 0 || QuickFixSupport.notAnInt(arguments, "problemId")) { //$NON-NLS-1$
 			// a malformed argument, not a changed file
 			return McpToolResult.error("'problemId' must be a problem id as eclipse_get_quick_fixes lists it."); //$NON-NLS-1$
 		}
-		if (args.has("offset") && offset < 0 || args.has("line") && line < 1 || QuickFixSupport.fractional(arguments, "offset") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-				|| QuickFixSupport.fractional(arguments, "line")) { //$NON-NLS-1$
+		if (args.has("offset") && offset < 0 || args.has("line") && line < 1 || QuickFixSupport.notAnInt(arguments, "offset") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				|| QuickFixSupport.notAnInt(arguments, "line")) { //$NON-NLS-1$
 			return McpToolResult.error("'offset' must be a whole number, 0 or more, and 'line' a whole number, 1 or more."); //$NON-NLS-1$
 		}
 		if (offset < 0 && line < 1) {

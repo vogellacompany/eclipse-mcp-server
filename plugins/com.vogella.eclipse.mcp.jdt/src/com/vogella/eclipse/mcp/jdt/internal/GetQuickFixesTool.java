@@ -59,7 +59,7 @@ public final class GetQuickFixesTool implements IMcpTool {
 			return McpToolResult.error("The argument 'path' is required."); //$NON-NLS-1$
 		}
 		int line = args.getInt("line", 0, 0, Integer.MAX_VALUE); //$NON-NLS-1$
-		if (args.has("line") && line < 1 || QuickFixSupport.fractional(arguments, "line")) { //$NON-NLS-1$ //$NON-NLS-2$
+		if (args.has("line") && line < 1 || QuickFixSupport.notAnInt(arguments, "line")) { //$NON-NLS-1$ //$NON-NLS-2$
 			return McpToolResult.error("'line' is 1-based, so it must be a whole number, 1 or more."); //$NON-NLS-1$
 		}
 		boolean includeWarnings = args.getBoolean("includeWarnings", true); //$NON-NLS-1$
@@ -87,7 +87,6 @@ public final class GetQuickFixesTool implements IMcpTool {
 		}
 		JsonArray listed = new JsonArray();
 		boolean outOfTime = false;
-		boolean cancelled = false;
 		for (IProblem problem : problems) {
 			if (listed.size() >= maxResults) {
 				break;
@@ -96,9 +95,9 @@ public final class GetQuickFixesTool implements IMcpTool {
 				return McpToolResult.error("The request was cancelled."); //$NON-NLS-1$
 			}
 			if (listed.size() > 0 && (monitor.isCanceled() || CallBudget.leftMillis() == 0)) {
-				// answer with what is done rather than let the call time out with nothing
-				cancelled = monitor.isCanceled();
-				outOfTime = !cancelled;
+				// answer with what is done rather than let the call time out with nothing; the monitor is cancelled
+				// only by the server's call timeout, so both mean the call's time is up
+				outOfTime = true;
 				break;
 			}
 			JsonObject entry = QuickFixSupport.describe(problem);
@@ -136,11 +135,11 @@ public final class GetQuickFixesTool implements IMcpTool {
 			// 'total' counts the problems on the asked line, so also say how many of the same kinds the whole file has
 			result.put("totalInFile", Integer.valueOf(inFile)); //$NON-NLS-1$
 		}
-		if (outOfTime || cancelled) {
+		if (outOfTime) {
 			// a larger maxResults would not help here, so say why the list is short apart from 'truncated'
-			result.put(cancelled ? "cancelled" : "outOfTime", Boolean.TRUE); //$NON-NLS-1$ //$NON-NLS-2$
+			result.put("outOfTime", Boolean.TRUE); //$NON-NLS-1$
 			IProblem last = problems.get(listed.size() - 1);
-			result.put("waitNote", ("Computing the fixes " + (cancelled ? "was cancelled" : "ran out of the call's time") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			result.put("waitNote", ("Computing the fixes ran out of the call's time" //$NON-NLS-1$
 					+ " after %d of %d problems, the last on line %d. " //$NON-NLS-1$
 					+ (line > 0 ? "The rest of this line was not reached, and asking for the line again starts from its first problem." //$NON-NLS-1$
 							: "Ask again with 'line' for each later line to list the rest.")).formatted(Integer.valueOf(listed.size()), //$NON-NLS-1$

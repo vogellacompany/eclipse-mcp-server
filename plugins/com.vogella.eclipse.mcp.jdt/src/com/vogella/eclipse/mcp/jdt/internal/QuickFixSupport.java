@@ -50,10 +50,16 @@ final class QuickFixSupport {
 	private QuickFixSupport() {
 	}
 
-	/** Whether the argument is a number with a fraction, which would otherwise be cut to another problem's id or place. */
-	static boolean fractional(Map<String, Object> arguments, String name) {
-		return arguments != null && arguments.get(name) instanceof Number number
-				&& number.doubleValue() != Math.rint(number.doubleValue());
+	/**
+	 * Whether the argument is a number that is no int, with a fraction or out of range, which getInt would cut to another
+	 * problem's id or place.
+	 */
+	static boolean notAnInt(Map<String, Object> arguments, String name) {
+		if (arguments == null || !(arguments.get(name) instanceof Number number)) {
+			return false;
+		}
+		double value = number.doubleValue();
+		return value != Math.rint(value) || value < Integer.MIN_VALUE || value > Integer.MAX_VALUE;
 	}
 
 	/**
@@ -99,9 +105,9 @@ final class QuickFixSupport {
 	}
 
 	static Fixes fixes(ICompilationUnit unit, CompilationUnit astRoot, IProblem problem) throws CoreException {
-		// headless, the jdt.ui preference node the code style is read from is missing
-		OrganizeImportsTool.ensureCodeStylePreferences();
 		try {
+			// headless, the jdt.ui preference node the code style is read from is missing
+			OrganizeImportsTool.ensureCodeStylePreferences();
 			QuickFixProcessor processor = new QuickFixProcessor();
 			List<ChangeCorrectionProposalCore> proposals = processor.getCorrections(unit, astRoot, problem);
 			Exception failure = processor.partialFailure();
