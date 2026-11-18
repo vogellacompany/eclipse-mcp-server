@@ -720,7 +720,8 @@ public final class QuickFixProcessor {
 	private static int moveBack(int offset, int start, String ignoreCharacters, ICompilationUnit unit) {
 		try {
 			IBuffer buffer = unit.getBuffer();
-			while (offset >= start) {
+			// offset 0 has no character before it to look at
+			while (offset > 0 && offset >= start) {
 				if (ignoreCharacters.indexOf(buffer.getChar(offset - 1)) == -1) {
 					return offset;
 				}
