@@ -49,6 +49,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				    "problemId": {"type":"integer","description":"The problem's problemId from eclipse_get_quick_fixes."},
 				    "offset":    {"type":"integer","minimum":0,"description":"The problem's offset from eclipse_get_quick_fixes."},
 				    "line":      {"type":"integer","minimum":1,"description":"The problem's 1-based line, instead of 'offset'; one of the two is required, and both must match when both are given."},
+				    "message":   {"type":"string","description":"The problem's message exactly as listed, needed only when several problems share the id and offset, such as one per unhandled exception of a call."},
 				    "fix":       {"type":"string","description":"The fix's label exactly as eclipse_get_quick_fixes lists it."},
 				    "dryRun":    {"type":"boolean","default":true},
 				    "maxResults": {"type":"integer","default":50,"minimum":1,"maximum":500,"description":"Most remaining errors to list after applying."}
@@ -62,6 +63,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$
 		String label = args.getString("fix"); //$NON-NLS-1$
+		String message = args.getString("message"); //$NON-NLS-1$
 		int problemId = args.getInt("problemId", -1, Integer.MIN_VALUE, Integer.MAX_VALUE); //$NON-NLS-1$
 		int offset = args.getInt("offset", -1, -1, Integer.MAX_VALUE); //$NON-NLS-1$
 		int line = args.getInt("line", -1, -1, Integer.MAX_VALUE); //$NON-NLS-1$
@@ -96,6 +98,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				.filter(problem -> problem.getID() == problemId)
 				.filter(problem -> offset < 0 || problem.getSourceStart() == offset)
 				.filter(problem -> line < 1 || problem.getSourceLineNumber() == line)
+				.filter(problem -> message == null || message.equals(problem.getMessage()))
 				.toList();
 		if (matching.isEmpty()) {
 			return McpToolResult.error(("The file has no problem %d at %s. It may already be fixed, or the file changed; " //$NON-NLS-1$
@@ -107,7 +110,14 @@ public final class ApplyQuickFixTool implements IMcpTool {
 					Integer.valueOf(line), Integer.valueOf(matching.size()), Integer.valueOf(problemId),
 					matching.stream().map(problem -> String.valueOf(problem.getSourceStart())).toList()));
 		}
-		// two problems with the same id and offset are the same problem reported twice
+		// JDT reports one problem per exception type at the same node, told apart only by the message
+		List<String> messages = matching.stream().map(IProblem::getMessage).distinct().toList();
+		if (messages.size() > 1) {
+			return McpToolResult.error("%d problems with id %d are at offset %d. Name one by its 'message': %s".formatted( //$NON-NLS-1$
+					Integer.valueOf(messages.size()), Integer.valueOf(problemId),
+					Integer.valueOf(matching.get(0).getSourceStart()), messages));
+		}
+		// what is left is one problem, possibly reported twice
 		IProblem problem = matching.get(0);
 
 		List<ChangeCorrectionProposalCore> fixes;

@@ -283,6 +283,44 @@ class QuickFixToolsTest {
 		assertTrue(TestFixture.read(file).contains("public class Holder"), TestFixture.read(file));
 	}
 
+	@Test
+	@SuppressWarnings("unchecked")
+	void tellsApartTwoUnhandledExceptionsOfOneCall() throws Exception {
+		IFile file = holder("""
+				package example;
+				public class Holder {
+					void risky() throws java.io.IOException, InterruptedException {
+					}
+					void load() {
+						risky();
+					}
+				}
+				""");
+		Map<String, Object> listed = TestFixture.callAndParse(LIST, Map.of("path", PATH));
+		List<Map<String, Object>> unhandled = ((List<Object>) listed.get("problems")).stream()
+				.map(entry -> (Map<String, Object>) entry)
+				.filter(entry -> ((Number) entry.get("problemId")).intValue() == IProblem.UnhandledException).toList();
+		assertEquals(2, unhandled.size(), "got " + listed);
+		Map<String, Object> second = unhandled.get(1);
+		String label = fixContaining(second, "throws");
+
+		McpToolResult ambiguous = TestFixture.call(APPLY, new HashMap<>(Map.of("path", PATH, "problemId",
+				second.get("problemId"), "offset", second.get("offset"), "fix", label)));
+		assertTrue(ambiguous.isError() && ambiguous.text().contains("message"), ambiguous.text());
+
+		Map<String, Object> arguments = new HashMap<>(target(second));
+		arguments.put("message", second.get("message"));
+		arguments.put("fix", label);
+		arguments.put("dryRun", Boolean.FALSE);
+		TestFixture.callAndParse(APPLY, arguments);
+		String source = TestFixture.read(file);
+		String exception = String.valueOf(second.get("message")).contains("Interrupted") ? "InterruptedException"
+				: "IOException";
+		// JDT's throws fix declares every exception the call leaves unhandled, the named one included
+		String load = source.lines().filter(text -> text.contains("void load()")).findFirst().orElse("");
+		assertTrue(load.contains("throws") && load.contains(exception), source);
+	}
+
 	private IFile holder(String source) throws Exception {
 		IJavaProject project = fixture.createJavaProject(PROJECT);
 		IFile file = TestFixture.addType(project, "example", "Holder", source);
