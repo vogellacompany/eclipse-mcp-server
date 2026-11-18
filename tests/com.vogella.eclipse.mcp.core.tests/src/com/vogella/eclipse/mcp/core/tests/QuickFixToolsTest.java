@@ -186,6 +186,25 @@ class QuickFixToolsTest {
 	}
 
 	@Test
+	void refusesAFractionalOffsetInsteadOfCuttingIt() throws Exception {
+		holder("""
+				package example;
+				public class Holder {
+					List<String> names;
+				}
+				""");
+		Map<String, Object> problem = problem(IProblem.UndefinedType);
+
+		Map<String, Object> arguments = new HashMap<>(target(problem));
+		arguments.put("offset", Double.valueOf(((Number) problem.get("offset")).intValue() + 0.5));
+		arguments.put("fix", fixContaining(problem, "java.util"));
+		McpToolResult result = TestFixture.call(APPLY, arguments);
+
+		assertTrue(result.isError(), result.text());
+		assertTrue(result.text().contains("whole number"), result.text());
+	}
+
+	@Test
 	void asksForAnOffsetWhenALineHasTwoSuchProblems() throws Exception {
 		holder("""
 				package example;

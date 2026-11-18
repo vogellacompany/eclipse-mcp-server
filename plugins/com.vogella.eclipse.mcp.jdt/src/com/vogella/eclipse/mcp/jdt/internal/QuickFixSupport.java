@@ -11,6 +11,7 @@ import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.compiler.IProblem;
@@ -46,14 +47,21 @@ final class QuickFixSupport {
 	private QuickFixSupport() {
 	}
 
-	/** Parses the unit's current content with bindings, the AST the quick fix offsets refer to. */
+	/**
+	 * Parses the unit's current content with bindings, the AST the quick fix offsets refer to. Answers null when the
+	 * monitor is cancelled, since the parser signals that with an exception.
+	 */
 	static CompilationUnit parse(ICompilationUnit unit, IProgressMonitor monitor) {
 		ASTParser parser = ASTParser.newParser(AST.getJLSLatest());
 		parser.setSource(unit);
 		parser.setResolveBindings(true);
 		parser.setStatementsRecovery(true);
 		parser.setBindingsRecovery(true);
-		return (CompilationUnit) parser.createAST(monitor);
+		try {
+			return (CompilationUnit) parser.createAST(monitor);
+		} catch (OperationCanceledException e) {
+			return null;
+		}
 	}
 
 	/** The unit's errors and, optionally, warnings and infos, in source order. */
@@ -155,6 +163,9 @@ final class QuickFixSupport {
 				entry.put("element", element.getElementName()); //$NON-NLS-1$
 			} else if (change.getModifiedElement() instanceof IResource resource) {
 				entry.put("element", resource.getFullPath().toString()); //$NON-NLS-1$
+			} else if (change.getModifiedElement() instanceof IPath file) {
+				// a new file, such as a package-info.java, is named by the path it will have
+				entry.put("file", file.toString()); //$NON-NLS-1$
 			}
 		}
 		changes.add(entry);

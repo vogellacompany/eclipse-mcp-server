@@ -76,12 +76,13 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		if (path == null || label == null || !args.has("problemId")) { //$NON-NLS-1$
 			return McpToolResult.error("The arguments 'path', 'problemId' and 'fix' are required."); //$NON-NLS-1$
 		}
-		if (problemId == Integer.MIN_VALUE || problemId == 0) {
+		if (problemId == Integer.MIN_VALUE || problemId == 0 || fractional(arguments, "problemId")) { //$NON-NLS-1$
 			// a malformed argument, not a changed file
 			return McpToolResult.error("'problemId' must be a problem id as eclipse_get_quick_fixes lists it."); //$NON-NLS-1$
 		}
-		if (args.has("offset") && offset < 0 || args.has("line") && line < 1) { //$NON-NLS-1$ //$NON-NLS-2$
-			return McpToolResult.error("'offset' must be 0 or more, and 'line' 1 or more."); //$NON-NLS-1$
+		if (args.has("offset") && offset < 0 || args.has("line") && line < 1 || fractional(arguments, "offset") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				|| fractional(arguments, "line")) { //$NON-NLS-1$
+			return McpToolResult.error("'offset' must be a whole number, 0 or more, and 'line' a whole number, 1 or more."); //$NON-NLS-1$
 		}
 		if (offset < 0 && line < 1) {
 			return McpToolResult.error("Give the problem's 'offset', or its 'line'."); //$NON-NLS-1$
@@ -99,7 +100,6 @@ public final class ApplyQuickFixTool implements IMcpTool {
 
 		CompilationUnit astRoot = QuickFixSupport.parse(unit, monitor);
 		if (astRoot == null) {
-			// the parser answers null when the monitor is cancelled
 			return McpToolResult.error("The request was cancelled."); //$NON-NLS-1$
 		}
 		List<IProblem> matching = QuickFixSupport.problems(astRoot, true).stream()
@@ -261,6 +261,12 @@ public final class ApplyQuickFixTool implements IMcpTool {
 					+ Objects.requireNonNullElse(e.getMessage(), e.getClass().getName()));
 		}
 		return McpToolResult.of(result.toString());
+	}
+
+	/** Whether the argument is a number with a fraction, which would otherwise be cut to another problem's id or place. */
+	private static boolean fractional(Map<String, Object> arguments, String name) {
+		return arguments != null && arguments.get(name) instanceof Number number
+				&& number.doubleValue() != Math.rint(number.doubleValue());
 	}
 
 	/** Releases the validation state of a change that was never performed, without hiding the original failure. */
