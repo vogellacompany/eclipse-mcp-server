@@ -65,7 +65,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Makes the IDE run a workspace project's bundle in place of the installed one at the next restart, by packing the project and pointing this installation's bundles.info line at the packed jar. CHANGES THE INSTALLATION, not the workspace, and runs as a dry run unless dryRun is set to false; the dry run shows the exact line before and after. THIS IS THE ONLY WAY IN FOR MOST OF THE SDK: a hot install through eclipse_install_bundle is invisible to anything that reads the registry once at startup, the theme engine among them, and the dropins directory cannot replace a bundle that belongs to an installed feature, because a feature demands its bundles at an exact version, which covers nearly everything in an SDK. THE RISK IS REAL: a bundles.info that names a jar which is not there leaves the bundles that need it unresolvable, and if that bundle is one the framework itself needs, the IDE does not start and no tool here can reach it; short of that the IDE still runs and action repair points such a line back at the installed jar. NEVER DELETE A PACKED JAR BY HAND: action cleanup does it and re-reads bundles.info first, because this file is rewritten at every start and by other sessions, so a jar that looks unreferenced can be the one the next start loads. The original line is recorded, so action restore needs nothing from the caller, and action status reports what is substituted right now, checked against bundles.info rather than believed from the record, including a substitution another session made and, under referencingSubstitutedJars, every line that points at a packed jar even when nothing here recorded it, which is what stops somebody debugging an IDE that is not running what its plugins directory holds. THE VERSION FIELD IS WHAT MAKES IT TAKE EFFECT: simpleconfigurator matches a bundle on symbolic name plus version, so a line that keeps the installed version and only changes the path is read as a bundle already installed and the path is never looked at, which is a substitution that does nothing while every check on the file says it is in force. The version of the substituted jar is therefore written into the line. Ask action status for the 'running' field, which reports what the framework has actually loaded, its version, its state and the jar it came from, rather than what the file says, and believe that one. The line may also be rewritten at a restart, so everything here matches on the bundle name, the one stable field. Packing follows bin.includes, expands patterns such as *.so and always includes the manifest; entries that match nothing are listed under unmatchedIncludes, and a jar holding Git LFS pointers instead of the real files is refused."; //$NON-NLS-1$
+		return "Makes the IDE run a workspace project's bundle in place of the installed one at the next restart, by packing the project and pointing this installation's bundles.info line at the packed jar. CHANGES THE INSTALLATION, not the workspace, and runs as a dry run unless dryRun is set to false; the dry run shows the exact line before and after. THIS IS THE ONLY WAY IN FOR MOST OF THE SDK: a hot install through eclipse_install_bundle is invisible to anything that reads the registry once at startup, the theme engine among them, and the dropins directory cannot replace a bundle that belongs to an installed feature, because a feature demands its bundles at an exact version, which covers nearly everything in an SDK. THE RISK IS REAL: a bundles.info that names a jar which is not there leaves the bundles that need it unresolvable, and if that bundle is one the framework itself needs, the IDE does not start and no tool here can reach it; short of that the IDE still runs and action repair points such a line back at the installed jar. NEVER DELETE A PACKED JAR BY HAND: action cleanup does it and re-reads bundles.info first, because this file is rewritten at every start and by other sessions, so a jar that looks unreferenced can be the one the next start loads. The original line is recorded, so action restore needs nothing from the caller, and action status reports what is substituted right now, checked against bundles.info rather than believed from the record, including a substitution another session made and, under referencingSubstitutedJars, every line that points at a packed jar even when nothing here recorded it, which is what stops somebody debugging an IDE that is not running what its plugins directory holds. THE VERSION FIELD IS WHAT MAKES IT TAKE EFFECT: simpleconfigurator matches a bundle on symbolic name plus version, so a line that keeps the installed version and only changes the path is read as a bundle already installed and the path is never looked at, which is a substitution that does nothing while every check on the file says it is in force. The version of the substituted jar is therefore written into the line. IN A SHARED INSTALLATION the substitution is written to the user area, which simpleconfigurator ignores once the shared bundles.info has changed since the user area recorded it; substitute then records the shared file's current time when the two files are identical apart from the substituted lines, refuses otherwise unless acceptSharedChanges is set, and reports the state under sharedInstall, as status does. Ask action status for the 'running' field, which reports what the framework has actually loaded, its version, its state and the jar it came from, rather than what the file says, and believe that one. The line may also be rewritten at a restart, so everything here matches on the bundle name, the one stable field. Packing follows bin.includes, expands patterns such as *.so and always includes the manifest; entries that match nothing are listed under unmatchedIncludes, and a jar holding Git LFS pointers instead of the real files is refused."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -78,7 +78,8 @@ public final class SubstituteBundleTool implements IMcpTool {
 				    "bundle":  {"type":"string","description":"For restore: put back only this bundle's original line, by symbolic name, and leave every other recorded substitution in place. Without it restore undoes EVERY recorded substitution of this installation, including one another session made, since the record is per installation and an installation is shared."},
 				    "jar":     {"type":"string","description":"Absolute path of a jar that is already built, used instead of 'project'. Its Bundle-SymbolicName and Bundle-Version are read from its own manifest rather than guessed from the file name, which for a Maven build matches neither. The jar is copied, so rebuilding it afterwards does not silently change what this IDE runs."},
 				    "project": {"type":"string","description":"Plug-in project to pack, for substitute. Its output folder and the bin.includes of build.properties are what goes into the jar. CHECK WHICH CLONE IT IS: the answer reports packedFrom, because a workspace project can point at one clone of a repository while the change being measured lives in another, and then this packs a tree without it."},
-				    "dryRun":  {"type":"boolean","default":true,"description":"Report the line that would change, and change nothing."}
+				    "dryRun":  {"type":"boolean","default":true,"description":"Report the line that would change, and change nothing."},
+				    "acceptSharedChanges": {"type":"boolean","default":false,"description":"For substitute in a shared installation whose bundles.info changed after this user area recorded it: let the user area win at the next start even though the two files differ in more than the substituted lines (listed under sharedInstall)."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -128,6 +129,138 @@ public final class SubstituteBundleTool implements IMcpTool {
 		} catch (IOException e) {
 			return McpToolResult.error("Could not work with the installation: " + e); //$NON-NLS-1$
 		}
+	}
+
+	/** A shared installation's state as this user area sees it, with the answer that reports it. */
+	public record Shared(SharedBase.State state, List<String> onlyShared, List<String> onlyUser, JsonObject json) {
+
+		/** Whether the files differ in more than the substituted lines while the user area is ignored. */
+		public boolean differs() {
+			return state.stale() && !(onlyShared.isEmpty() && onlyUser.isEmpty());
+		}
+
+		String staleText() {
+			return "This is a shared installation, and its bundles.info changed after this user area last recorded it (%d, now %d), so at the next start simpleconfigurator reads the shared file and ignores this user area's bundles.info, a substitution in it included." //$NON-NLS-1$
+					.formatted(Long.valueOf(state.recorded()), Long.valueOf(state.current()));
+		}
+
+		/** Why marking the user area current needs acceptSharedChanges. */
+		public String refusal() {
+			return staleText()
+					+ " Marking the user area current would make it win over the shared file, and the two differ in more than the substituted lines: the shared file has %s, the user area has %s. That is either the user's own installs or an update of the shared installation, which this cannot tell apart. Pass acceptSharedChanges true to substitute anyway and let the user area win, or bring the user area up to date first." //$NON-NLS-1$
+							.formatted(onlyShared, onlyUser);
+		}
+	}
+
+	/** The shared installation behind this user area, or {@code null} when there is none. */
+	private static Shared sharedInstall(Path configuration, List<String> userLines, Set<String> ignored)
+			throws IOException {
+		Path base = SharedBase.baseBundlesInfo(BUNDLES_INFO);
+		return base == null ? null : sharedInstall(configuration, base, userLines, ignored);
+	}
+
+	/**
+	 * The state of a user area against the shared bundles.info {@code base}, with the lines either file holds and the
+	 * other does not, leaving out the bundles named in {@code ignored}; those are compared only while the user area is
+	 * ignored.
+	 */
+	public static Shared sharedInstall(Path configuration, Path base, List<String> userLines, Set<String> ignored)
+			throws IOException {
+		SharedBase.State state = SharedBase.state(configuration, base);
+		List<String> baseLines = state.stale() ? Files.readAllLines(base, StandardCharsets.UTF_8) : List.of();
+		List<String> onlyShared = SharedBase.linesNotIn(baseLines, userLines, ignored);
+		List<String> onlyUser = state.stale() ? SharedBase.linesNotIn(userLines, baseLines, ignored) : List.<String> of();
+		JsonObject json = new JsonObject().put("baseBundlesInfo", base.toString()) //$NON-NLS-1$
+				.put("recordedBaseTimestamp", Long.valueOf(state.recorded())) //$NON-NLS-1$
+				.put("baseTimestamp", Long.valueOf(state.current())) //$NON-NLS-1$
+				.put("userAreaReadAtNextStart", Boolean.valueOf(!state.stale())) //$NON-NLS-1$
+				.put("extTimestampNote", state.extChecked() ? null //$NON-NLS-1$
+						: "This IDE runs with p2.fragments, so simpleconfigurator also compares the fragment info files' time recorded as extTimestamp, which is not checked here; userAreaReadAtNextStart covers bundles.info only.") //$NON-NLS-1$
+				// compared only while the user area is ignored, so null says "not compared", not "identical"
+				.put("onlyInSharedFile", state.stale() ? array(onlyShared) : null) //$NON-NLS-1$
+				.put("onlyInUserArea", state.stale() ? array(onlyUser) : null) //$NON-NLS-1$
+				// set by simpleconfigurator when it chose the shared file for this session
+				.put("userAreaIgnoredThisSession", Boolean.valueOf(Boolean.getBoolean("eclipse.ignoreUserConfiguration"))); //$NON-NLS-1$ //$NON-NLS-2$
+		return new Shared(state, onlyShared, onlyUser, json);
+	}
+
+	private static JsonArray array(List<String> values) {
+		JsonArray array = new JsonArray();
+		values.forEach(array::add);
+		return array;
+	}
+
+	/** The bundles whose recorded substitution is still in bundles.info, plus {@code also}. */
+	public static Set<String> substitutedNames(Path configuration, List<String> lines, String also)
+			throws IOException {
+		Set<String> names = new HashSet<>();
+		for (String[] record : records(configuration)) {
+			String current = lineFor(lines, record[0]);
+			if (current != null && !current.equals(record[1])) {
+				names.add(record[0]);
+			}
+		}
+		if (also != null) {
+			names.add(also);
+		}
+		return names;
+	}
+
+	/**
+	 * Makes the next start read the user area, or on a dry run says that it would; called right before bundles.info is
+	 * written.
+	 */
+	public static void markUserAreaCurrent(Path configuration, Shared shared, boolean write) throws IOException {
+		if (shared == null || !shared.state().stale()) {
+			return;
+		}
+		if (write) {
+			SharedBase.markCurrent(configuration, shared.state().baseBundlesInfo());
+		}
+		shared.json().put(write ? "baseTimestampUpdated" : "wouldUpdateBaseTimestamp", Boolean.TRUE) //$NON-NLS-1$ //$NON-NLS-2$
+				.put("sharedNote", //$NON-NLS-1$
+						(shared.differs() ? "acceptSharedChanges lets the user area win although the two files differ in the lines listed. " //$NON-NLS-1$
+								: "Apart from the substituted lines the two bundles.info files are identical. ") //$NON-NLS-1$
+								+ "The user area's record of the shared file's time " //$NON-NLS-1$
+								+ (write ? "was set to the current one, so the next start reads the user area." //$NON-NLS-1$
+										: "is set to the current one when this runs, so the next start reads the user area.")); //$NON-NLS-1$
+	}
+
+	/** The shared state checked for a substitution, and the answer that refuses it, if any. */
+	public record Prepared(Shared shared, McpToolResult refusal) {
+	}
+
+	/**
+	 * The shared state for a substitution of {@code bundle}, reported in {@code result}: on a dry run a refusal is
+	 * reported and marking is described; on a real run a refusal is the answer, and marking is left to the caller.
+	 */
+	private static Prepared prepareShared(Path configuration, List<String> lines, String bundle, ToolArguments args,
+			JsonObject result, boolean dryRun) throws IOException {
+		Path base = SharedBase.baseBundlesInfo(BUNDLES_INFO);
+		if (base == null) {
+			result.put("sharedInstall", null); //$NON-NLS-1$
+			return new Prepared(null, null);
+		}
+		return prepareShared(configuration, base, lines, bundle, args.getBoolean("acceptSharedChanges", false), result, //$NON-NLS-1$
+				dryRun);
+	}
+
+	/** {@link #prepareShared(Path, List, String, ToolArguments, JsonObject, boolean)} against a given shared file. */
+	public static Prepared prepareShared(Path configuration, Path base, List<String> lines, String bundle,
+			boolean accept, JsonObject result, boolean dryRun) throws IOException {
+		Shared shared = sharedInstall(configuration, base, lines, substitutedNames(configuration, lines, bundle));
+		result.put("sharedInstall", shared.json()); //$NON-NLS-1$
+		if (shared.differs() && !accept) {
+			if (!dryRun) {
+				return new Prepared(shared, McpToolResult.error(shared.refusal() + " Nothing was changed.")); //$NON-NLS-1$
+			}
+			shared.json().put("refusedWithoutAcceptSharedChanges", shared.refusal()); //$NON-NLS-1$
+			return new Prepared(shared, null);
+		}
+		if (dryRun) {
+			markUserAreaCurrent(configuration, shared, false);
+		}
+		return new Prepared(shared, null);
 	}
 
 	private static boolean changedInstallation(McpToolResult result) {
@@ -191,11 +324,15 @@ public final class SubstituteBundleTool implements IMcpTool {
 					// and it is exactly the evidence that can be stale
 					.put("running", running(bundle))); //$NON-NLS-1$
 		}
+		Shared shared = sharedInstall(configuration, lines, substitutedNames(configuration, lines, null));
+		String staleNote = shared == null || !shared.state().stale() ? null
+				: shared.staleText() + " A substitution made now records the shared file's current time when the files agree apart from the substituted lines, and otherwise needs acceptSharedChanges; onlyInSharedFile and onlyInUserArea list what keeps them apart. "; //$NON-NLS-1$
 		return new JsonObject().put("substituted", active) //$NON-NLS-1$
 				.put("count", Integer.valueOf(active.size())) //$NON-NLS-1$
 				.put("stillInForce", Integer.valueOf(stillSubstituted)) //$NON-NLS-1$
 				.put("referencingSubstitutedJars", referencing) //$NON-NLS-1$
-				.put("note", note(stillSubstituted, referencing)); //$NON-NLS-1$
+				.put("sharedInstall", shared == null ? null : shared.json()) //$NON-NLS-1$
+				.put("note", (staleNote == null ? "" : staleNote) + note(stillSubstituted, referencing)); //$NON-NLS-1$
 	}
 
 	private static String note(int stillSubstituted, JsonArray referencing) {
@@ -682,12 +819,17 @@ public final class SubstituteBundleTool implements IMcpTool {
 				.put("substitutedLine", substituted) //$NON-NLS-1$
 				.put("jar", jar.toString()); //$NON-NLS-1$
 		if (args.getBoolean("dryRun", true)) { //$NON-NLS-1$
+			prepareShared(configuration, lines, symbolicName, args, result, true);
 			return McpToolResult.of(result.put("dryRun", Boolean.TRUE) //$NON-NLS-1$
 					.put("note", //$NON-NLS-1$
 							"Nothing was changed and no jar was packed. Pass dryRun false to carry it out; it needs a restart afterwards, and an unresolvable jar leaves an IDE that does not start.") //$NON-NLS-1$
 					.toString());
 		}
 
+		Prepared shared = prepareShared(configuration, lines, symbolicName, args, result, false);
+		if (shared.refusal() != null) {
+			return shared.refusal();
+		}
 		Files.createDirectories(jars);
 		Packed packed;
 		try {
@@ -706,6 +848,8 @@ public final class SubstituteBundleTool implements IMcpTool {
 							+ (packed.unmatched().isEmpty() ? "" : " These bin.includes entries also matched nothing: " + packed.unmatched() + ".") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 							+ (packed.unreadable().isEmpty() ? "" : " These could not be read: " + packed.unreadable() + ".")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		}
+		// last, after everything that can still fail, so a failed substitution leaves the timestamp alone
+		markUserAreaCurrent(configuration, shared.shared(), true);
 		lines.set(index, substituted);
 		Files.write(bundlesInfo, lines, StandardCharsets.UTF_8);
 		record(configuration, symbolicName, original, substituted);
@@ -789,15 +933,22 @@ public final class SubstituteBundleTool implements IMcpTool {
 				.put("originalLine", original) //$NON-NLS-1$
 				.put("substitutedLine", substituted); //$NON-NLS-1$
 		if (args.getBoolean("dryRun", true)) { //$NON-NLS-1$
+			prepareShared(configuration, lines, symbolicName, args, result, true);
 			return McpToolResult.of(result.put("dryRun", Boolean.TRUE) //$NON-NLS-1$
 					.put("note", //$NON-NLS-1$
 							"Nothing was changed and nothing was copied. Pass dryRun false to carry it out; it needs a restart afterwards, and an unresolvable jar leaves an IDE that does not start.") //$NON-NLS-1$
 					.toString());
 		}
+		Prepared shared = prepareShared(configuration, lines, symbolicName, args, result, false);
+		if (shared.refusal() != null) {
+			return shared.refusal();
+		}
 		Files.createDirectories(jars);
 		// copied rather than referenced in place: a later rebuild of the source jar
 		// would otherwise change what this IDE runs without anybody saying so
 		Files.copy(source, copy, StandardCopyOption.REPLACE_EXISTING);
+		// last, after everything that can still fail, so a failed substitution leaves the timestamp alone
+		markUserAreaCurrent(configuration, shared.shared(), true);
 		lines.set(index, substituted);
 		Files.write(bundlesInfo, lines, StandardCharsets.UTF_8);
 		record(configuration, symbolicName, original, substituted);
