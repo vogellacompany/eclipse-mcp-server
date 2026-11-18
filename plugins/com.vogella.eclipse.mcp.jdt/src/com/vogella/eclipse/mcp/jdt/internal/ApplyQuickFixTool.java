@@ -190,15 +190,14 @@ public final class ApplyQuickFixTool implements IMcpTool {
 						QuickFixSupport.files(change)));
 			}
 			if (operation.changeExecutionFailed()) {
-				// the change may have written some of its edits before it failed
-				List<String> touched = QuickFixSupport.files(change);
-				change.dispose();
+				// the change may have written some of its edits before it failed; LTK has disposed it
 				return McpToolResult.error("JDT could not apply '%s', and may have applied part of it. Check %s.".formatted( //$NON-NLS-1$
-						label, touched));
+						label, QuickFixSupport.files(change)));
 			}
 			if (!operation.changeExecuted()) {
 				// LTK validates once more before performing and skips the change when that turns fatal
 				RefactoringStatus late = operation.getValidationStatus();
+				// LTK disposes only a change it ran
 				change.dispose();
 				return McpToolResult.error("JDT did not apply '%s', and nothing was changed%s".formatted(label, //$NON-NLS-1$
 						late != null && late.hasFatalError()
