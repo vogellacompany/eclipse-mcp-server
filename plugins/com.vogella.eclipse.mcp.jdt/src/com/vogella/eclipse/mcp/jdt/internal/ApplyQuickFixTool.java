@@ -48,7 +48,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				    "path":      {"type":"string","description":"Workspace path of the Java file."},
 				    "problemId": {"type":"integer","description":"The problem's problemId from eclipse_get_quick_fixes."},
 				    "offset":    {"type":"integer","minimum":0,"description":"The problem's offset from eclipse_get_quick_fixes."},
-				    "line":      {"type":"integer","minimum":1,"description":"The problem's 1-based line, instead of 'offset'."},
+				    "line":      {"type":"integer","minimum":1,"description":"The problem's 1-based line, instead of 'offset'; one of the two is required, and both must match when both are given."},
 				    "fix":       {"type":"string","description":"The fix's label exactly as eclipse_get_quick_fixes lists it."},
 				    "dryRun":    {"type":"boolean","default":true},
 				    "maxResults": {"type":"integer","default":50,"minimum":1,"maximum":500,"description":"Most remaining errors to list after applying."}
@@ -94,8 +94,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		}
 		List<IProblem> matching = QuickFixSupport.problems(astRoot, true).stream()
 				.filter(problem -> problem.getID() == problemId)
-				.filter(problem -> offset >= 0 ? problem.getSourceStart() == offset
-						: problem.getSourceLineNumber() == line)
+				.filter(problem -> offset < 0 || problem.getSourceStart() == offset)
+				.filter(problem -> line < 1 || problem.getSourceLineNumber() == line)
 				.toList();
 		if (matching.isEmpty()) {
 			return McpToolResult.error(("The file has no problem %d at %s. It may already be fixed, or the file changed; " //$NON-NLS-1$
@@ -179,12 +179,18 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			}
 			// what is left tells the caller whether to look for another fix; a move leaves the old unit behind
 			CompilationUnit after = unit.exists() ? QuickFixSupport.parse(unit, monitor) : null;
-			List<IProblem> left = after == null ? List.of() : QuickFixSupport.problems(after, false);
-			JsonArray remaining = new JsonArray();
-			left.stream().limit(maxResults).forEach(error -> remaining.add(QuickFixSupport.describe(error)));
-			result.put("remainingErrors", remaining) //$NON-NLS-1$
-					.put("remainingErrorsTotal", Integer.valueOf(left.size())) //$NON-NLS-1$
-					.put("truncated", Boolean.valueOf(left.size() > remaining.size())); //$NON-NLS-1$
+			if (after == null) {
+				// no parse, no claim about what is left
+				result.put("checkSkipped", unit.exists() ? "The request was cancelled before the file was checked again." //$NON-NLS-1$ //$NON-NLS-2$
+						: "The fix moved or renamed the file, so it was not checked again."); //$NON-NLS-1$
+			} else {
+				List<IProblem> left = QuickFixSupport.problems(after, false);
+				JsonArray remaining = new JsonArray();
+				left.stream().limit(maxResults).forEach(error -> remaining.add(QuickFixSupport.describe(error)));
+				result.put("remainingErrors", remaining) //$NON-NLS-1$
+						.put("remainingErrorsTotal", Integer.valueOf(left.size())) //$NON-NLS-1$
+						.put("truncated", Boolean.valueOf(left.size() > remaining.size())); //$NON-NLS-1$
+			}
 		} catch (RuntimeException e) {
 			result.put("checkError", "The fix was applied, but the file could not be checked again: " //$NON-NLS-1$ //$NON-NLS-2$
 					+ Objects.requireNonNullElse(e.getMessage(), e.getClass().getName()));

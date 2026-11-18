@@ -160,6 +160,11 @@ final class QuickFixSupport {
 			}
 		} else if (change instanceof TextFileChange file) {
 			files.add(file.getFile().getFullPath().toString());
+		} else if (change.getModifiedElement() instanceof IJavaElement element && element.getResource() != null) {
+			// a move, rename or new file
+			files.add(element.getResource().getFullPath().toString());
+		} else if (change.getModifiedElement() instanceof IResource resource) {
+			files.add(resource.getFullPath().toString());
 		}
 		return files;
 	}
