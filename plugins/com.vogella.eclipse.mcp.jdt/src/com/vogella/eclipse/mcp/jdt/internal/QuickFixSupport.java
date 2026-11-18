@@ -86,11 +86,15 @@ final class QuickFixSupport {
 	}
 
 	static JsonObject describe(IProblem problem) {
-		return new JsonObject().put("problemId", Integer.valueOf(problem.getID())) //$NON-NLS-1$
+		JsonObject entry = new JsonObject().put("problemId", Integer.valueOf(problem.getID())) //$NON-NLS-1$
 				.put("message", problem.getMessage()) //$NON-NLS-1$
 				.put("severity", problem.isError() ? "error" : problem.isWarning() ? "warning" : "info") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-				.put("line", Integer.valueOf(problem.getSourceLineNumber())) //$NON-NLS-1$
-				.put("offset", Integer.valueOf(problem.getSourceStart())) //$NON-NLS-1$
+				.put("line", Integer.valueOf(problem.getSourceLineNumber())); //$NON-NLS-1$
+		if (problem.getSourceStart() < 0) {
+			// an offset of -1 would be refused by eclipse_apply_quick_fix, so say why there is none
+			return entry.put("note", "JDT reports this problem without a position in the file, so it has no quick fix here."); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		return entry.put("offset", Integer.valueOf(problem.getSourceStart())) //$NON-NLS-1$
 				.put("length", Integer.valueOf(Math.max(0, problem.getSourceEnd() - problem.getSourceStart() + 1))); //$NON-NLS-1$
 	}
 

@@ -125,7 +125,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		List<String> messages = matching.stream().map(IProblem::getMessage).distinct().toList();
 		if (messages.size() > 1) {
 			return McpToolResult.error("%d problems with id %d are at offset %d. Name one by its 'message': %s".formatted( //$NON-NLS-1$
-					Integer.valueOf(messages.size()), Integer.valueOf(problemId),
+					Integer.valueOf(matching.size()), Integer.valueOf(problemId),
 					Integer.valueOf(matching.get(0).getSourceStart()), messages));
 		}
 		// what is left is one problem, possibly reported twice

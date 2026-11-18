@@ -100,6 +100,10 @@ public final class GetQuickFixesTool implements IMcpTool {
 			}
 			JsonObject entry = QuickFixSupport.describe(problem);
 			JsonArray fixes = new JsonArray();
+			if (problem.getSourceStart() < 0) {
+				listed.add(entry.put("fixes", fixes)); //$NON-NLS-1$
+				continue;
+			}
 			try {
 				for (ChangeCorrectionProposalCore fix : QuickFixSupport.fixes(unit, astRoot, problem)) {
 					fixes.add(new JsonObject().put("label", fix.getName()) //$NON-NLS-1$
