@@ -67,7 +67,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		String path = args.getString("path"); //$NON-NLS-1$
 		String label = args.getString("fix"); //$NON-NLS-1$
 		String message = args.getString("message"); //$NON-NLS-1$
-		int problemId = args.getInt("problemId", -1, Integer.MIN_VALUE, Integer.MAX_VALUE); //$NON-NLS-1$
+		// a value that is not a number answers the default; no JDT id is Integer.MIN_VALUE, which is the Javadoc bit alone
+		int problemId = args.getInt("problemId", Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE); //$NON-NLS-1$
 		int offset = args.getInt("offset", -1, -1, Integer.MAX_VALUE); //$NON-NLS-1$
 		int line = args.getInt("line", -1, -1, Integer.MAX_VALUE); //$NON-NLS-1$
 		boolean dryRun = args.getBoolean("dryRun", true); //$NON-NLS-1$
@@ -75,8 +76,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		if (path == null || label == null || !args.has("problemId")) { //$NON-NLS-1$
 			return McpToolResult.error("The arguments 'path', 'problemId' and 'fix' are required."); //$NON-NLS-1$
 		}
-		if (problemId < 1) {
-			// JDT's problem ids are positive; anything else is a malformed argument, not a changed file
+		if (problemId == Integer.MIN_VALUE || problemId == 0) {
+			// a malformed argument, not a changed file
 			return McpToolResult.error("'problemId' must be a problem id as eclipse_get_quick_fixes lists it."); //$NON-NLS-1$
 		}
 		if (args.has("offset") && offset < 0 || args.has("line") && line < 1) { //$NON-NLS-1$ //$NON-NLS-2$
