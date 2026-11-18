@@ -4,7 +4,7 @@
   <locations>
     <location includeAllPlatforms="false" includeConfigurePhase="true" includeMode="planner" includeSource="true" type="InstallableUnit">
       <unit id="org.eclipse.sdk.feature.group" version="0.0.0"/>
-      <repository location="https://download.eclipse.org/releases/2026-06/"/>
+      <repository location="https://download.eclipse.org/releases/2026-09/"/>
     </location>
     <!-- Only to compile against: the ui and git bundles require these optionally, so an
          IDE without EGit still installs, and the git tools report that rather than failing

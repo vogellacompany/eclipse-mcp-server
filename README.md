@@ -22,20 +22,20 @@ https://vogellacompany.github.io/eclipse-mcp-server/
 ```
 
 and install the **Eclipse MCP Server** feature.
-The site lists the newest build only; older versions are available as the repository zip attached to each GitHub release, through *Add > Archive*.
+The site lists the newest build only.
 
 ## Building
 
-Requires JDK 25 and Maven 3.9 or newer.
+Requires JDK 25; the Maven wrapper brings Maven 3.10.1.
 
 ```bash
-mvn clean verify
+./mvnw clean verify
 ```
 
 The p2 repository ends up in `update-site/com.vogella.eclipse.mcp.repository/target/repository`.
 To work on the code in Eclipse, import the projects with *Search for nested projects* enabled and set `target-platform/com.vogella.eclipse.mcp.target/com.vogella.eclipse.mcp.target.target` as the active target platform.
 
-Every push to `main` publishes to the update site; pushing a `v<version>` tag additionally creates a GitHub release with the repository zip.
+Every push to `main` publishes to the update site.
 
 ## Enabling the server
 

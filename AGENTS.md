@@ -11,10 +11,10 @@ Built with Maven and Tycho, pomless: the root `pom.xml` is the only pom in the r
 ## Build and test
 
 ```bash
-mvn clean verify
+./mvnw clean verify
 ```
 
-Requires JDK 25 and Maven 3.9 or newer.
+Requires JDK 25; the Maven wrapper brings Maven 3.10.1.
 Always run it from the repository root; inside a module directory the sibling bundles are missing from the reactor and the build fails.
 `-pl` on one bundle still resolves the whole target platform, so there is no faster partial build.
 The first run downloads the Eclipse SDK; later runs reuse `~/.m2/repository/.cache/tycho`.
@@ -136,10 +136,10 @@ The build, test run, sampling and provisioning registries are per IDE, so those 
 - No test may run `eclipse_update` or `eclipse_install`. `ProvisioningGuardsTest` asserts their registration, that `eclipse_update` defaults to a dry run and has `acknowledgeSelfUpdate`, and that the descriptions announce what they do. `eclipse_install` has a dry run but does not default to it.
 - `callsEveryRegisteredTool` in the server tests only sees basic, server and jdt tools; a green run is not protocol coverage of the other bundles.
 - Tests never write the real token: the surefire `argLine` sets `-Dcom.vogella.eclipse.mcp.tokenDirectory` to `target/`, and a test fails if that redirect is lost.
-- JUnit comes from the Eclipse SDK (bundle `junit-jupiter-api` 6.x); do not add a Maven location for it.
+- JUnit comes from the Eclipse SDK; test bundles require `junit-jupiter-api` `[5.14.0,6.0.0)`, since the target also ships JUnit 6, which the junit5 provider cannot launch. Do not add a Maven location for it.
 - Generated output that carries semantics, `OSGI-INF` descriptors above all, can diverge from source silently, which is why `eclipse_run_tests` always reports `descriptorGeneration` and `buildBeforeLaunch`. A never-read `@Reference` field can be an ordering guarantee, not dead code.
-- `.github/workflows/build.yml` runs `mvn clean verify` under `xvfb-run` on every push and PR.
-- `Jenkinsfile` does the same on a Jenkins with the tools `Maven 3.9` and `Java 25 Temurin` on the `built-in` agent, without `xvnc` because the suite needs no display and one would mask a tool that started needing a workbench, and without `-Dmaven.test.failure.ignore=true`. The agent still needs the GTK 3 libraries, because SWT loads them without a display and the ui tool tests fail with `libgtk-3.so.0` missing.
+- GitHub Actions do not build branches or PRs; run `./mvnw clean verify` locally before pushing.
+- `Jenkinsfile` runs `./mvnw clean verify` for every branch and PR on a Jenkins with the tool `Java 25 Temurin` on the `built-in` agent, without `xvnc` because the suite needs no display and one would mask a tool that started needing a workbench, and without `-Dmaven.test.failure.ignore=true`. The agent still needs the GTK 3 libraries, because SWT loads them without a display and the ui tool tests fail with `libgtk-3.so.0` missing.
 
 ## Gotchas
 
@@ -148,7 +148,7 @@ Do not undo these without understanding why they are there.
 ### Build and packaging
 
 - The root pom sets `project.build.outputTimestamp` to the build time: Tycho takes the qualifier from it, and the super POM of Maven 3.10 and later pins it to 1980, which gives every build the same version and p2 never sees an update.
-- `.mvn/maven.config` sets `tycho.pomless.aggregator.names`, otherwise `update-site/` is not an aggregator and the build fails.
+- `.mvn/maven.config` sets the Tycho version, which `.mvn/extensions.xml` and the root pom read, and `tycho.pomless.aggregator.names`, without which `update-site/` is not an aggregator and the build fails.
 - The feature includes Jetty ee11, the MCP SDK, Jackson 3, networknt, reactor and `jakarta.servlet-api`, and leaves out `slf4j.api`, which the host IDE ships.
   The server imports `jakarta.servlet` `[6.1,7)`, which a plain SDK does not provide, so without the bundle an install from the update site alone fails.
 - Jetty imports are pinned to `[12.1.12,13)`, the floor `jetty-ee11-servlet` needs.
@@ -294,12 +294,11 @@ A capture downscaled by a fraction is blurry and looks like a rendering bug.
 
 ## Releasing
 
-Every push to `main` publishes through `.github/workflows/release.yml`; `gh workflow run release.yml` republishes by hand.
+Every push to `main` publishes through `.github/workflows/update-site.yml`, the only GitHub workflow; `gh workflow run update-site.yml` republishes by hand.
 It builds `main` with the tests, so a red build publishes nothing, copies the p2 repository into `releases/<built version>/` on `gh-pages`, regenerates the composite with `releng/update-composite-site.sh --only "$version"`, adding `--retain` with the build the live composite lists, and force-pushes a single orphan commit.
 `--retain` keeps the build the live composite listed on disk, unlisted, for one more publish: GitHub Pages and its CDN switch files one at a time, so an install that read the old composite would otherwise get 404 for every jar.
 Use `--only`, not `--keep 1`: `sort -V` does not sort qualifiers as p2 does.
 Its `concurrency` group lets a newer pending run replace an older one.
-Pushing a `v<version>` tag also creates the GitHub release with the repository archive, the only downloadable zip and the only place older builds survive.
 
 Leave versions alone for ordinary changes; the `yyyyMMddHHmm` qualifier makes each build an update.
 Bump `Bundle-Version`, `feature.xml` and `pom.xml` together when something worth naming lands.
