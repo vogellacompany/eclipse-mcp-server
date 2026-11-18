@@ -110,6 +110,12 @@ public final class GetQuickFixesTool implements IMcpTool {
 					fixes.add(new JsonObject().put("label", fix.getName()) //$NON-NLS-1$
 							.put("relevance", Integer.valueOf(fix.getRelevance()))); //$NON-NLS-1$
 				}
+			} catch (IllegalStateException e) {
+				if (e.getCause() instanceof LinkageError) {
+					// a mismatched installation fails every problem alike, so say it once
+					return McpToolResult.error(e.getMessage());
+				}
+				entry.put("error", Objects.requireNonNullElse(e.getMessage(), e.getClass().getName())); //$NON-NLS-1$
 			} catch (CoreException | RuntimeException e) {
 				// one subprocessor failing must not hide the other problems' fixes
 				entry.put("error", Objects.requireNonNullElse(e.getMessage(), e.getClass().getName())); //$NON-NLS-1$

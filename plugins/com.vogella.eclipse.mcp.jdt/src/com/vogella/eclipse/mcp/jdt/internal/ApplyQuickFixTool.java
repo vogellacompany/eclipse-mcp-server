@@ -191,13 +191,22 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				return McpToolResult.error("JDT could not apply '%s', and may have applied part of it. Check %s.".formatted( //$NON-NLS-1$
 						label, QuickFixSupport.files(change)));
 			}
+			if (!operation.changeExecuted()) {
+				// LTK validates once more before performing and skips the change when that turns fatal
+				RefactoringStatus late = operation.getValidationStatus();
+				return McpToolResult.error("JDT did not apply '%s', and nothing was changed%s".formatted(label, //$NON-NLS-1$
+						late != null && late.hasFatalError()
+								? ": " + late.getMessageMatchingSeverity(RefactoringStatus.FATAL) //$NON-NLS-1$
+								: ".")); //$NON-NLS-1$
+			}
 		} catch (LinkageError e) {
 			return failed("apply the quick fix", new IllegalStateException(QuickFixSupport.mismatch(e), e)); //$NON-NLS-1$
 		} catch (CoreException e) {
 			// performing reports its own failures above, so this is before anything was written
 			throw new McpToolException("Could not prepare the quick fix's change; nothing was changed", e); //$NON-NLS-1$
 		} catch (RuntimeException e) {
-			return failed("apply the quick fix", e); //$NON-NLS-1$
+			// performing reports its own failures above, so this is before anything was written
+			return failed("prepare the quick fix's change, and nothing was changed", e); //$NON-NLS-1$
 		}
 
 		// the fix is applied: whatever fails from here on must not read as a failed apply
