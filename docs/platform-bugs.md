@@ -165,9 +165,12 @@ encapsulate field, generating `hashCode`/`equals`, and the catch clause quick
 assists JDT LS takes from its own `QuickAssistProcessor`. Also not offered:
 enabling preview features (JDT UI's `PreviewFeaturesSubProcessor` has no core
 counterpart), changing the workspace compliance (only the project's is
-offered), and the fixes for unreachable or misordered catch blocks, sealed
-types, missing packages and modules, and enum switch expressions with a
-default.
+offered), the fixes for unreachable or misordered catch blocks, missing
+packages and modules, and enum switch expressions with a default, two of the
+sealed type fixes (`SealedMissingSealedModifier`,
+`SealedSealedTypeMissingPermits`; the other sealed fixes are ported), and the
+module Javadoc tags (`JavadocMissingUsesTag`, `JavadocMissingProvidesTag`),
+whose subprocessor methods are bound but not dispatched.
 
 ### JDT: no code template store without JDT UI
 
@@ -176,11 +179,11 @@ which only JDT UI sets, so every quick fix that writes a method, constructor or
 catch block throws a `NullPointerException` in `ProjectTemplateStore.load` when
 JDT UI has not started, and a store without the comment templates silently
 drops the Javadoc fixes. `corrections.CodeTemplates` installs JDT UI's default
-body and comment templates (without the `@author` line) when the store is missing;
-module comments and new-file templates are not installed, so the fixes that need
-them (a module Javadoc, a new `package-info.java`) are not offered, as JDT LS does in its
-`PreferenceManager`; the user's own code templates apply only once JDT UI has
-started and installed its store. Not filed upstream.
+body and comment templates (without the `@author` line) when the store is
+missing, as JDT LS does in its `PreferenceManager`. The new-file templates are
+not installed, so a fix that creates a `package-info.java` writes it without a
+file comment. The user's own code templates apply only once JDT UI has started
+and installed its store. Not filed upstream.
 
 ### JDT: correction proposals leave their edits unsaved
 
