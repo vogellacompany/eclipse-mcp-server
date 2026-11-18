@@ -124,7 +124,12 @@ class QuickFixToolsTest {
 				""");
 
 		Map<String, Object> problem = problem(IProblem.UnusedImport);
-		apply(problem, fixContaining(problem, "import"), false);
+		String label = fixContaining(problem, "import");
+		Map<String, Object> dry = apply(problem, label, true);
+		String changes = String.valueOf(dry.get("changes"));
+		assertTrue(changes.contains("file=" + PATH) && changes.contains("import java.util.Map;"),
+				"the dry run should list the file and its edit: " + dry);
+		apply(problem, label, false);
 
 		assertFalse(TestFixture.read(file).contains("java.util.Map"), TestFixture.read(file));
 	}

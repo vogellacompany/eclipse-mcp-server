@@ -76,6 +76,10 @@ public final class GetQuickFixesTool implements IMcpTool {
 		}
 
 		CompilationUnit astRoot = QuickFixSupport.parse(unit, monitor);
+		if (astRoot == null) {
+			// the parser answers null when the monitor is cancelled
+			return McpToolResult.error("The request was cancelled."); //$NON-NLS-1$
+		}
 		List<IProblem> problems = QuickFixSupport.problems(astRoot, includeWarnings);
 		if (line > 0) {
 			problems.removeIf(problem -> problem.getSourceLineNumber() != line);

@@ -88,6 +88,10 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		}
 
 		CompilationUnit astRoot = QuickFixSupport.parse(unit, monitor);
+		if (astRoot == null) {
+			// the parser answers null when the monitor is cancelled
+			return McpToolResult.error("The request was cancelled."); //$NON-NLS-1$
+		}
 		List<IProblem> matching = QuickFixSupport.problems(astRoot, true).stream()
 				.filter(problem -> problem.getID() == problemId)
 				.filter(problem -> offset >= 0 ? problem.getSourceStart() == offset
@@ -150,7 +154,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 						label, QuickFixSupport.files(change)));
 			}
 		} catch (CoreException e) {
-			throw new McpToolException("Could not apply the quick fix", e); //$NON-NLS-1$
+			throw new McpToolException(dryRun ? "Could not describe the quick fix's change" : "Could not apply the quick fix", e); //$NON-NLS-1$ //$NON-NLS-2$
 		} catch (RuntimeException e) {
 			return failed("apply the quick fix", e); //$NON-NLS-1$
 		}
@@ -165,7 +169,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 						"These files had unsaved edits in an open editor, so the fix is in the editor and not yet on disk."); //$NON-NLS-1$
 			}
 			// what is left tells the caller whether to look for another fix
-			List<IProblem> left = QuickFixSupport.problems(QuickFixSupport.parse(unit, monitor), false);
+			CompilationUnit after = QuickFixSupport.parse(unit, monitor);
+			List<IProblem> left = after == null ? List.of() : QuickFixSupport.problems(after, false);
 			JsonArray remaining = new JsonArray();
 			left.stream().limit(maxResults).forEach(error -> remaining.add(QuickFixSupport.describe(error)));
 			result.put("remainingErrors", remaining) //$NON-NLS-1$
