@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.ltk.core.refactoring.Change;
@@ -80,6 +81,10 @@ public final class ProjectOptionsChange extends Change {
 
 	@Override
 	public Change perform(IProgressMonitor monitor) {
+		if (monitor != null && monitor.isCanceled()) {
+			// a change outside the source must not land after the caller gave up
+			throw new OperationCanceledException();
+		}
 		Map<String, String> before = new HashMap<>(project.getOptions(false));
 		Map<String, String> after = replace ? new HashMap<>(updates) : new HashMap<>(before);
 		if (!replace) {

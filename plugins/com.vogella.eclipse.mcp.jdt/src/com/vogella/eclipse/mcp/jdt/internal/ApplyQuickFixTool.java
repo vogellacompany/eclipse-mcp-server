@@ -17,6 +17,7 @@ import org.eclipse.ltk.core.refactoring.Change;
 import org.eclipse.ltk.core.refactoring.PerformChangeOperation;
 import org.eclipse.ltk.core.refactoring.RefactoringStatus;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolException;
 import com.vogella.eclipse.mcp.core.McpToolResult;
@@ -232,11 +233,14 @@ public final class ApplyQuickFixTool implements IMcpTool {
 						"These files had unsaved edits in an open editor, so the fix is in the editor and not yet on disk."); //$NON-NLS-1$
 			}
 			// what is left tells the caller whether to look for another fix; a move leaves the old unit behind
-			CompilationUnit after = unit.exists() ? QuickFixSupport.parse(unit, monitor) : null;
+			// with the call's time used up, report the applied fix rather than let the check turn it into a timeout
+			boolean outOfTime = CallBudget.leftMillis() == 0;
+			CompilationUnit after = unit.exists() && !outOfTime ? QuickFixSupport.parse(unit, monitor) : null;
 			if (after == null) {
 				// no parse, no claim about what is left
-				result.put("checkSkipped", unit.exists() ? "The request was cancelled before the file was checked again." //$NON-NLS-1$ //$NON-NLS-2$
-						: "The fix moved or renamed the file, so it was not checked again."); //$NON-NLS-1$
+				result.put("checkSkipped", !unit.exists() ? "The fix moved or renamed the file, so it was not checked again." //$NON-NLS-1$ //$NON-NLS-2$
+						: outOfTime ? "The call ran out of time, so the file was not checked again." //$NON-NLS-1$
+								: "The request was cancelled before the file was checked again."); //$NON-NLS-1$
 			} else {
 				List<IProblem> left = QuickFixSupport.problems(after, false);
 				JsonArray remaining = new JsonArray();
@@ -252,7 +256,6 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		return McpToolResult.of(result.toString());
 	}
 
-	/** JDT's correction code throws unchecked exceptions for setups it does not expect; answer them rather than fail. */
 	/** Releases the validation state of a change that was never performed, without hiding the original failure. */
 	private static void disposeQuietly(Change change) {
 		if (change == null) {
@@ -265,6 +268,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		}
 	}
 
+	/** JDT's correction code throws unchecked exceptions for setups it does not expect; answer them rather than fail. */
 	private static McpToolResult failed(String what, RuntimeException e) {
 		return McpToolResult.error("JDT failed to %s: %s".formatted(what, //$NON-NLS-1$
 				Objects.requireNonNullElse(e.getMessage(), e.getClass().getName())));
