@@ -75,6 +75,10 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		if (path == null || label == null || !args.has("problemId")) { //$NON-NLS-1$
 			return McpToolResult.error("The arguments 'path', 'problemId' and 'fix' are required."); //$NON-NLS-1$
 		}
+		if (problemId < 1) {
+			// JDT's problem ids are positive; anything else is a malformed argument, not a changed file
+			return McpToolResult.error("'problemId' must be a problem id as eclipse_get_quick_fixes lists it."); //$NON-NLS-1$
+		}
 		if (args.has("offset") && offset < 0 || args.has("line") && line < 1) { //$NON-NLS-1$ //$NON-NLS-2$
 			return McpToolResult.error("'offset' must be 0 or more, and 'line' 1 or more."); //$NON-NLS-1$
 		}
@@ -181,8 +185,10 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			}
 			if (monitor.isCanceled() || CallBudget.leftMillis() == 0) {
 				// the caller gave up, or would not hear the answer: change nothing it can no longer see
+				boolean cancelled = monitor.isCanceled();
 				change.dispose();
-				return McpToolResult.error("The request was cancelled or ran out of time before the fix was applied, so nothing was changed."); //$NON-NLS-1$
+				return McpToolResult.error((cancelled ? "The request was cancelled" : "The call ran out of time") //$NON-NLS-1$ //$NON-NLS-2$
+						+ " before the fix was applied, so nothing was changed."); //$NON-NLS-1$
 			}
 			// a performed composite change drops its children, so read the files first
 			List<String> touched = QuickFixSupport.files(change);
