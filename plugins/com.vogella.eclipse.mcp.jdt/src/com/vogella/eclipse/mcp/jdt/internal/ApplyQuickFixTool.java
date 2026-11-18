@@ -101,7 +101,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				.filter(problem -> message == null || message.equals(problem.getMessage()))
 				.toList();
 		if (matching.isEmpty()) {
-			String where = offset >= 0 ? "offset " + offset : "line " + line; //$NON-NLS-1$ //$NON-NLS-2$
+			String where = offset >= 0 && line >= 1 ? "offset " + offset + " on line " + line //$NON-NLS-1$ //$NON-NLS-2$
+					: offset >= 0 ? "offset " + offset : "line " + line; //$NON-NLS-1$ //$NON-NLS-2$
 			if (message != null) {
 				List<String> there = QuickFixSupport.problems(astRoot, true).stream()
 						.filter(problem -> problem.getID() == problemId)

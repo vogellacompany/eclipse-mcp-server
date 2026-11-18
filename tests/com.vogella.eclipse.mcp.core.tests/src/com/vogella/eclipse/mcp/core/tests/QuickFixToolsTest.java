@@ -240,7 +240,9 @@ class QuickFixToolsTest {
 		String changes = String.valueOf(dry.get("changes"));
 		assertTrue(changes.contains(JavaCore.COMPILER_COMPLIANCE) && changes.contains(PROJECT), "got " + dry);
 
-		apply(problem, label, false);
+		Map<String, Object> applied = apply(problem, label, false);
+		// the check parses with the project's new options, so it needs no build to see the error gone
+		assertEquals(List.of(), applied.get("remainingErrors"), "got " + applied);
 		assertFalse(JavaCore.VERSION_1_8.equals(project.getOption(JavaCore.COMPILER_COMPLIANCE, false)),
 				"the project compliance should have been raised");
 	}
