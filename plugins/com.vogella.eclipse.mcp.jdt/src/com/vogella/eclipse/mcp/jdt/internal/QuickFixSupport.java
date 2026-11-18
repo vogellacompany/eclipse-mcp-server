@@ -3,6 +3,7 @@ package com.vogella.eclipse.mcp.jdt.internal;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -47,6 +48,12 @@ final class QuickFixSupport {
 	private static final int MAX_EDITS = 100;
 
 	private QuickFixSupport() {
+	}
+
+	/** Whether the argument is a number with a fraction, which would otherwise be cut to another problem's id or place. */
+	static boolean fractional(Map<String, Object> arguments, String name) {
+		return arguments != null && arguments.get(name) instanceof Number number
+				&& number.doubleValue() != Math.rint(number.doubleValue());
 	}
 
 	/**

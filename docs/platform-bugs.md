@@ -203,7 +203,7 @@ and installed its store. Not filed upstream.
 `CUCorrectionProposalCore.createTextChange` sets `TextFileChange.LEAVE_DIRTY`,
 because a proposal is meant to edit an open editor. Performed headlessly the
 edit goes to a buffer nobody holds and is lost when the buffer is released.
-`QuickFixSupport.saveFiles` switches every text change to `KEEP_SAVE_STATE`
+`QuickFixSupport.saveFiles` switches every `TextFileChange` (`CompilationUnitChange` is one) to `KEEP_SAVE_STATE`
 before `eclipse_apply_quick_fix` performs it. As designed for an editor, not filed.
 
 ### JDT: `SearchMatch.getResource()` attributes a binary match to the wrong project

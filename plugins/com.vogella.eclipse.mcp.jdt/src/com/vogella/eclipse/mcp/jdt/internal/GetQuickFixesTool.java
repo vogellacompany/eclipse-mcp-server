@@ -32,7 +32,7 @@ public final class GetQuickFixesTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Lists the compiler problems of one Java file and, for each, the quick fixes JDT offers for it (what Ctrl+1 shows in the editor), most relevant first. Computed on the file's current content without the UI, so it works in a headless IDE and does not need a build. Apply one with eclipse_apply_quick_fix, passing the problem's offset and problemId and the fix's label exactly as listed. Fixes that exist only as a JDT UI wizard or dialog, such as creating a new class or adding a library to the build path, are not offered. Fixes JDT offers twice under one label are listed once. A problem whose fixes could not be computed at all carries an 'error' with the reason instead of fixes; when only some of JDT's fix computations fail, the others are listed with a 'partialError', and the failure goes to the Error Log."; //$NON-NLS-1$
+		return "Lists the compiler problems of one Java file and, for each, the quick fixes JDT offers for it (most of what Ctrl+1 shows in the editor), most relevant first. Computed on the file's current content without the UI, so it works in a headless IDE and does not need a build. Apply one with eclipse_apply_quick_fix, passing the problem's offset and problemId and the fix's label exactly as listed. Fixes that exist only as a JDT UI wizard or dialog, such as creating a new class or adding a library to the build path, are not offered, nor are some fixes for rarer problems; where two types share a simple name, the order of the import fixes does not follow your earlier picks as Ctrl+1 does. Fixes JDT offers twice under one label are listed once. A problem whose fixes could not be computed at all carries an 'error' with the reason instead of fixes; when only some of JDT's fix computations fail, the others are listed with a 'partialError', and the failure goes to the Error Log."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -59,8 +59,8 @@ public final class GetQuickFixesTool implements IMcpTool {
 			return McpToolResult.error("The argument 'path' is required."); //$NON-NLS-1$
 		}
 		int line = args.getInt("line", 0, 0, Integer.MAX_VALUE); //$NON-NLS-1$
-		if (args.has("line") && line < 1) { //$NON-NLS-1$
-			return McpToolResult.error("'line' is 1-based, so it must be 1 or more."); //$NON-NLS-1$
+		if (args.has("line") && line < 1 || QuickFixSupport.fractional(arguments, "line")) { //$NON-NLS-1$ //$NON-NLS-2$
+			return McpToolResult.error("'line' is 1-based, so it must be a whole number, 1 or more."); //$NON-NLS-1$
 		}
 		boolean includeWarnings = args.getBoolean("includeWarnings", true); //$NON-NLS-1$
 		int maxResults = args.getInt("maxResults", 50, 1, 500); //$NON-NLS-1$
