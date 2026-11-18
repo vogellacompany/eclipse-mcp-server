@@ -131,6 +131,9 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		}
 		// what is left is one problem, possibly reported twice
 		IProblem problem = matching.get(0);
+		if (problem.getSourceStart() < 0) {
+			return McpToolResult.error("JDT reports this problem without a position in the file, so it has no quick fix here."); //$NON-NLS-1$
+		}
 
 		List<ChangeCorrectionProposalCore> fixes;
 		try {
@@ -188,12 +191,15 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			}
 			if (operation.changeExecutionFailed()) {
 				// the change may have written some of its edits before it failed
+				List<String> touched = QuickFixSupport.files(change);
+				change.dispose();
 				return McpToolResult.error("JDT could not apply '%s', and may have applied part of it. Check %s.".formatted( //$NON-NLS-1$
-						label, QuickFixSupport.files(change)));
+						label, touched));
 			}
 			if (!operation.changeExecuted()) {
 				// LTK validates once more before performing and skips the change when that turns fatal
 				RefactoringStatus late = operation.getValidationStatus();
+				change.dispose();
 				return McpToolResult.error("JDT did not apply '%s', and nothing was changed%s".formatted(label, //$NON-NLS-1$
 						late != null && late.hasFatalError()
 								? ": " + late.getMessageMatchingSeverity(RefactoringStatus.FATAL) //$NON-NLS-1$
