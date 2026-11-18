@@ -81,6 +81,7 @@ public final class GetQuickFixesTool implements IMcpTool {
 			return McpToolResult.error("The request was cancelled."); //$NON-NLS-1$
 		}
 		List<IProblem> problems = QuickFixSupport.problems(astRoot, includeWarnings);
+		int inFile = problems.size();
 		if (line > 0) {
 			problems.removeIf(problem -> problem.getSourceLineNumber() != line);
 		}
@@ -119,6 +120,10 @@ public final class GetQuickFixesTool implements IMcpTool {
 				.put("total", Integer.valueOf(problems.size())) //$NON-NLS-1$
 				.put("truncated", Boolean.valueOf(problems.size() > listed.size())) //$NON-NLS-1$
 				.put("problems", listed); //$NON-NLS-1$
+		if (line > 0) {
+			// 'total' counts the problems on the asked line, so also say how many the whole file has
+			result.put("totalInFile", Integer.valueOf(inFile)); //$NON-NLS-1$
+		}
 		if (outOfTime) {
 			// a larger maxResults would not help here, so say why the list is short apart from 'truncated'
 			result.put("outOfTime", Boolean.TRUE); //$NON-NLS-1$

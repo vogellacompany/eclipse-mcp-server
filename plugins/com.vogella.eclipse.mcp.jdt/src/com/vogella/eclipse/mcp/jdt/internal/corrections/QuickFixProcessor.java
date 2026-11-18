@@ -93,17 +93,32 @@ public final class QuickFixProcessor {
 		IProblemLocation location = new ProblemLocation(problem);
 		IInvocationContext context = new InvocationContext(unit, astRoot, location.getOffset(), location.getLength());
 		List<ChangeCorrectionProposalCore> proposals = new ArrayList<>();
+		CoreException coreFailure = null;
+		RuntimeException runtimeFailure = null;
 		try {
 			process(context, location, proposals);
-		} catch (CoreException | RuntimeException e) {
-			// keep what the subprocessors before the failing one found, and fail only when that is nothing
+		} catch (CoreException e) {
+			coreFailure = e;
+		} catch (RuntimeException e) {
+			runtimeFailure = e;
+		}
+		try {
+			suppressWarnings.getSuppressWarningsProposals(context, location, proposals);
+		} catch (RuntimeException e) {
+			runtimeFailure = runtimeFailure == null ? e : runtimeFailure;
+		}
+		Exception failure = coreFailure != null ? coreFailure : runtimeFailure;
+		if (failure != null) {
+			// keep what the other subprocessors found, and fail only when that is nothing
 			if (proposals.stream().noneMatch(Objects::nonNull)) {
-				throw e;
+				if (coreFailure != null) {
+					throw coreFailure;
+				}
+				throw runtimeFailure;
 			}
 			ILog.get().error("A quick fix subprocessor failed for problem " + problem.getID() //$NON-NLS-1$
-					+ "; the fixes found before it are kept.", e); //$NON-NLS-1$
+					+ "; the fixes the others found are kept.", failure); //$NON-NLS-1$
 		}
-		suppressWarnings.getSuppressWarningsProposals(context, location, proposals);
 
 		List<ChangeCorrectionProposalCore> sorted = new ArrayList<>(proposals);
 		// a factory returns null for a fix that needs JDT UI, and the subprocessors also hand lists over with addAll
