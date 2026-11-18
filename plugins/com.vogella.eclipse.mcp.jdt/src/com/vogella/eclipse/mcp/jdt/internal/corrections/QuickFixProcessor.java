@@ -84,6 +84,15 @@ public final class QuickFixProcessor {
 	private final JavadocTags javadoc = new JavadocTags();
 	private final GetterSetter getterSetter = new GetterSetter();
 	private final NullAnnotations nullAnnotations = new NullAnnotations();
+	private Exception partialFailure;
+
+	/**
+	 * The failure of a subprocessor in the last {@link #getCorrections} call whose other fixes were kept, or null when
+	 * every subprocessor finished.
+	 */
+	public Exception partialFailure() {
+		return partialFailure;
+	}
 
 	/**
 	 * Returns the fixes for {@code problem} in {@code astRoot}, most relevant first, one per label.
@@ -92,6 +101,7 @@ public final class QuickFixProcessor {
 	 */
 	public List<ChangeCorrectionProposalCore> getCorrections(ICompilationUnit unit, CompilationUnit astRoot,
 			IProblem problem) throws CoreException {
+		partialFailure = null;
 		CodeTemplates.ensureInstalled();
 		IProblemLocation location = new ProblemLocation(problem);
 		IInvocationContext context = new InvocationContext(unit, astRoot, location.getOffset(), location.getLength());
@@ -121,6 +131,7 @@ public final class QuickFixProcessor {
 			}
 			ILog.get().warn("A quick fix subprocessor failed for problem " + problem.getID() //$NON-NLS-1$
 					+ "; the fixes the others found are kept.", failure); //$NON-NLS-1$
+			partialFailure = failure;
 		}
 
 		List<ChangeCorrectionProposalCore> sorted = new ArrayList<>(proposals);

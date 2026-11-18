@@ -144,8 +144,11 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		}
 
 		List<ChangeCorrectionProposalCore> fixes;
+		String partialFailure;
 		try {
-			fixes = QuickFixSupport.fixes(unit, astRoot, problem);
+			QuickFixSupport.Fixes found = QuickFixSupport.fixes(unit, astRoot, problem);
+			fixes = found.proposals();
+			partialFailure = found.partialFailure();
 		} catch (CoreException e) {
 			throw new McpToolException("Could not compute the quick fixes", e); //$NON-NLS-1$
 		} catch (RuntimeException e) {
@@ -154,8 +157,10 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		ChangeCorrectionProposalCore fix = fixes.stream().filter(candidate -> label.equals(candidate.getName()))
 				.findFirst().orElse(null);
 		if (fix == null) {
-			return McpToolResult.error("No fix labelled '%s' for this problem. Offered: %s".formatted(label, //$NON-NLS-1$
-					fixes.isEmpty() ? "none" : fixes.stream().map(ChangeCorrectionProposalCore::getName).toList())); //$NON-NLS-1$
+			// a failed computation, not a wrong label, may be why the fix is missing
+			return McpToolResult.error("No fix labelled '%s' for this problem. Offered: %s%s".formatted(label, //$NON-NLS-1$
+					fixes.isEmpty() ? "none" : fixes.stream().map(ChangeCorrectionProposalCore::getName).toList(), //$NON-NLS-1$
+					partialFailure == null ? "" : ". " + partialFailure)); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 
 		JsonObject result = new JsonObject().put("dryRun", Boolean.valueOf(dryRun)) //$NON-NLS-1$

@@ -32,7 +32,7 @@ public final class GetQuickFixesTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Lists the compiler problems of one Java file and, for each, the quick fixes JDT offers for it (what Ctrl+1 shows in the editor), most relevant first. Computed on the file's current content without the UI, so it works in a headless IDE and does not need a build. Apply one with eclipse_apply_quick_fix, passing the problem's offset and problemId and the fix's label exactly as listed. Fixes that exist only as a JDT UI wizard or dialog, such as creating a new class or adding a library to the build path, are not offered. Fixes JDT offers twice under one label are listed once. A problem whose fixes could not be computed at all carries an 'error' with the reason instead of fixes; when only some of JDT's fix computations fail, the others are listed and the failure goes to the Error Log."; //$NON-NLS-1$
+		return "Lists the compiler problems of one Java file and, for each, the quick fixes JDT offers for it (what Ctrl+1 shows in the editor), most relevant first. Computed on the file's current content without the UI, so it works in a headless IDE and does not need a build. Apply one with eclipse_apply_quick_fix, passing the problem's offset and problemId and the fix's label exactly as listed. Fixes that exist only as a JDT UI wizard or dialog, such as creating a new class or adding a library to the build path, are not offered. Fixes JDT offers twice under one label are listed once. A problem whose fixes could not be computed at all carries an 'error' with the reason instead of fixes; when only some of JDT's fix computations fail, the others are listed with a 'partialError', and the failure goes to the Error Log."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -87,6 +87,7 @@ public final class GetQuickFixesTool implements IMcpTool {
 		}
 		JsonArray listed = new JsonArray();
 		boolean outOfTime = false;
+		boolean cancelled = false;
 		for (IProblem problem : problems) {
 			if (listed.size() >= maxResults) {
 				break;
@@ -96,7 +97,8 @@ public final class GetQuickFixesTool implements IMcpTool {
 			}
 			if (listed.size() > 0 && (monitor.isCanceled() || CallBudget.leftMillis() == 0)) {
 				// answer with what is done rather than let the call time out with nothing
-				outOfTime = true;
+				cancelled = monitor.isCanceled();
+				outOfTime = !cancelled;
 				break;
 			}
 			JsonObject entry = QuickFixSupport.describe(problem);
@@ -106,9 +108,13 @@ public final class GetQuickFixesTool implements IMcpTool {
 				continue;
 			}
 			try {
-				for (ChangeCorrectionProposalCore fix : QuickFixSupport.fixes(unit, astRoot, problem)) {
+				QuickFixSupport.Fixes found = QuickFixSupport.fixes(unit, astRoot, problem);
+				for (ChangeCorrectionProposalCore fix : found.proposals()) {
 					fixes.add(new JsonObject().put("label", fix.getName()) //$NON-NLS-1$
 							.put("relevance", Integer.valueOf(fix.getRelevance()))); //$NON-NLS-1$
+				}
+				if (found.partialFailure() != null) {
+					entry.put("partialError", found.partialFailure()); //$NON-NLS-1$
 				}
 			} catch (IllegalStateException e) {
 				if (e.getCause() instanceof LinkageError) {
@@ -130,11 +136,12 @@ public final class GetQuickFixesTool implements IMcpTool {
 			// 'total' counts the problems on the asked line, so also say how many of the same kinds the whole file has
 			result.put("totalInFile", Integer.valueOf(inFile)); //$NON-NLS-1$
 		}
-		if (outOfTime) {
+		if (outOfTime || cancelled) {
 			// a larger maxResults would not help here, so say why the list is short apart from 'truncated'
-			result.put("outOfTime", Boolean.TRUE); //$NON-NLS-1$
+			result.put(cancelled ? "cancelled" : "outOfTime", Boolean.TRUE); //$NON-NLS-1$ //$NON-NLS-2$
 			IProblem last = problems.get(listed.size() - 1);
-			result.put("waitNote", ("Computing the fixes was cancelled or ran out of the call's time after %d of %d problems, the last on line %d. " //$NON-NLS-1$ //$NON-NLS-2$
+			result.put("waitNote", ("Computing the fixes " + (cancelled ? "was cancelled" : "ran out of the call's time") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+					+ " after %d of %d problems, the last on line %d. " //$NON-NLS-1$
 					+ (line > 0 ? "The rest of this line was not reached, and asking for the line again starts from its first problem." //$NON-NLS-1$
 							: "Ask again with 'line' for each later line to list the rest.")).formatted(Integer.valueOf(listed.size()), //$NON-NLS-1$
 							Integer.valueOf(problems.size()), Integer.valueOf(last.getSourceLineNumber())));

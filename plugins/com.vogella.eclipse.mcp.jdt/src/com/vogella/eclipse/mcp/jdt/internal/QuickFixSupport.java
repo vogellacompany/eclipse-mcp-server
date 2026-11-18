@@ -84,12 +84,23 @@ final class QuickFixSupport {
 		return problems;
 	}
 
-	static List<ChangeCorrectionProposalCore> fixes(ICompilationUnit unit, CompilationUnit astRoot, IProblem problem)
-			throws CoreException {
+	/**
+	 * A problem's fixes, and when some of JDT's fix computations failed while others succeeded, the reason the list may
+	 * lack a fix; null otherwise.
+	 */
+	record Fixes(List<ChangeCorrectionProposalCore> proposals, String partialFailure) {
+	}
+
+	static Fixes fixes(ICompilationUnit unit, CompilationUnit astRoot, IProblem problem) throws CoreException {
 		// headless, the jdt.ui preference node the code style is read from is missing
 		OrganizeImportsTool.ensureCodeStylePreferences();
 		try {
-			return new QuickFixProcessor().getCorrections(unit, astRoot, problem);
+			QuickFixProcessor processor = new QuickFixProcessor();
+			List<ChangeCorrectionProposalCore> proposals = processor.getCorrections(unit, astRoot, problem);
+			Exception failure = processor.partialFailure();
+			return new Fixes(proposals, failure == null ? null
+					: "Some of JDT's fix computations failed, so a fix may be missing (see the Error Log): " //$NON-NLS-1$
+							+ Objects.requireNonNullElse(failure.getMessage(), failure.getClass().getName()));
 		} catch (LinkageError e) {
 			// the port subclasses internal classes whose abstract methods change between releases
 			throw new IllegalStateException(mismatch(e), e);
