@@ -52,14 +52,25 @@ final class QuickFixSupport {
 	}
 
 	/**
-	 * Whether the argument is a number that is no int, with a fraction or out of range, which getInt would cut to another
-	 * problem's id or place.
+	 * Whether the argument is given but is no int: a number with a fraction or out of range, or text that is no number,
+	 * which getInt would turn into another problem's id or place, or into an argument not given.
 	 */
 	static boolean notAnInt(Map<String, Object> arguments, String name) {
-		if (arguments == null || !(arguments.get(name) instanceof Number number)) {
+		Object given = arguments == null ? null : arguments.get(name);
+		if (given == null) {
 			return false;
 		}
-		double value = number.doubleValue();
+		double value;
+		if (given instanceof Number number) {
+			value = number.doubleValue();
+		} else {
+			// getInt answers its fallback for text it cannot parse, which would read as an argument not given
+			try {
+				value = Integer.parseInt(String.valueOf(given).trim());
+			} catch (NumberFormatException e) {
+				return true;
+			}
+		}
 		return value != Math.rint(value) || value < Integer.MIN_VALUE || value > Integer.MAX_VALUE;
 	}
 

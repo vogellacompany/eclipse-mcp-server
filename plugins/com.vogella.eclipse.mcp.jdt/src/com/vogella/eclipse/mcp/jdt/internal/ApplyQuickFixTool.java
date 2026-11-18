@@ -203,16 +203,14 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			try {
 				ResourcesPlugin.getWorkspace().run(operation, monitor);
 			} catch (CoreException | RuntimeException | LinkageError e) {
-				// a cancel or failure while performing, a missing internal JDT class included, does not undo the edits already written
+				// a cancel or failure while performing, a missing internal JDT class included, does not undo the edits
+				// already written; LTK disposes the change only after a perform that returned, so release it here
+				disposeQuietly(change);
 				return McpToolResult.error("JDT could not finish '%s' (%s), and may have applied part of it. Check %s.".formatted( //$NON-NLS-1$
 						label, Objects.requireNonNullElse(e.getMessage(), e.getClass().getName()),
 						touched));
 			}
-			if (operation.changeExecutionFailed()) {
-				// the change may have written some of its edits before it failed; LTK has disposed it
-				return McpToolResult.error("JDT could not apply '%s', and may have applied part of it. Check %s.".formatted( //$NON-NLS-1$
-						label, touched));
-			}
+			// a change that fails while performing reaches the catch above, since LTK rethrows its exception
 			if (!operation.changeExecuted()) {
 				// LTK validates once more before performing and skips the change when that turns fatal
 				RefactoringStatus late = operation.getValidationStatus();
