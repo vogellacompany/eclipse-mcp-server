@@ -32,7 +32,7 @@ public final class GetQuickFixesTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Lists the compiler problems of one Java file and, for each, the quick fixes JDT offers for it (what Ctrl+1 shows in the editor), most relevant first. Computed on the file's current content without the UI, so it works in a headless IDE and does not need a build. Apply one with eclipse_apply_quick_fix, passing the problem's offset and problemId and the fix's label exactly as listed. Fixes that exist only as a JDT UI wizard or dialog, such as creating a new class or adding a library to the build path, are not offered. A problem whose fixes could not be computed at all carries an 'error' with the reason instead of fixes; when only some of JDT's fix computations fail, the others are listed and the failure goes to the Error Log."; //$NON-NLS-1$
+		return "Lists the compiler problems of one Java file and, for each, the quick fixes JDT offers for it (what Ctrl+1 shows in the editor), most relevant first. Computed on the file's current content without the UI, so it works in a headless IDE and does not need a build. Apply one with eclipse_apply_quick_fix, passing the problem's offset and problemId and the fix's label exactly as listed. Fixes that exist only as a JDT UI wizard or dialog, such as creating a new class or adding a library to the build path, are not offered. Fixes JDT offers twice under one label are listed once. A problem whose fixes could not be computed at all carries an 'error' with the reason instead of fixes; when only some of JDT's fix computations fail, the others are listed and the failure goes to the Error Log."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -135,7 +135,8 @@ public final class GetQuickFixesTool implements IMcpTool {
 			result.put("outOfTime", Boolean.TRUE); //$NON-NLS-1$
 			IProblem last = problems.get(listed.size() - 1);
 			result.put("waitNote", ("Computing the fixes was cancelled or ran out of the call's time after %d of %d problems, the last on line %d. " //$NON-NLS-1$ //$NON-NLS-2$
-					+ "Ask again with 'line' for each later line to list the rest.").formatted(Integer.valueOf(listed.size()), //$NON-NLS-1$
+					+ (line > 0 ? "The rest of this line was not reached, and asking for the line again starts from its first problem." //$NON-NLS-1$
+							: "Ask again with 'line' for each later line to list the rest.")).formatted(Integer.valueOf(listed.size()), //$NON-NLS-1$
 							Integer.valueOf(problems.size()), Integer.valueOf(last.getSourceLineNumber())));
 		}
 		return McpToolResult.of(result.toString());
