@@ -157,11 +157,17 @@ The subprocessors behind Ctrl+1 live in `org.eclipse.jdt.core.manipulation` as
 change between releases. The dispatcher that maps a problem id to them,
 `QuickFixProcessor`, stays in JDT UI, so JDT LS and this project each keep a copy.
 
-`corrections.QuickFixProcessor` follows JDT LS's copy. Not ported, because JDT UI
-implements them as wizards or dialogs with no core counterpart: creating a new
-type for an unresolved name, adding a library or project to the build path,
-self encapsulate field, generating `hashCode`/`equals`, and the catch clause
-quick assists JDT LS takes from its own `QuickAssistProcessor`.
+`corrections.QuickFixProcessor` is based on JDT LS's copy, but does not cover
+every problem id JDT UI handles. Not ported, because JDT UI implements them as
+wizards or dialogs with no core counterpart: creating a new type for an
+unresolved name, adding a library or project to the build path, self
+encapsulate field, generating `hashCode`/`equals`, and the catch clause quick
+assists JDT LS takes from its own `QuickAssistProcessor`. Also not offered:
+enabling preview features (JDT UI's `PreviewFeaturesSubProcessor` has no core
+counterpart), changing the workspace compliance (only the project's is
+offered), and the fixes for unreachable or misordered catch blocks, sealed
+types, missing packages and modules, and enum switch expressions with a
+default.
 
 ### JDT: no code template store without JDT UI
 

@@ -433,6 +433,10 @@ final class SubProcessors {
 		@Override
 		protected ChangeCorrectionProposalCore createChangeToRequiredCompilerComplianceProposal(String label,
 				IJavaProject project, boolean workspace, String version, int relevance) {
+			if (workspace) {
+				// changing every project's compliance is not something a fix for one file should do unasked
+				return null;
+			}
 			return new ChangeCorrectionProposalCore(label, ProjectOptionsChange.compliance(label, project, version,
 					false), relevance);
 		}
@@ -440,6 +444,9 @@ final class SubProcessors {
 		@Override
 		protected ChangeCorrectionProposalCore createChangeToRequiredCompilerComplianceProposal(String label,
 				IJavaProject project, boolean workspace, String version, boolean enablePreviews, int relevance) {
+			if (workspace) {
+				return null;
+			}
 			return new ChangeCorrectionProposalCore(label, ProjectOptionsChange.compliance(label, project, version,
 					enablePreviews), relevance);
 		}

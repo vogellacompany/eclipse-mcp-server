@@ -146,6 +146,54 @@ class QuickFixToolsTest {
 		assertTrue(result.text().contains("java.util"), "the refusal should list the offered fixes: " + result.text());
 	}
 
+	@Test
+	void asksForAnOffsetWhenALineHasTwoSuchProblems() throws Exception {
+		holder("""
+				package example;
+				public class Holder {
+					List<String> first; List<String> second;
+				}
+				""");
+		Map<String, Object> problem = problem(IProblem.UndefinedType);
+
+		Map<String, Object> arguments = new HashMap<>(Map.of("path", PATH, "problemId", problem.get("problemId"),
+				"line", problem.get("line"), "fix", fixContaining(problem, "java.util")));
+		McpToolResult result = TestFixture.call(APPLY, arguments);
+
+		assertTrue(result.isError(), result.text());
+		assertTrue(result.text().contains("offset"), "the refusal should ask for an offset: " + result.text());
+	}
+
+	@Test
+	void listsOnlyAsManyProblemsAsAsked() throws Exception {
+		holder("""
+				package example;
+				public class Holder {
+					List<String> names;
+					Set<String> keys;
+				}
+				""");
+
+		Map<String, Object> one = TestFixture.callAndParse(LIST, Map.of("path", PATH, "maxResults", Integer.valueOf(1)));
+		assertEquals(1, ((List<?>) one.get("problems")).size(), "got " + one);
+		assertEquals(Boolean.TRUE, one.get("truncated"), "got " + one);
+		assertEquals(2, ((Number) one.get("total")).intValue(), "got " + one);
+	}
+
+	@Test
+	void leavesOutWarningsWhenAsked() throws Exception {
+		holder("""
+				package example;
+				import java.util.Map;
+				public class Holder {
+				}
+				""");
+
+		Map<String, Object> errorsOnly = TestFixture.callAndParse(LIST,
+				Map.of("path", PATH, "includeWarnings", Boolean.FALSE));
+		assertEquals(List.of(), errorsOnly.get("problems"), "the unused import is a warning: " + errorsOnly);
+	}
+
 	private IFile holder(String source) throws Exception {
 		IJavaProject project = fixture.createJavaProject(PROJECT);
 		IFile file = TestFixture.addType(project, "example", "Holder", source);

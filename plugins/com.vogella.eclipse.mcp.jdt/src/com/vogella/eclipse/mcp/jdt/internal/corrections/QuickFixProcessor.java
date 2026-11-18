@@ -175,7 +175,7 @@ public final class QuickFixProcessor {
 				break;
 			case IProblem.TypeMismatch:
 			case IProblem.ReturnTypeMismatch:
-				typeMismatch.collectTypeMismatchProposals(context, withTwoArguments(problem), proposals);
+				typeMismatch.collectTypeMismatchProposals(context, problem, proposals);
 				break;
 			case IProblem.IncompatibleTypesInForeach:
 				typeMismatch.collectTypeMismatchInForEachProposals(context, problem, proposals);
@@ -684,17 +684,6 @@ public final class QuickFixProcessor {
 		IJavaProject project = context.getCompilationUnit().getJavaProject();
 		return project != null
 				&& JavaCore.ENABLED.equals(project.getOption(JavaCore.COMPILER_ANNOTATION_NULL_ANALYSIS, true));
-	}
-
-	/** The type mismatch subprocessor indexes two problem arguments, which some mismatches do not carry. */
-	private static IProblemLocation withTwoArguments(IProblemLocation problem) {
-		String[] arguments = problem.getProblemArguments();
-		if (arguments != null && arguments.length >= 2) {
-			return problem;
-		}
-		String[] padded = { arguments != null && arguments.length == 1 ? arguments[0] : "", "" }; //$NON-NLS-1$ //$NON-NLS-2$
-		return new ProblemLocation(problem.getOffset(), problem.getLength(), problem.getProblemId(), padded,
-				problem.isError(), problem.getMarkerType());
 	}
 
 	private static int moveBack(int offset, int start, String ignoreCharacters, ICompilationUnit unit) {

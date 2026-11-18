@@ -87,7 +87,7 @@ class McpServerServiceTest {
 	private static final String QUICK_FIX_SAMPLE = "/%s/src/example/QuickFixSample.java".formatted(PROJECT);
 
 	private static final Set<String> WRITES_FILES = Set.of("eclipse_organize_imports", "eclipse_format",
-			"eclipse_write_file");
+			"eclipse_write_file", "eclipse_apply_quick_fix");
 
 	private static final String IMAGE = "/%s/pixel.png".formatted(PROJECT);
 
@@ -585,9 +585,12 @@ class McpServerServiceTest {
 			for (String name : WRITES_FILES) {
 				// content only where the schema has it: an unknown argument would be
 				// refused by the validator, and the refusal under test is the tool's
-				Map<String, Object> arguments = "eclipse_write_file".equals(name)
-						? Map.of("path", "/no-such-project/src/Nothing.java", "content", "nothing")
-						: Map.of("path", "/no-such-project/src/Nothing.java");
+				Map<String, Object> arguments = switch (name) {
+					case "eclipse_write_file" -> Map.of("path", "/no-such-project/src/Nothing.java", "content", "nothing");
+					case "eclipse_apply_quick_fix" -> Map.of("path", "/no-such-project/src/Nothing.java", "problemId",
+							Integer.valueOf(1), "offset", Integer.valueOf(0), "fix", "Nothing", "dryRun", Boolean.FALSE);
+					default -> Map.of("path", "/no-such-project/src/Nothing.java");
+				};
 				CallToolResult result = client.callTool(new CallToolRequest(name, arguments));
 				assertEquals(Boolean.TRUE, result.isError(), name + " should report a missing file as an error");
 				assertTrue(result.content().get(0) instanceof TextContent, name + " should explain itself in text");

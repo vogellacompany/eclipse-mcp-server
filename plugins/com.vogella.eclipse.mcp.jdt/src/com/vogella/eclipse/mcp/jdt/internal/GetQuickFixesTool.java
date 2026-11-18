@@ -11,6 +11,7 @@ import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.manipulation.ChangeCorrectionProposalCore;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolException;
 import com.vogella.eclipse.mcp.core.McpToolResult;
@@ -77,12 +78,18 @@ public final class GetQuickFixesTool implements IMcpTool {
 			problems.removeIf(problem -> problem.getSourceLineNumber() != line);
 		}
 		JsonArray listed = new JsonArray();
+		boolean outOfTime = false;
 		for (IProblem problem : problems) {
 			if (listed.size() >= maxResults) {
 				break;
 			}
 			if (monitor.isCanceled()) {
 				return McpToolResult.error("The request was cancelled."); //$NON-NLS-1$
+			}
+			if (listed.size() > 0 && CallBudget.leftMillis() == 0) {
+				// answer with what is done rather than let the call time out with nothing
+				outOfTime = true;
+				break;
 			}
 			JsonObject entry = QuickFixSupport.describe(problem);
 			JsonArray fixes = new JsonArray();
@@ -97,9 +104,14 @@ public final class GetQuickFixesTool implements IMcpTool {
 			}
 			listed.add(entry.put("fixes", fixes)); //$NON-NLS-1$
 		}
-		return McpToolResult.of(new JsonObject().put("file", path) //$NON-NLS-1$
+		JsonObject result = new JsonObject().put("file", path) //$NON-NLS-1$
 				.put("total", Integer.valueOf(problems.size())) //$NON-NLS-1$
 				.put("truncated", Boolean.valueOf(problems.size() > listed.size())) //$NON-NLS-1$
-				.put("problems", listed).toString()); //$NON-NLS-1$
+				.put("problems", listed); //$NON-NLS-1$
+		if (outOfTime) {
+			result.put("waitNote", "Computing the fixes ran out of the call's time, so only the first problems are listed. " //$NON-NLS-1$ //$NON-NLS-2$
+					+ "Ask again with 'line', or with includeWarnings false, to list the rest."); //$NON-NLS-1$
+		}
+		return McpToolResult.of(result.toString());
 	}
 }
