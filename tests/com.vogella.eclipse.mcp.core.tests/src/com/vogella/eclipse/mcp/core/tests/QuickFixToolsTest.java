@@ -240,6 +240,30 @@ class QuickFixToolsTest {
 				"the project compliance should have been raised");
 	}
 
+	@Test
+	void addsAMissingJavadocComment() throws Exception {
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		Map<String, String> options = new HashMap<>(project.getOptions(false));
+		options.put(JavaCore.COMPILER_DOC_COMMENT_SUPPORT, JavaCore.ENABLED);
+		options.put(JavaCore.COMPILER_PB_MISSING_JAVADOC_COMMENTS, JavaCore.WARNING);
+		options.put(JavaCore.COMPILER_PB_MISSING_JAVADOC_COMMENTS_VISIBILITY, JavaCore.PUBLIC);
+		project.setOptions(options);
+		IFile file = TestFixture.addType(project, "example", "Holder", """
+				package example;
+				/** Holds. */
+				public class Holder {
+					public int size(int x) {
+						return x;
+					}
+				}
+				""");
+
+		Map<String, Object> problem = problem(IProblem.JavadocMissing);
+		apply(problem, fixContaining(problem, "Javadoc"), false);
+
+		assertTrue(TestFixture.read(file).contains("@param x"), TestFixture.read(file));
+	}
+
 	private IFile holder(String source) throws Exception {
 		IJavaProject project = fixture.createJavaProject(PROJECT);
 		IFile file = TestFixture.addType(project, "example", "Holder", source);

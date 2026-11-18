@@ -9,7 +9,8 @@ import org.eclipse.text.templates.TemplatePersistenceData;
 import org.eclipse.text.templates.TemplateStoreCore;
 
 /**
- * Gives JDT's code generation the body templates it reads when a fix writes a method, constructor or catch block.
+ * Gives JDT's code generation the body and comment templates it reads when a fix writes a method, constructor,
+ * catch block or Javadoc comment.
  * <p>
  * JDT UI installs its template store into {@link JavaManipulation} once it starts; until then, and always in a
  * headless IDE, the store is {@code null} and every such fix fails with a {@code NullPointerException} in
@@ -44,6 +45,23 @@ final class CodeTemplates {
 				"return ${field};"); //$NON-NLS-1$
 		add(store, CodeTemplateContextType.SETTERSTUB_ID, CodeTemplateContextType.SETTERBODY_CONTEXTTYPE,
 				"${field} = ${param};"); //$NON-NLS-1$
+		// the comment templates the Javadoc fixes read, without JDT UI's @author line
+		add(store, CodeTemplateContextType.TYPECOMMENT_ID, CodeTemplateContextType.TYPECOMMENT_CONTEXTTYPE,
+				"/**\n * ${tags}\n */"); //$NON-NLS-1$
+		add(store, CodeTemplateContextType.FIELDCOMMENT_ID, CodeTemplateContextType.FIELDCOMMENT_CONTEXTTYPE,
+				"/**\n * \n */"); //$NON-NLS-1$
+		add(store, CodeTemplateContextType.METHODCOMMENT_ID, CodeTemplateContextType.METHODCOMMENT_CONTEXTTYPE,
+				"/**\n * ${tags}\n */"); //$NON-NLS-1$
+		add(store, CodeTemplateContextType.CONSTRUCTORCOMMENT_ID,
+				CodeTemplateContextType.CONSTRUCTORCOMMENT_CONTEXTTYPE, "/**\n * ${tags}\n */"); //$NON-NLS-1$
+		add(store, CodeTemplateContextType.OVERRIDECOMMENT_ID, CodeTemplateContextType.OVERRIDECOMMENT_CONTEXTTYPE,
+				"/**\n * ${see_to_overridden}\n */"); //$NON-NLS-1$
+		add(store, CodeTemplateContextType.DELEGATECOMMENT_ID, CodeTemplateContextType.DELEGATECOMMENT_CONTEXTTYPE,
+				"/**\n * ${tags}\n * ${see_to_target}\n */"); //$NON-NLS-1$
+		add(store, CodeTemplateContextType.GETTERCOMMENT_ID, CodeTemplateContextType.GETTERCOMMENT_CONTEXTTYPE,
+				"/**\n * @return the ${bare_field_name}\n */"); //$NON-NLS-1$
+		add(store, CodeTemplateContextType.SETTERCOMMENT_ID, CodeTemplateContextType.SETTERCOMMENT_CONTEXTTYPE,
+				"/**\n * @param ${param} the ${bare_field_name} to set\n */"); //$NON-NLS-1$
 		JavaManipulation.setCodeTemplateStore(store);
 	}
 

@@ -174,8 +174,9 @@ default.
 `StubUtility.getCodeTemplate` reads `JavaManipulation.getCodeTemplateStore()`,
 which only JDT UI sets, so every quick fix that writes a method, constructor or
 catch block throws a `NullPointerException` in `ProjectTemplateStore.load` when
-JDT UI has not started. `corrections.CodeTemplates` installs JDT UI's default
-body templates when the store is missing, as JDT LS does in its
+JDT UI has not started, and a store without the comment templates silently
+drops the Javadoc fixes. `corrections.CodeTemplates` installs JDT UI's default
+body and comment templates (without the `@author` line) when the store is missing, as JDT LS does in its
 `PreferenceManager`; the user's own code templates apply only once JDT UI has
 started and installed its store. Not filed upstream.
 
