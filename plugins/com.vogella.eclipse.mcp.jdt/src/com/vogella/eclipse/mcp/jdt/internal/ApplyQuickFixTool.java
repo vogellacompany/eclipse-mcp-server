@@ -2,6 +2,7 @@ package com.vogella.eclipse.mcp.jdt.internal;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
@@ -49,7 +50,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				    "offset":    {"type":"integer","minimum":0,"description":"The problem's offset from eclipse_get_quick_fixes."},
 				    "line":      {"type":"integer","minimum":1,"description":"The problem's 1-based line, instead of 'offset'."},
 				    "fix":       {"type":"string","description":"The fix's label exactly as eclipse_get_quick_fixes lists it."},
-				    "dryRun":    {"type":"boolean","default":true}
+				    "dryRun":    {"type":"boolean","default":true},
+				    "maxResults": {"type":"integer","default":50,"minimum":1,"maximum":500,"description":"Most remaining errors to list after applying."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -64,6 +66,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		int offset = args.getInt("offset", -1, -1, Integer.MAX_VALUE); //$NON-NLS-1$
 		int line = args.getInt("line", -1, -1, Integer.MAX_VALUE); //$NON-NLS-1$
 		boolean dryRun = args.getBoolean("dryRun", true); //$NON-NLS-1$
+		int maxResults = args.getInt("maxResults", 50, 1, 500); //$NON-NLS-1$
 		if (path == null || label == null || !args.has("problemId")) { //$NON-NLS-1$
 			return McpToolResult.error("The arguments 'path', 'problemId' and 'fix' are required."); //$NON-NLS-1$
 		}
@@ -92,11 +95,12 @@ public final class ApplyQuickFixTool implements IMcpTool {
 					+ "list the current ones with eclipse_get_quick_fixes.").formatted(Integer.valueOf(problemId), //$NON-NLS-1$
 							offset >= 0 ? "offset " + offset : "line " + line)); //$NON-NLS-1$ //$NON-NLS-2$
 		}
-		if (matching.size() > 1) {
+		if (matching.size() > 1 && offset < 0) {
 			return McpToolResult.error("Line %d has %d problems with id %d. Name one by its 'offset': %s".formatted( //$NON-NLS-1$
 					Integer.valueOf(line), Integer.valueOf(matching.size()), Integer.valueOf(problemId),
 					matching.stream().map(problem -> String.valueOf(problem.getSourceStart())).toList()));
 		}
+		// two problems with the same id and offset are the same problem reported twice
 		IProblem problem = matching.get(0);
 
 		List<ChangeCorrectionProposalCore> fixes;
@@ -104,6 +108,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			fixes = QuickFixSupport.fixes(unit, astRoot, problem);
 		} catch (CoreException e) {
 			throw new McpToolException("Could not compute the quick fixes", e); //$NON-NLS-1$
+		} catch (RuntimeException e) {
+			return failed("compute the quick fixes", e); //$NON-NLS-1$
 		}
 		ChangeCorrectionProposalCore fix = fixes.stream().filter(candidate -> label.equals(candidate.getName()))
 				.findFirst().orElse(null);
@@ -137,14 +143,31 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			if (operation.changeExecutionFailed()) {
 				return McpToolResult.error("JDT could not apply '%s'.".formatted(label)); //$NON-NLS-1$
 			}
+			List<String> unsaved = QuickFixSupport.unsavedFiles(change);
+			if (!unsaved.isEmpty()) {
+				JsonArray files = new JsonArray();
+				unsaved.forEach(files::add);
+				result.put("unsavedFiles", files).put("note", //$NON-NLS-1$ //$NON-NLS-2$
+						"These files had unsaved edits in an open editor, so the fix is in the editor and not yet on disk."); //$NON-NLS-1$
+			}
 		} catch (CoreException e) {
 			throw new McpToolException("Could not apply the quick fix", e); //$NON-NLS-1$
+		} catch (RuntimeException e) {
+			return failed("apply the quick fix", e); //$NON-NLS-1$
 		}
 
 		// what is left tells the caller whether to look for another fix
+		List<IProblem> left = QuickFixSupport.problems(QuickFixSupport.parse(unit, monitor), false);
 		JsonArray remaining = new JsonArray();
-		QuickFixSupport.problems(QuickFixSupport.parse(unit, monitor), false)
-				.forEach(left -> remaining.add(QuickFixSupport.describe(left)));
-		return McpToolResult.of(result.put("remainingErrors", remaining).toString()); //$NON-NLS-1$
+		left.stream().limit(maxResults).forEach(error -> remaining.add(QuickFixSupport.describe(error)));
+		return McpToolResult.of(result.put("remainingErrors", remaining) //$NON-NLS-1$
+				.put("remainingErrorsTotal", Integer.valueOf(left.size())) //$NON-NLS-1$
+				.put("truncated", Boolean.valueOf(left.size() > remaining.size())).toString()); //$NON-NLS-1$
+	}
+
+	/** JDT's correction code throws unchecked exceptions for setups it does not expect; answer them rather than fail. */
+	private static McpToolResult failed(String what, RuntimeException e) {
+		return McpToolResult.error("JDT failed to %s: %s".formatted(what, //$NON-NLS-1$
+				Objects.requireNonNullElse(e.getMessage(), e.getClass().getName())));
 	}
 }

@@ -4,6 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import org.eclipse.core.filebuffers.FileBuffers;
+import org.eclipse.core.filebuffers.ITextFileBuffer;
+import org.eclipse.core.filebuffers.LocationKind;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.ICompilationUnit;
@@ -119,6 +122,23 @@ final class QuickFixSupport {
 		} else if (change instanceof TextFileChange file) {
 			file.setSaveMode(TextFileChange.KEEP_SAVE_STATE);
 		}
+	}
+
+	/** The files of the change whose buffer is still dirty, because an editor held unsaved edits to them. */
+	static List<String> unsavedFiles(Change change) {
+		List<String> unsaved = new ArrayList<>();
+		if (change instanceof CompositeChange composite) {
+			for (Change child : composite.getChildren()) {
+				unsaved.addAll(unsavedFiles(child));
+			}
+		} else if (change instanceof TextFileChange file) {
+			ITextFileBuffer buffer = FileBuffers.getTextFileBufferManager()
+					.getTextFileBuffer(file.getFile().getFullPath(), LocationKind.IFILE);
+			if (buffer != null && buffer.isDirty()) {
+				unsaved.add(file.getFile().getFullPath().toString());
+			}
+		}
+		return unsaved;
 	}
 
 	private static JsonObject describe(TextEdit edit, String content) {
