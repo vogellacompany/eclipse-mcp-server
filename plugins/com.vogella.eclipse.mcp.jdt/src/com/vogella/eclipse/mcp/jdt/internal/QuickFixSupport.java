@@ -191,6 +191,9 @@ final class QuickFixSupport {
 			files.add(element.getResource().getFullPath().toString());
 		} else if (change.getModifiedElement() instanceof IResource resource) {
 			files.add(resource.getFullPath().toString());
+		} else if (change.getModifiedElement() instanceof IPath path) {
+			// a new file, such as a package-info.java, is named by the path it will have
+			files.add(path.toString());
 		}
 		return files;
 	}
