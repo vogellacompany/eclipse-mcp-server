@@ -146,6 +146,10 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				return McpToolResult.error("The fix can no longer be applied: " //$NON-NLS-1$
 						+ status.getMessageMatchingSeverity(RefactoringStatus.FATAL));
 			}
+			if (monitor.isCanceled()) {
+				// the caller gave up: change nothing it can no longer see
+				return McpToolResult.error("The request was cancelled before the fix was applied."); //$NON-NLS-1$
+			}
 			PerformChangeOperation operation = new PerformChangeOperation(change);
 			try {
 				ResourcesPlugin.getWorkspace().run(operation, monitor);

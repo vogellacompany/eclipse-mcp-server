@@ -39,6 +39,9 @@ import com.vogella.eclipse.mcp.jdt.internal.corrections.QuickFixProcessor;
  */
 final class QuickFixSupport {
 
+	/** Most text edits listed for one file; a quick fix rarely makes more than a few. */
+	private static final int MAX_EDITS = 100;
+
 	private QuickFixSupport() {
 	}
 
@@ -114,17 +117,26 @@ final class QuickFixSupport {
 				String content = Objects.requireNonNullElse(text.getCurrentContent(monitor), ""); //$NON-NLS-1$
 				SourceText lines = SourceText.of(content);
 				JsonArray edits = new JsonArray();
-				for (TextEdit edit : leaves(text.getEdit())) {
+				List<TextEdit> leaves = leaves(text.getEdit());
+				for (TextEdit edit : leaves) {
+					if (edits.size() >= MAX_EDITS) {
+						break;
+					}
 					if (edit.getOffset() >= 0) {
 						edits.add(describe(edit, content, lines));
 					}
 				}
 				entry.put("edits", edits); //$NON-NLS-1$
+				if (edits.size() >= MAX_EDITS && leaves.size() > MAX_EDITS) {
+					entry.put("editsTotal", Integer.valueOf(leaves.size())).put("truncated", Boolean.TRUE); //$NON-NLS-1$ //$NON-NLS-2$
+				}
 			}
 		} else if (change instanceof ProjectOptionsChange options) {
 			JsonObject changed = new JsonObject();
 			options.changedOptions().forEach(changed::put);
-			entry.put("project", options.projectName()).put("options", changed); //$NON-NLS-1$ //$NON-NLS-2$
+			entry.put("project", options.projectName()).put("options", changed) //$NON-NLS-1$ //$NON-NLS-2$
+					.put("note", "Only the compiler options change. The JRE on the build path stays as it is, so a problem " //$NON-NLS-1$ //$NON-NLS-2$
+							+ "that needs a newer library remains."); //$NON-NLS-1$
 		} else {
 			// a move, rename or new file: name what it is, since it changes more than text
 			entry.put("kind", change.getClass().getSimpleName()); //$NON-NLS-1$
