@@ -172,6 +172,12 @@ sealed type fixes (`SealedMissingSealedModifier`,
 module Javadoc tags (`JavadocMissingUsesTag`, `JavadocMissingProvidesTag`),
 whose subprocessor methods are bound but not dispatched.
 
+JDT UI ranks the types offered for an unresolved name by the ones the user
+picked before (`getQualifiedTypeNameHistoryBoost`). That history is kept in JDT UI.
+Like JDT LS, the port answers no boost. So where two types share a simple name,
+the order, and the import `eclipse_apply_quick_fix` takes as JDT's first
+suggestion, can differ from what Ctrl+1 shows in a workspace with history.
+
 The base subprocessors take no progress monitor, and JDT UI and JDT LS call
 them the same way, so computing one problem's fixes cannot be cancelled.
 `eclipse_get_quick_fixes` checks the call's time between problems and answers
