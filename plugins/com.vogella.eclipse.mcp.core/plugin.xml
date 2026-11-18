@@ -3,5 +3,6 @@
 <plugin>
 
    <extension-point id="tools" name="MCP Tools" schema="schema/tools.exsd"/>
+   <extension-point id="server" name="MCP Server Description" schema="schema/server.exsd"/>
 
 </plugin>

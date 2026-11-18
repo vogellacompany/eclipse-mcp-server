@@ -1,0 +1,119 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<schema targetNamespace="com.vogella.eclipse.mcp.core" xmlns="http://www.w3.org/2001/XMLSchema">
+<annotation>
+      <appInfo>
+         <meta.schema plugin="com.vogella.eclipse.mcp.core" id="server" name="MCP Server Description"/>
+      </appInfo>
+      <documentation>
+         Lets a product describe itself to MCP clients: instructions the client puts into the agent's context, and the server name and version reported on initialize.
+      </documentation>
+   </annotation>
+
+   <element name="extension">
+      <complexType>
+         <choice minOccurs="1" maxOccurs="unbounded">
+            <element ref="instructions"/>
+            <element ref="serverInfo"/>
+         </choice>
+         <attribute name="point" type="string" use="required">
+            <annotation>
+               <documentation>
+                  The fully qualified identifier of the target extension point.
+               </documentation>
+            </annotation>
+         </attribute>
+         <attribute name="id" type="string">
+            <annotation>
+               <documentation>
+                  An optional identifier of the extension instance.
+               </documentation>
+            </annotation>
+         </attribute>
+         <attribute name="name" type="string">
+            <annotation>
+               <documentation>
+                  An optional name of the extension instance.
+               </documentation>
+               <appInfo>
+                  <meta.attribute translatable="true"/>
+               </appInfo>
+            </annotation>
+         </attribute>
+      </complexType>
+   </element>
+
+   <element name="instructions" type="string">
+      <annotation>
+         <documentation>
+            Text added to the server instructions, as the element's content. Contributions are appended to the default instructions in the order of the contributing bundles' symbolic names. Tools named in the text that are not installed are listed by the server.
+         </documentation>
+         <appInfo>
+            <meta.element translatable="true"/>
+         </appInfo>
+      </annotation>
+      <complexType>
+         <attribute name="replace" type="boolean">
+            <annotation>
+               <documentation>
+                  When true, the server's default instructions, which describe the IDE, are left out and only the contributed texts are sent.
+               </documentation>
+            </annotation>
+         </attribute>
+      </complexType>
+   </element>
+
+   <element name="serverInfo">
+      <annotation>
+         <documentation>
+            The name and version reported as serverInfo. Only one is used; with several, the one from the first contributing bundle by symbolic name wins and a warning is logged.
+         </documentation>
+      </annotation>
+      <complexType>
+         <attribute name="name" type="string" use="required">
+            <annotation>
+               <documentation>
+                  The server name, for example the product's id.
+               </documentation>
+            </annotation>
+         </attribute>
+         <attribute name="version" type="string">
+            <annotation>
+               <documentation>
+                  The server version. Defaults to the contributing bundle's version.
+               </documentation>
+            </annotation>
+         </attribute>
+      </complexType>
+   </element>
+
+   <annotation>
+      <appInfo>
+         <meta.section type="examples"/>
+      </appInfo>
+      <documentation>
+         &lt;extension point=&quot;com.vogella.eclipse.mcp.core.server&quot;&gt;
+   &lt;serverInfo name=&quot;com.example.product&quot;/&gt;
+   &lt;instructions replace=&quot;true&quot;&gt;Example Product: call example_login_state first; order ids look like ORD-123.&lt;/instructions&gt;
+&lt;/extension&gt;
+      </documentation>
+   </annotation>
+
+   <annotation>
+      <appInfo>
+         <meta.section type="since"/>
+      </appInfo>
+      <documentation>
+         4.0.0
+      </documentation>
+   </annotation>
+
+   <annotation>
+      <appInfo>
+         <meta.section type="copyright"/>
+      </appInfo>
+      <documentation>
+         Copyright (c) 2026 vogella GmbH and others.
+      </documentation>
+   </annotation>
+
+</schema>

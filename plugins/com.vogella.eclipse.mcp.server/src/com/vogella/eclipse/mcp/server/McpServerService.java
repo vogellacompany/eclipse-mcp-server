@@ -22,6 +22,7 @@ import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.Version;
 
 import com.vogella.eclipse.mcp.core.ClientSessions;
+import com.vogella.eclipse.mcp.core.McpServerDescription;
 import com.vogella.eclipse.mcp.core.McpToolRegistry;
 import com.vogella.eclipse.mcp.core.TracePages;
 import com.vogella.eclipse.mcp.server.internal.ActiveSessions;
@@ -53,6 +54,16 @@ import jakarta.servlet.DispatcherType;
  * tool of the {@link McpToolRegistry} over the Streamable HTTP transport.
  */
 public final class McpServerService {
+
+	/** What the server tells a client about the IDE, unless a product replaces it. */
+	private static final String DEFAULT_INSTRUCTIONS = "A running Eclipse IDE: the Java model, problem markers, builds, tests, the debugger, the Error Log, preferences, files, and the live SWT workbench. " //$NON-NLS-1$
+			+ "Most tools only read; a tool that changes something says so in capitals in its own description and defaults to a dry run where one makes sense. " //$NON-NLS-1$
+			+ "To test the UI or an SWT change: eclipse_list_ui_targets names shells and parts, eclipse_get_widget_tree gives each widget's path, bounds and with includeMetrics what it computes for itself; " //$NON-NLS-1$
+			+ "drive it with eclipse_press_widget, eclipse_set_widget_text, eclipse_click, eclipse_press_key and eclipse_type_text; wait on a condition with eclipse_wait_for rather than a pause; " //$NON-NLS-1$
+			+ "capture with eclipse_screenshot, settle and settlePixels for stable pixels. eclipse_run_script runs many steps with expect assertions in one call. " //$NON-NLS-1$
+			+ "eclipse_mark_log then eclipse_get_log_entries shows what an action logged, UI freezes included. " //$NON-NLS-1$
+			+ "To run changed platform code, eclipse_substitute_bundle swaps in a workspace bundle at the next eclipse_restart, and eclipse_hot_code_replace redefines classes in place. " //$NON-NLS-1$
+			+ "Builds, test runs and provisioning return a handle to poll. With several clients connected, pass ids explicitly instead of relying on a most-recent default; a session ends with an HTTP DELETE or after 60 seconds without a request."; //$NON-NLS-1$
 
 	private static final String ENDPOINT_PATH = "/mcp"; //$NON-NLS-1$
 
@@ -304,15 +315,10 @@ public final class McpServerService {
 		try {
 			specifications = McpToolRegistry.getInstance().getTools().stream()
 					.map(tool -> McpToolAdapter.toSpecification(tool, jsonMapper, toolExecutor)).toList();
-			mcpServer = McpServer.sync(transport).serverInfo("eclipse-mcp", version()) //$NON-NLS-1$
-					.instructions(withMissingTools("A running Eclipse IDE: the Java model, problem markers, builds, tests, the debugger, the Error Log, preferences, files, and the live SWT workbench. " //$NON-NLS-1$
-							+ "Most tools only read; a tool that changes something says so in capitals in its own description and defaults to a dry run where one makes sense. " //$NON-NLS-1$
-							+ "To test the UI or an SWT change: eclipse_list_ui_targets names shells and parts, eclipse_get_widget_tree gives each widget's path, bounds and with includeMetrics what it computes for itself; " //$NON-NLS-1$
-							+ "drive it with eclipse_press_widget, eclipse_set_widget_text, eclipse_click, eclipse_press_key and eclipse_type_text; wait on a condition with eclipse_wait_for rather than a pause; " //$NON-NLS-1$
-							+ "capture with eclipse_screenshot, settle and settlePixels for stable pixels. eclipse_run_script runs many steps with expect assertions in one call. " //$NON-NLS-1$
-							+ "eclipse_mark_log then eclipse_get_log_entries shows what an action logged, UI freezes included. " //$NON-NLS-1$
-							+ "To run changed platform code, eclipse_substitute_bundle swaps in a workspace bundle at the next eclipse_restart, and eclipse_hot_code_replace redefines classes in place. " //$NON-NLS-1$
-							+ "Builds, test runs and provisioning return a handle to poll. With several clients connected, pass ids explicitly instead of relying on a most-recent default; a session ends with an HTTP DELETE or after 60 seconds without a request.")) //$NON-NLS-1$
+			McpServerDescription description = McpServerDescription.read(new McpServerDescription("eclipse-mcp", //$NON-NLS-1$
+					version(), DEFAULT_INSTRUCTIONS));
+			mcpServer = McpServer.sync(transport).serverInfo(description.name(), description.version())
+					.instructions(withMissingTools(description.instructions()))
 					.capabilities(ServerCapabilities.builder().tools(false).build()).jsonMapper(jsonMapper)
 					.jsonSchemaValidator(new BundleJsonSchemaValidator()).tools(specifications).build();
 			runningPort = listeningPort;
