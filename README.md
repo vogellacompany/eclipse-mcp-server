@@ -241,7 +241,7 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_list_perspectives`, ✎ `eclipse_switch_perspective`, `eclipse_reset_perspective` | Perspectives |
 | ✎ `eclipse_manage_window`, `eclipse_set_shell_bounds`, `eclipse_set_ide_visibility`, `eclipse_set_model_visibility` | Windows, their bounds, and what of the IDE is visible |
 | `eclipse_list_themes`, `eclipse_list_theme_definitions`, ✎ `eclipse_set_theme`, `eclipse_register_theme`, `eclipse_apply_css` | Themes and live CSS |
-| `eclipse_get_display_info`, `eclipse_screenshot`, `eclipse_start_screencast`, `eclipse_stop_screencast` | Display scaling, PNG captures and GIF recordings |
+| `eclipse_get_display_info`, `eclipse_screenshot`, `eclipse_start_screencast`, `eclipse_stop_screencast` | Display scaling, PNG captures, and GIF or MP4 recordings |
 | `eclipse_wait_until_settled` | Wait until the UI has stopped changing |
 | `eclipse_wait_for` | Wait until a shell, widget, selection, editor or job condition holds |
 | ✎ `eclipse_run_script` | Run several tools in sequence with expectations, optionally in one UI turn |
