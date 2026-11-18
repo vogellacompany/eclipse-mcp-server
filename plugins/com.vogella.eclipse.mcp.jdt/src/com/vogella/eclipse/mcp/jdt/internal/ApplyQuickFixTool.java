@@ -179,10 +179,10 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				change.dispose();
 				return McpToolResult.of(result.toString());
 			}
-			if (monitor.isCanceled()) {
-				// the caller gave up: change nothing it can no longer see
+			if (monitor.isCanceled() || CallBudget.leftMillis() == 0) {
+				// the caller gave up, or would not hear the answer: change nothing it can no longer see
 				change.dispose();
-				return McpToolResult.error("The request was cancelled before the fix was applied."); //$NON-NLS-1$
+				return McpToolResult.error("The request was cancelled or ran out of time before the fix was applied, so nothing was changed."); //$NON-NLS-1$
 			}
 			// a performed composite change drops its children, so read the files first
 			List<String> touched = QuickFixSupport.files(change);

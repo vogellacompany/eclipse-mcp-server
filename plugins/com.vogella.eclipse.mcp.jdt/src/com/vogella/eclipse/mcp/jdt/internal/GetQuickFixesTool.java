@@ -32,7 +32,7 @@ public final class GetQuickFixesTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Lists the compiler problems of one Java file and, for each, the quick fixes JDT offers for it (what Ctrl+1 shows in the editor), most relevant first. Computed on the file's current content without the UI, so it works in a headless IDE and does not need a build. Apply one with eclipse_apply_quick_fix, passing the problem's offset and problemId and the fix's label exactly as listed. Fixes that exist only as a JDT UI wizard or dialog, such as creating a new class or adding a library to the build path, are not offered. A problem whose fixes could not be computed carries an 'error' with the reason instead of fixes."; //$NON-NLS-1$
+		return "Lists the compiler problems of one Java file and, for each, the quick fixes JDT offers for it (what Ctrl+1 shows in the editor), most relevant first. Computed on the file's current content without the UI, so it works in a headless IDE and does not need a build. Apply one with eclipse_apply_quick_fix, passing the problem's offset and problemId and the fix's label exactly as listed. Fixes that exist only as a JDT UI wizard or dialog, such as creating a new class or adding a library to the build path, are not offered. A problem whose fixes could not be computed at all carries an 'error' with the reason instead of fixes; when only some of JDT's fix computations fail, the others are listed and the failure goes to the Error Log."; //$NON-NLS-1$
 	}
 
 	@Override
