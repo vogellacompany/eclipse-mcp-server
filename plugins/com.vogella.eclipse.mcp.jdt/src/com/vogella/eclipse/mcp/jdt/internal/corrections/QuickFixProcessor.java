@@ -4,8 +4,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.eclipse.core.runtime.CoreException;
@@ -19,15 +19,18 @@ import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.FieldAccess;
+import org.eclipse.jdt.core.dom.MemberValuePair;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.Name;
 import org.eclipse.jdt.core.dom.QualifiedName;
 import org.eclipse.jdt.core.dom.SimpleName;
+import org.eclipse.jdt.core.dom.SingleMemberAnnotation;
 import org.eclipse.jdt.core.dom.SuperFieldAccess;
 import org.eclipse.jdt.core.manipulation.ChangeCorrectionProposalCore;
 import org.eclipse.jdt.core.manipulation.CleanUpOptionsCore;
 import org.eclipse.jdt.internal.corext.dom.ASTNodes;
+import org.eclipse.jdt.internal.corext.dom.Bindings;
 import org.eclipse.jdt.internal.corext.fix.CleanUpConstants;
 import org.eclipse.jdt.internal.corext.fix.FixMessages;
 import org.eclipse.jdt.internal.corext.fix.IProposableFix;
@@ -172,8 +175,19 @@ public final class QuickFixProcessor {
 				break;
 			case IProblem.UndefinedField:
 			case IProblem.UndefinedName:
-			case IProblem.UnresolvedVariable:
 				unresolved.collectVariableProposals(context, problem, null, proposals);
+				break;
+			case IProblem.UnresolvedVariable:
+				ASTNode selected = problem.getCoveredNode(context.getASTRoot());
+				if (selected != null && Bindings.getBindingOfParentTypeContext(selected) == null
+						&& selected.getParent() instanceof QualifiedName
+						&& (selected.getParent().getParent() instanceof SingleMemberAnnotation
+								|| selected.getParent().getParent() instanceof MemberValuePair)) {
+					// outside a type, a qualified name in an annotation names a type, as JDT UI decides
+					unresolved.collectTypeProposals(context, problem, proposals);
+				} else if (selected != null) {
+					unresolved.collectVariableProposals(context, problem, null, proposals);
+				}
 				break;
 			case IProblem.ExpressionShouldBeAVariable:
 				local.getExpressionShouldBeAVariableProposalsBase(context, problem, proposals);

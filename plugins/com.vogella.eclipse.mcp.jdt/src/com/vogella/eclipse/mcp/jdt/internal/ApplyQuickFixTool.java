@@ -156,8 +156,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			if (change == null) {
 				return McpToolResult.error("JDT produced no change for '%s'.".formatted(label)); //$NON-NLS-1$
 			}
-			result.put("changes", QuickFixSupport.describe(change, monitor)); //$NON-NLS-1$
-			// validate in the dry run too, so that it does not offer a fix the apply would refuse
+			// validate first, in the dry run too, so that a fix the apply would refuse is refused for its reason
 			QuickFixSupport.saveFiles(change);
 			change.initializeValidationData(monitor);
 			RefactoringStatus status = change.isValid(monitor);
@@ -166,6 +165,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				return McpToolResult.error("The fix can no longer be applied: " //$NON-NLS-1$
 						+ status.getMessageMatchingSeverity(RefactoringStatus.FATAL));
 			}
+			result.put("changes", QuickFixSupport.describe(change, monitor)); //$NON-NLS-1$
 			if (dryRun) {
 				result.put("note", "Nothing was changed. Pass dryRun false to apply it."); //$NON-NLS-1$ //$NON-NLS-2$
 				// releases the validation state; performing the change disposes it on the other path
@@ -194,7 +194,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		} catch (LinkageError e) {
 			return failed("apply the quick fix", new IllegalStateException(QuickFixSupport.mismatch(e), e)); //$NON-NLS-1$
 		} catch (CoreException e) {
-			throw new McpToolException(dryRun ? "Could not describe the quick fix's change" : "Could not apply the quick fix", e); //$NON-NLS-1$ //$NON-NLS-2$
+			// performing reports its own failures above, so this is before anything was written
+			throw new McpToolException("Could not prepare the quick fix's change; nothing was changed", e); //$NON-NLS-1$
 		} catch (RuntimeException e) {
 			return failed("apply the quick fix", e); //$NON-NLS-1$
 		}

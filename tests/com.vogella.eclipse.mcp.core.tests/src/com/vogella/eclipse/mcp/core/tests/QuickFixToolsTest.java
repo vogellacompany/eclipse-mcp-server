@@ -154,6 +154,20 @@ class QuickFixToolsTest {
 	}
 
 	@Test
+	void offersATypeImportForAnUnresolvedTypeInAnAnnotation() throws Exception {
+		holder("""
+				package example;
+				@SuppressWarnings(TimeUnit.SECONDS)
+				public class Holder {
+				}
+				""");
+
+		Map<String, Object> problem = problem(IProblem.UnresolvedVariable);
+		// outside a type body the qualifier names a type, so JDT offers to import it, not to create a variable
+		fixContaining(problem, "Import 'TimeUnit'");
+	}
+
+	@Test
 	void refusesAnUnknownFixWithTheOffered() throws Exception {
 		holder("""
 				package example;
