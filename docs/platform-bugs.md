@@ -176,7 +176,9 @@ which only JDT UI sets, so every quick fix that writes a method, constructor or
 catch block throws a `NullPointerException` in `ProjectTemplateStore.load` when
 JDT UI has not started, and a store without the comment templates silently
 drops the Javadoc fixes. `corrections.CodeTemplates` installs JDT UI's default
-body and comment templates (without the `@author` line) when the store is missing, as JDT LS does in its
+body and comment templates (without the `@author` line) when the store is missing;
+module comments and new-file templates are not installed, so the fixes that need
+them (a module Javadoc, a new `package-info.java`) are not offered, as JDT LS does in its
 `PreferenceManager`; the user's own code templates apply only once JDT UI has
 started and installed its store. Not filed upstream.
 
