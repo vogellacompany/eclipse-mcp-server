@@ -5,6 +5,7 @@ import java.util.Collection;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.ILog;
+import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IField;
 import org.eclipse.jdt.core.IJavaElement;
@@ -124,7 +125,7 @@ final class SubProcessors {
 			return null;
 		}
 		try {
-			CompilationUnitChange change = fix.createChange(null);
+			CompilationUnitChange change = fix.createChange(new NullProgressMonitor());
 			return new CUCorrectionProposalCore(change.getName(), change.getCompilationUnit(), change, relevance);
 		} catch (CoreException e) {
 			ILog.get().log(e.getStatus());

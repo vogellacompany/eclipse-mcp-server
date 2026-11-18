@@ -118,16 +118,19 @@ final class QuickFixSupport {
 				SourceText lines = SourceText.of(content);
 				JsonArray edits = new JsonArray();
 				List<TextEdit> leaves = leaves(text.getEdit());
+				boolean truncated = false;
 				for (TextEdit edit : leaves) {
+					if (edit.getOffset() < 0) {
+						continue;
+					}
 					if (edits.size() >= MAX_EDITS) {
+						truncated = true;
 						break;
 					}
-					if (edit.getOffset() >= 0) {
-						edits.add(describe(edit, content, lines));
-					}
+					edits.add(describe(edit, content, lines));
 				}
 				entry.put("edits", edits); //$NON-NLS-1$
-				if (edits.size() >= MAX_EDITS && leaves.size() > MAX_EDITS) {
+				if (truncated) {
 					entry.put("editsTotal", Integer.valueOf(leaves.size())).put("truncated", Boolean.TRUE); //$NON-NLS-1$ //$NON-NLS-2$
 				}
 			}
