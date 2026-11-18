@@ -50,7 +50,7 @@ public final class ProjectOptionsChange extends Change {
 	public Map<String, String> changedOptions() {
 		Map<String, String> current = project.getOptions(false);
 		Map<String, String> changed = new TreeMap<>();
-		updates.forEach((key, value) -> {
+		effectiveUpdates().forEach((key, value) -> {
 			if (!Objects.equals(current.get(key), value)) {
 				changed.put(key, value);
 			}
@@ -79,19 +79,35 @@ public final class ProjectOptionsChange extends Change {
 		if (!project.getProject().isAccessible()) {
 			return RefactoringStatus.createFatalErrorStatus("The project " + project.getElementName() + " is closed or no longer exists."); //$NON-NLS-1$ //$NON-NLS-2$
 		}
-		if (!replace) {
-			for (String key : List.of(JavaCore.COMPILER_COMPLIANCE, JavaCore.COMPILER_SOURCE,
-					JavaCore.COMPILER_CODEGEN_TARGET_PLATFORM)) {
-				String target = updates.get(key);
-				String current = project.getOption(key, true);
-				if (target != null && current != null && JavaCore.compareJavaVersions(current, target) > 0) {
-					// raised since the problem was found: writing the fix's level now would lower it
-					return RefactoringStatus.createFatalErrorStatus("The project " + project.getElementName() //$NON-NLS-1$
-							+ " already has " + key + " " + current + ", above the fix's " + target + "."); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-				}
-			}
+		String target = updates.get(JavaCore.COMPILER_COMPLIANCE);
+		String current = project.getOption(JavaCore.COMPILER_COMPLIANCE, true);
+		if (!replace && higher(current, target)) {
+			// raised since the problem was found: writing the fix's level now would lower it
+			return RefactoringStatus.createFatalErrorStatus("The project " + project.getElementName() //$NON-NLS-1$
+					+ " is already at compliance " + current + ", above the fix's " + target + "."); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		}
 		return new RefactoringStatus();
+	}
+
+	/**
+	 * The updates as they will be written: a source or target level the project already has above the fix's stays,
+	 * since a project may legally build with a target above its compliance.
+	 */
+	private Map<String, String> effectiveUpdates() {
+		if (replace) {
+			return updates;
+		}
+		Map<String, String> effective = new HashMap<>(updates);
+		for (String key : List.of(JavaCore.COMPILER_SOURCE, JavaCore.COMPILER_CODEGEN_TARGET_PLATFORM)) {
+			if (higher(project.getOption(key, true), updates.get(key))) {
+				effective.remove(key);
+			}
+		}
+		return effective;
+	}
+
+	private static boolean higher(String current, String target) {
+		return current != null && target != null && JavaCore.compareJavaVersions(current, target) > 0;
 	}
 
 	@Override
@@ -103,7 +119,7 @@ public final class ProjectOptionsChange extends Change {
 		Map<String, String> before = new HashMap<>(project.getOptions(false));
 		Map<String, String> after = replace ? new HashMap<>(updates) : new HashMap<>(before);
 		if (!replace) {
-			after.putAll(updates);
+			after.putAll(effectiveUpdates());
 		}
 		project.setOptions(after);
 		return new ProjectOptionsChange(name, project, before, true);
