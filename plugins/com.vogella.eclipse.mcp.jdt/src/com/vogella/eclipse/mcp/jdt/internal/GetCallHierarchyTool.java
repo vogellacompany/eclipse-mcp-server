@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -122,7 +123,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 				.put("direction", direction) //$NON-NLS-1$
 				.put("depth", depth); //$NON-NLS-1$
 		if (!"callees".equals(direction)) { //$NON-NLS-1$
-			result.put("callers", callersOf(methods, scope, depth, new LinkedHashSet<>(), counter, monitor)); //$NON-NLS-1$
+			result.put("callers", callersOf(methods, scope, depth, new LinkedHashSet<>(), new HashMap<>(), counter, monitor)); //$NON-NLS-1$
 		}
 		if (!"callers".equals(direction)) { //$NON-NLS-1$
 			Callees callees = new Callees(args.getBoolean("includeJdk", false), counter, monitor); //$NON-NLS-1$
@@ -166,6 +167,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 	}
 
 	private JsonArray callersOf(List<IMember> targets, IJavaSearchScope scope, int depth, Set<String> seen,
+			Map<String, SourceText> texts,
 			Counter counter, IProgressMonitor monitor) throws McpToolException {
 		JsonArray nodes = new JsonArray();
 		if (depth <= 0) {
@@ -191,12 +193,12 @@ public final class GetCallHierarchyTool implements IMcpTool {
 					.put("caller", JavaModelSupport.describe(enclosing == null ? element : enclosing)); //$NON-NLS-1$
 			JavaModelSupport.describeLocation(match, node);
 			node.put("offset", match.getOffset()); //$NON-NLS-1$
-			int line = lineOf(element, match.getOffset());
+			int line = lineOf(element, match.getOffset(), texts);
 			if (line > 0) {
 				node.put("line", line); //$NON-NLS-1$
 			}
 			if (enclosing != null && depth > 1) {
-				JsonArray deeper = callersOf(List.of(enclosing), scope, depth - 1, seen, counter, monitor);
+				JsonArray deeper = callersOf(List.of(enclosing), scope, depth - 1, seen, texts, counter, monitor);
 				if (deeper.size() > 0) {
 					node.put("callers", deeper); //$NON-NLS-1$
 				}
@@ -206,16 +208,26 @@ public final class GetCallHierarchyTool implements IMcpTool {
 		return nodes;
 	}
 
-	private static int lineOf(IJavaElement element, int offset) {
+	/** The line of {@code offset}, indexing each file once however many callers it holds. */
+	private static int lineOf(IJavaElement element, int offset, Map<String, SourceText> texts) {
 		if (!(element instanceof IMember member) || member.isBinary()) {
 			return -1;
 		}
-		try {
-			String source = member.getTypeRoot().getSource();
-			return source == null ? -1 : SourceText.of(source).lineOf(offset);
-		} catch (JavaModelException e) {
-			return -1;
+		String key = member.getTypeRoot().getHandleIdentifier();
+		SourceText text = texts.get(key);
+		if (text == null) {
+			try {
+				String source = member.getTypeRoot().getSource();
+				if (source == null) {
+					return -1;
+				}
+				text = SourceText.of(source);
+				texts.put(key, text);
+			} catch (JavaModelException e) {
+				return -1;
+			}
 		}
+		return text.lineOf(offset);
 	}
 
 	private List<SearchMatch> search(List<IMember> targets, IJavaSearchScope scope, IProgressMonitor monitor)

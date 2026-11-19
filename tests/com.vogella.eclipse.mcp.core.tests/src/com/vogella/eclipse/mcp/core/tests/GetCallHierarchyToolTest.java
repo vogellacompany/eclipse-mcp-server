@@ -139,6 +139,30 @@ class GetCallHierarchyToolTest {
 	}
 
 	@Test
+	void paramTypesPicksOneOverloadForTheCallees() throws Exception {
+		IJavaProject project = fixtureProject();
+		TestFixture.addType(project, "example", "Overloads", """
+				package example;
+				public class Overloads {
+					void run() { run(1); }
+					void run(int times) { new Target().target(); }
+				}
+				""");
+		TestFixture.build(project.getProject());
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("typeName", "example.Overloads",
+				"memberName", "run", "paramTypes", List.of("int"), "project", PROJECT, "direction", "callees"));
+
+		assertEquals("example.Overloads#run(int)", result.get("resolved"), "got " + result);
+		List<?> callees = (List<?>) result.get("callees");
+		assertTrue(callees.stream().map(Map.class::cast).noneMatch(n -> n.containsKey("from")), "got " + result);
+		assertTrue(callees.stream().map(Map.class::cast)
+				.anyMatch(n -> "example.Target.target()".equals(n.get("callee"))), "got " + result);
+		assertTrue(callees.stream().map(Map.class::cast)
+				.noneMatch(n -> "example.Overloads.run(int)".equals(n.get("callee"))), "run() was not asked for, got " + result);
+	}
+
+	@Test
 	void saysWhyAnAbstractMethodHasNoCalleesInsteadOfAnsweringEmpty() throws Exception {
 		IJavaProject project = fixtureProject();
 		TestFixture.addType(project, "example", "Port", """

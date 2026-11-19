@@ -121,6 +121,19 @@ class FindImplementationsToolTest {
 	}
 
 	@Test
+	void listsTheQueriedImplementationItselfWithTheSubtypesThatInheritIt() throws Exception {
+		fixtureProject();
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL,
+				Map.of("typeName", "example.Polygon", "memberName", "scale", "project", PROJECT));
+
+		List<Map<?, ?>> found = implementations(result);
+		assertEquals(1, found.size(), "got " + result);
+		assertEquals("example.Polygon.scale(Double)", found.get(0).get("method"), "got " + result);
+		assertEquals(List.of("example.Square"), found.get(0).get("inheritedBy"), "got " + result);
+	}
+
+	@Test
 	void refusesAFinalMethodAndSaysWhy() throws Exception {
 		fixtureProject();
 

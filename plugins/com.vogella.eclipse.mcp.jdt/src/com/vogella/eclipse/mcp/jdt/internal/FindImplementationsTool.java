@@ -109,6 +109,13 @@ public final class FindImplementationsTool implements IMcpTool {
 		Map<String, IMethod> declaredIn = new HashMap<>();
 		Map<IMethod, List<String>> inheritedBy = new HashMap<>();
 		try {
+			for (IMethod method : methods) {
+				// the queried declaration is an implementation too, and the one its non-overriding subtypes run
+				declaredIn.put(key(method, type), method);
+				if (includeAbstract || !hasNoBody(method)) {
+					found.add(method);
+				}
+			}
 			for (IType subtype : hierarchy.getAllSubtypes(type)) {
 				if (monitor.isCanceled()) {
 					break;
@@ -130,14 +137,14 @@ public final class FindImplementationsTool implements IMcpTool {
 					}
 					if (overriding != null) {
 						declaredIn.put(key(method, subtype), overriding);
-						if (includeAbstract || !Flags.isAbstract(overriding.getFlags())) {
+						if (includeAbstract || !hasNoBody(overriding)) {
 							found.add(overriding);
 						}
 					}
 				}
 			}
 			if (!methods.isEmpty()) {
-				collectInheritors(type, hierarchy, methods, declaredIn, inheritedBy, includeBinary);
+				collectInheritors(type, hierarchy, methods, declaredIn, inheritedBy, includeBinary, monitor);
 			}
 		} catch (JavaModelException e) {
 			throw new McpToolException("Could not read the subtypes of " + type.getFullyQualifiedName(), e); //$NON-NLS-1$
@@ -176,9 +183,12 @@ public final class FindImplementationsTool implements IMcpTool {
 	 * superclass implementation it runs, so a type that only inherits one is not missing.
 	 */
 	private static void collectInheritors(IType base, ITypeHierarchy hierarchy, List<IMethod> methods,
-			Map<String, IMethod> declaredIn, Map<IMethod, List<String>> inheritedBy, boolean includeBinary)
-			throws JavaModelException {
+			Map<String, IMethod> declaredIn, Map<IMethod, List<String>> inheritedBy, boolean includeBinary,
+			IProgressMonitor monitor) throws JavaModelException {
 		for (IType subtype : hierarchy.getAllSubtypes(base)) {
+			if (monitor.isCanceled()) {
+				return;
+			}
 			if (!isConcrete(subtype) || (!includeBinary && subtype.isBinary())) {
 				continue;
 			}
@@ -187,7 +197,7 @@ public final class FindImplementationsTool implements IMcpTool {
 					continue;
 				}
 				IMethod implementation = null;
-				for (IType up = hierarchy.getSuperclass(subtype); up != null && !up.equals(base)
+				for (IType up = hierarchy.getSuperclass(subtype); up != null
 						&& implementation == null; up = hierarchy.getSuperclass(up)) {
 					implementation = declaredIn.get(key(method, up));
 				}
@@ -196,13 +206,13 @@ public final class FindImplementationsTool implements IMcpTool {
 					List<IMethod> defaults = new ArrayList<>();
 					for (IType up : hierarchy.getAllSuperInterfaces(subtype)) {
 						IMethod candidate = declaredIn.get(key(method, up));
-						if (candidate != null && !Flags.isAbstract(candidate.getFlags())) {
+						if (candidate != null && !hasNoBody(candidate)) {
 							defaults.add(candidate);
 						}
 					}
 					implementation = defaults.size() == 1 ? defaults.get(0) : null;
 				}
-				if (implementation != null && !Flags.isAbstract(implementation.getFlags())) {
+				if (implementation != null && !hasNoBody(implementation)) {
 					inheritedBy.computeIfAbsent(implementation, k -> new ArrayList<>()).add(labelOf(subtype));
 				}
 			}
@@ -220,22 +230,22 @@ public final class FindImplementationsTool implements IMcpTool {
 					.formatted(type.getFullyQualifiedName(), memberName));
 		}
 		List<IMethod> overridable = new ArrayList<>();
-		boolean onlyFinal = true;
+		boolean sawFinal = false;
 		for (IMethod method : methods) {
 			try {
 				int flags = method.getFlags();
 				if (!method.isConstructor() && !Flags.isStatic(flags) && !Flags.isPrivate(flags)) {
 					if (Flags.isFinal(flags)) {
+						sawFinal = true;
 						continue;
 					}
-					onlyFinal = false;
 					overridable.add(method);
 				}
 			} catch (JavaModelException e) {
 				throw new McpToolException("Could not read the flags of " + JavaModelSupport.describe(method), e); //$NON-NLS-1$
 			}
 		}
-		if (overridable.isEmpty() && onlyFinal && methods.stream().anyMatch(FindImplementationsTool::isFinal)) {
+		if (overridable.isEmpty() && sawFinal) {
 			throw new ToolInputException("'%s#%s' is final, so its own declaration is the only implementation." //$NON-NLS-1$
 					.formatted(type.getFullyQualifiedName(), memberName));
 		}
@@ -262,12 +272,15 @@ public final class FindImplementationsTool implements IMcpTool {
 		return candidates.size() == 1 ? candidates.get(0) : null;
 	}
 
-	private static boolean isFinal(IMethod method) {
-		try {
-			return Flags.isFinal(method.getFlags());
-		} catch (JavaModelException e) {
-			return false;
+	/** Source interface methods carry no abstract flag, so the declaring type decides for them. */
+	private static boolean hasNoBody(IMethod method) throws JavaModelException {
+		int flags = method.getFlags();
+		if (Flags.isAbstract(flags)) {
+			return true;
 		}
+		IType declaring = method.getDeclaringType();
+		return declaring != null && declaring.isInterface() && !Flags.isDefaultMethod(flags) && !Flags.isStatic(flags)
+				&& !Flags.isPrivate(flags);
 	}
 
 	private static boolean isConcrete(IType type) throws JavaModelException {

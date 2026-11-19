@@ -1,11 +1,10 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.IMember;
@@ -53,7 +52,8 @@ final class Callees {
 
 	private final IProgressMonitor monitor;
 
-	private final Set<String> expanded = new HashSet<>();
+	/** The remaining depth each method was walked with, so a deeper revisit walks it again. */
+	private final Map<String, Integer> expanded = new HashMap<>();
 
 	private int jdkCallsHidden;
 
@@ -80,7 +80,7 @@ final class Callees {
 	 */
 	JsonArray of(List<? extends IMember> methods, int depth) {
 		List<IMethod> roots = methods.stream().filter(IMethod.class::isInstance).map(IMethod.class::cast)
-				.filter(m -> expanded.add(m.getHandleIdentifier())).toList();
+				.filter(m -> expanded.putIfAbsent(m.getHandleIdentifier(), Integer.valueOf(depth)) == null).toList();
 		// every root is marked before any is walked, so one overload calling another is listed, not expanded twice
 		JsonArray nodes = new JsonArray();
 		for (IMethod root : roots) {
@@ -115,7 +115,9 @@ final class Callees {
 			if (call.binary()) {
 				node.put("origin", "binary"); //$NON-NLS-1$ //$NON-NLS-2$
 			} else if (depth > 1 && call.target() != null) {
-				if (expanded.add(call.target().getHandleIdentifier())) {
+				Integer walked = expanded.get(call.target().getHandleIdentifier());
+				if (walked == null || walked.intValue() < depth - 1) {
+					expanded.put(call.target().getHandleIdentifier(), Integer.valueOf(depth - 1));
 					JsonArray deeper = calleesOf(call.target(), depth - 1, new JsonArray(), null);
 					if (deeper == null) {
 						node.put("body", reasonWithoutBody(call.target())); //$NON-NLS-1$
@@ -154,7 +156,7 @@ final class Callees {
 
 	/** The calls in the method's body, or {@code null} when there is no body to read. */
 	private List<Call> callsIn(IMethod method) {
-		MethodDeclaration declaration = declarationOf(method);
+		MethodDeclaration declaration = declarationOf(method, monitor);
 		if (declaration == null || declaration.getBody() == null) {
 			return null;
 		}
@@ -292,7 +294,7 @@ final class Callees {
 	}
 
 	/** The method's declaration in a fully resolved AST, or {@code null} without source. */
-	private static MethodDeclaration declarationOf(IMethod method) {
+	private static MethodDeclaration declarationOf(IMethod method, IProgressMonitor monitor) {
 		ITypeRoot root = method.getTypeRoot();
 		try {
 			ISourceRange name = method.getNameRange();
@@ -305,7 +307,7 @@ final class Callees {
 			parser.setBindingsRecovery(true);
 			// only the body around the focal position is kept, which makes parsing a large file cheap
 			parser.setFocalPosition(name.getOffset());
-			CompilationUnit unit = (CompilationUnit) parser.createAST(null);
+			CompilationUnit unit = (CompilationUnit) parser.createAST(monitor);
 			ASTNode node = NodeFinder.perform(unit, name.getOffset(), name.getLength());
 			while (node != null && !(node instanceof MethodDeclaration)) {
 				if (node instanceof AbstractTypeDeclaration) {
