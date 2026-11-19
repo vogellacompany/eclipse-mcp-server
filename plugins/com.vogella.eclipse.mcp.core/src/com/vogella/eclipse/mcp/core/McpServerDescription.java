@@ -1,0 +1,108 @@
+package com.vogella.eclipse.mcp.core;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+
+import org.eclipse.core.runtime.IConfigurationElement;
+import org.eclipse.core.runtime.IExtensionRegistry;
+import org.eclipse.core.runtime.ILog;
+import org.eclipse.core.runtime.Platform;
+import org.osgi.framework.Bundle;
+import org.osgi.framework.Version;
+
+/**
+ * The server name, version and instructions a client receives on {@code initialize}, as
+ * contributed through the {@code com.vogella.eclipse.mcp.core.server} extension point.
+ */
+public record McpServerDescription(String name, String version, String instructions) {
+
+	public static final String EXTENSION_POINT_ID = "com.vogella.eclipse.mcp.core.server"; //$NON-NLS-1$
+
+	/** An {@code instructions} contribution; {@code replace} drops the server's default text. */
+	public record Instructions(String contributor, String text, boolean replace) {
+	}
+
+	/**
+	 * A {@code serverInfo} contribution. {@link #read} fills a missing version with the
+	 * contributing bundle's; a {@code null} version keeps the default.
+	 */
+	public record Info(String contributor, String name, String version) {
+	}
+
+	/**
+	 * The defaults with the contributions from the extension registry applied. A contribution
+	 * that cannot be read is logged and skipped.
+	 */
+	public static McpServerDescription read(McpServerDescription defaults) {
+		IExtensionRegistry registry = Platform.getExtensionRegistry();
+		if (registry == null) {
+			return defaults;
+		}
+		List<Instructions> texts = new ArrayList<>();
+		List<Info> infos = new ArrayList<>();
+		for (IConfigurationElement element : registry.getConfigurationElementsFor(EXTENSION_POINT_ID)) {
+			try {
+				String contributor = element.getContributor().getName();
+				switch (element.getName()) {
+					case "instructions" -> texts.add(new Instructions(contributor, element.getValue(), //$NON-NLS-1$
+							Boolean.parseBoolean(element.getAttribute("replace")))); //$NON-NLS-1$
+					case "serverInfo" -> { //$NON-NLS-1$
+						String version = element.getAttribute("version"); //$NON-NLS-1$
+						infos.add(new Info(contributor, element.getAttribute("name"), //$NON-NLS-1$
+								version == null || version.isBlank() ? bundleVersion(contributor) : version));
+					}
+					default -> ILog.get().warn("Unknown element <%s> contributed by %s to %s" //$NON-NLS-1$
+							.formatted(element.getName(), contributor, EXTENSION_POINT_ID));
+				}
+			} catch (RuntimeException e) {
+				ILog.get().error("Could not read a contribution to " + EXTENSION_POINT_ID, e); //$NON-NLS-1$
+			}
+		}
+		List<Info> usable = infos.stream().filter(McpServerDescription::hasName).toList();
+		if (usable.size() > 1) {
+			ILog.get().warn("Several bundles contribute serverInfo to %s, using the one from %s".formatted( //$NON-NLS-1$
+					EXTENSION_POINT_ID, first(usable).orElseThrow().contributor()));
+		}
+		return compose(defaults, texts, infos);
+	}
+
+	/**
+	 * Appends the contributed texts to the default instructions in contributor order, without
+	 * the default when one of them replaces it, even one without text of its own, and takes the
+	 * server info of the first contributor that names one.
+	 */
+	public static McpServerDescription compose(McpServerDescription defaults, List<Instructions> texts,
+			List<Info> infos) {
+		List<String> parts = new ArrayList<>();
+		if (texts.stream().noneMatch(Instructions::replace)) {
+			parts.add(defaults.instructions());
+		}
+		texts.stream().filter(text -> text.text() != null && !text.text().isBlank())
+				.sorted(Comparator.comparing(Instructions::contributor)).forEach(text -> parts.add(text.text().strip()));
+		Info info = first(infos.stream().filter(McpServerDescription::hasName).toList()).orElse(null);
+		String name = info == null ? defaults.name() : info.name().strip();
+		String version = info == null || info.version() == null ? defaults.version() : info.version().strip();
+		return new McpServerDescription(name, version, String.join("\n\n", parts)); //$NON-NLS-1$
+	}
+
+	/** A bundle's version as {@code major.minor.micro}, without the qualifier. */
+	public static String versionOf(Bundle bundle) {
+		Version version = bundle.getVersion();
+		return "%d.%d.%d".formatted(version.getMajor(), version.getMinor(), version.getMicro()); //$NON-NLS-1$
+	}
+
+	private static boolean hasName(Info info) {
+		return info.name() != null && !info.name().isBlank();
+	}
+
+	private static Optional<Info> first(List<Info> infos) {
+		return infos.stream().min(Comparator.comparing(Info::contributor));
+	}
+
+	private static String bundleVersion(String symbolicName) {
+		Bundle bundle = Platform.getBundle(symbolicName);
+		return bundle == null ? null : versionOf(bundle);
+	}
+}

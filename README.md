@@ -271,6 +271,21 @@ Tools are contributed through the `com.vogella.eclipse.mcp.core.tools` extension
 It is called on a worker thread, must not open a dialog, must say in its description if it changes anything, and must finish within the call timeout or hand back a handle to poll.
 See `AGENTS.md` for the full set of rules.
 
+## Describing a product
+
+A product that embeds the server tells clients what they are connected to through the `com.vogella.eclipse.mcp.core.server` extension point:
+
+```xml
+<extension point="com.vogella.eclipse.mcp.core.server">
+   <serverInfo name="com.example.product"/>
+   <instructions replace="true">Example Product: call example_login_state first; order ids look like ORD-123.</instructions>
+</extension>
+```
+
+Clients put the instructions into the agent's context.
+Contributed texts are appended to the default instructions, which describe the IDE, and `replace="true"` leaves the default out.
+`serverInfo` sets the name and version reported on `initialize`; the version defaults to the contributing bundle's.
+
 ## Bundles
 
 | Bundle | Contains |
