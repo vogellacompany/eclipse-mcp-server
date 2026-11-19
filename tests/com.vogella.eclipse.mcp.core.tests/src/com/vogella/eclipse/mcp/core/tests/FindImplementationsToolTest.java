@@ -90,6 +90,37 @@ class FindImplementationsToolTest {
 	}
 
 	@Test
+	void listsTheTypesThatOnlyInheritADefaultMethod() throws Exception {
+		IJavaProject project = fixtureProject();
+		TestFixture.addType(project, "example", "Named", """
+				package example;
+				public interface Named {
+					String label();
+				}
+				""");
+		TestFixture.addType(project, "example", "Labelled", """
+				package example;
+				public interface Labelled extends Named {
+					@Override
+					default String label() { return "labelled"; }
+				}
+				""");
+		TestFixture.addType(project, "example", "Tag", """
+				package example;
+				public class Tag implements Labelled {
+				}
+				""");
+		TestFixture.build(project.getProject());
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL,
+				Map.of("typeName", "example.Named", "memberName", "label", "project", PROJECT));
+
+		Map<?, ?> entry = implementations(result).get(0);
+		assertEquals("example.Labelled.label()", entry.get("method"), "got " + result);
+		assertEquals(List.of("example.Tag"), entry.get("inheritedBy"), "got " + result);
+	}
+
+	@Test
 	void refusesAFinalMethodAndSaysWhy() throws Exception {
 		fixtureProject();
 

@@ -158,7 +158,13 @@ final class Callees {
 		if (declaration == null || declaration.getBody() == null) {
 			return null;
 		}
-		CompilationUnit unit = (CompilationUnit) declaration.getRoot();
+		SourceText text;
+		try {
+			// SourceText is the bundle's one offset-to-line index, so callee lines agree with every other tool
+			text = SourceText.of(method.getTypeRoot().getSource());
+		} catch (JavaModelException e) {
+			return null;
+		}
 		Map<String, Call> calls = new LinkedHashMap<>();
 		declaration.getBody().accept(new ASTVisitor() {
 			@Override
@@ -250,7 +256,7 @@ final class Callees {
 				calls.put(key, earlier != null ? earlier.again()
 						: new Call(label, target,
 								target != null ? target.isBinary() : declaringType == null || !declaringType.isFromSource(),
-								unit.getLineNumber(node.getStartPosition()), 1));
+								text.lineOf(node.getStartPosition()), 1));
 			}
 		});
 		return new ArrayList<>(calls.values());

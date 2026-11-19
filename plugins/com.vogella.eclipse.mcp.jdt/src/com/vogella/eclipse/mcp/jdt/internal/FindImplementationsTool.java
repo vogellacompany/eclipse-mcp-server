@@ -186,16 +186,24 @@ public final class FindImplementationsTool implements IMcpTool {
 				if (declaredIn.containsKey(key(method, subtype))) {
 					continue;
 				}
-				for (IType up = hierarchy.getSuperclass(subtype); up != null && !up.equals(base); up = hierarchy
-						.getSuperclass(up)) {
-					IMethod implementation = declaredIn.get(key(method, up));
-					if (implementation != null) {
-						if (!Flags.isAbstract(implementation.getFlags())) {
-							inheritedBy.computeIfAbsent(implementation, k -> new ArrayList<>())
-									.add(labelOf(subtype));
+				IMethod implementation = null;
+				for (IType up = hierarchy.getSuperclass(subtype); up != null && !up.equals(base)
+						&& implementation == null; up = hierarchy.getSuperclass(up)) {
+					implementation = declaredIn.get(key(method, up));
+				}
+				if (implementation == null) {
+					// no class supplies it, so a default method does, if exactly one interface declares one
+					List<IMethod> defaults = new ArrayList<>();
+					for (IType up : hierarchy.getAllSuperInterfaces(subtype)) {
+						IMethod candidate = declaredIn.get(key(method, up));
+						if (candidate != null && !Flags.isAbstract(candidate.getFlags())) {
+							defaults.add(candidate);
 						}
-						break;
 					}
+					implementation = defaults.size() == 1 ? defaults.get(0) : null;
+				}
+				if (implementation != null && !Flags.isAbstract(implementation.getFlags())) {
+					inheritedBy.computeIfAbsent(implementation, k -> new ArrayList<>()).add(labelOf(subtype));
 				}
 			}
 		}
