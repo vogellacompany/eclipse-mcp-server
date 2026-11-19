@@ -256,7 +256,9 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			// what is left tells the caller whether to look for another fix; a move leaves the old unit behind
 			// with the call's time used up, report the applied fix rather than let the check turn it into a timeout
 			// the margin alone may not cover a parse with bindings in a large workspace, so keep some time for it
-			boolean outOfTime = CallBudget.leftMillis() < CHECK_RESERVE_MILLIS;
+			// with a short configured timeout the reserve shrinks to half the call, so the check still runs
+			long reserve = Math.min(CHECK_RESERVE_MILLIS, CallBudget.maxWaitSeconds() * 1000L / 2);
+			boolean outOfTime = CallBudget.leftMillis() < reserve;
 			CompilationUnit after = unit.exists() && !outOfTime ? QuickFixSupport.parse(unit, monitor) : null;
 			if (after == null) {
 				// no parse, no claim about what is left
