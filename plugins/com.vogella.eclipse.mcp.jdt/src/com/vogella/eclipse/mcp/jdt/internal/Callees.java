@@ -67,6 +67,13 @@ final class Callees {
 		return jdkCallsHidden;
 	}
 
+	/** The requested methods whose callees could not be read, each with why, so none reads as calling nothing. */
+	JsonArray withoutBody() {
+		return withoutBody;
+	}
+
+	private final JsonArray withoutBody = new JsonArray();
+
 	/**
 	 * The callees of every method in {@code methods}, each followed {@code depth} levels.
 	 * With several overloads each top-level callee names the overload calling it in {@code from}.
@@ -77,13 +84,21 @@ final class Callees {
 		// every root is marked before any is walked, so one overload calling another is listed, not expanded twice
 		JsonArray nodes = new JsonArray();
 		for (IMethod root : roots) {
-			calleesOf(root, depth, nodes, roots.size() > 1 ? JavaModelSupport.signatureOf(root) : null);
+			if (calleesOf(root, depth, nodes, roots.size() > 1 ? JavaModelSupport.signatureOf(root) : null) == null) {
+				withoutBody.add(new JsonObject().put("method", JavaModelSupport.describe(root)) //$NON-NLS-1$
+						.put("reason", reasonWithoutBody(root))); //$NON-NLS-1$
+			}
 		}
 		return nodes;
 	}
 
+	/** Appends the callees of {@code method} to {@code nodes}, or answers {@code null} when it has no body to read. */
 	private JsonArray calleesOf(IMethod method, int depth, JsonArray nodes, String from) {
-		for (Call call : callsIn(method)) {
+		List<Call> calls = callsIn(method);
+		if (calls == null) {
+			return null;
+		}
+		for (Call call : calls) {
 			if (monitor.isCanceled() || !counter.take()) {
 				return nodes;
 			}
@@ -102,7 +117,9 @@ final class Callees {
 			} else if (depth > 1 && call.target() != null) {
 				if (expanded.add(call.target().getHandleIdentifier())) {
 					JsonArray deeper = calleesOf(call.target(), depth - 1, new JsonArray(), null);
-					if (deeper.size() > 0) {
+					if (deeper == null) {
+						node.put("body", reasonWithoutBody(call.target())); //$NON-NLS-1$
+					} else if (deeper.size() > 0) {
 						node.put("callees", deeper); //$NON-NLS-1$
 					}
 				} else {
@@ -122,10 +139,24 @@ final class Callees {
 		}
 	}
 
+	/** Why a method's callees cannot be listed: it has no source, or it is abstract or native. */
+	private static String reasonWithoutBody(IMethod method) {
+		try {
+			ITypeRoot root = method.getTypeRoot();
+			if (root == null || root.getSource() == null) {
+				return "noSource"; //$NON-NLS-1$
+			}
+		} catch (JavaModelException e) {
+			return "noSource"; //$NON-NLS-1$
+		}
+		return "abstract"; //$NON-NLS-1$
+	}
+
+	/** The calls in the method's body, or {@code null} when there is no body to read. */
 	private List<Call> callsIn(IMethod method) {
 		MethodDeclaration declaration = declarationOf(method);
 		if (declaration == null || declaration.getBody() == null) {
-			return List.of();
+			return null;
 		}
 		CompilationUnit unit = (CompilationUnit) declaration.getRoot();
 		Map<String, Call> calls = new LinkedHashMap<>();

@@ -91,7 +91,9 @@ public final class GetTypeHierarchyTool implements IMcpTool {
 			if (wantSupertypes) {
 				IType superclass = hierarchy.getSuperclass(type);
 				result.put("superclass", superclass == null ? null : superclass.getFullyQualifiedName()); //$NON-NLS-1$
-				result.put("interfaces", toArray(names(hierarchy.getSuperInterfaces(type)), maxResults)); //$NON-NLS-1$
+				List<String> interfaces = names(hierarchy.getSuperInterfaces(type));
+				result.put("interfaces", toArray(interfaces, maxResults)); //$NON-NLS-1$
+				truncated |= interfaces.size() > maxResults;
 				List<String> all = names(hierarchy.getAllSupertypes(type));
 				result.put("supertypes", toArray(all, maxResults)); //$NON-NLS-1$
 				result.put("supertypeTotal", all.size()); //$NON-NLS-1$

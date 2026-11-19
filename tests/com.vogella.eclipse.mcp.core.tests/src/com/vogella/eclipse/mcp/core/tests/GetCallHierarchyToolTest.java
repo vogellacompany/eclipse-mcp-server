@@ -139,6 +139,25 @@ class GetCallHierarchyToolTest {
 	}
 
 	@Test
+	void saysWhyAnAbstractMethodHasNoCalleesInsteadOfAnsweringEmpty() throws Exception {
+		IJavaProject project = fixtureProject();
+		TestFixture.addType(project, "example", "Port", """
+				package example;
+				public interface Port {
+					void send();
+				}
+				""");
+		TestFixture.build(project.getProject());
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("typeName", "example.Port", "memberName",
+				"send", "project", PROJECT, "direction", "callees"));
+
+		Map<?, ?> entry = (Map<?, ?>) ((List<?>) result.get("withoutBody")).get(0);
+		assertEquals("example.Port.send()", entry.get("method"), "got " + result);
+		assertEquals("abstract", entry.get("reason"), "got " + result);
+	}
+
+	@Test
 	void reportsBothDirectionsInOneCall() throws Exception {
 		fixtureProject();
 

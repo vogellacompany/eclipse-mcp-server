@@ -44,7 +44,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Returns the callers or the callees of a Java method, to the requested depth. Callers come from the JDT search engine; callees come from the resolved bindings of the method body, so an overloaded or inherited call names the exact method it binds to, which a text read of the body cannot. For dead code the useful question is not whether something is referenced but whether it is reachable from anything that is itself reachable, and a one level reference list cannot answer that. A method with callers that are themselves uncalled is still dead. A callee is the declared target of the call: an interface or abstract method is reported as such, and eclipse_find_implementations says what can run behind it. Calls into java.* and other JDK packages are left out of callees unless includeJdk is true, and jdkCallsHidden counts them; calls inside lambdas count for the enclosing method, calls inside anonymous and local classes do not."; //$NON-NLS-1$
+		return "Returns the callers or the callees of a Java method, to the requested depth. Callers come from the JDT search engine; callees come from the resolved bindings of the method body, so an overloaded or inherited call names the exact method it binds to, which a text read of the body cannot. For dead code the useful question is not whether something is referenced but whether it is reachable from anything that is itself reachable, and a one level reference list cannot answer that. A method with callers that are themselves uncalled is still dead. A callee is the declared target of the call: an interface or abstract method is reported as such, and eclipse_find_implementations says what can run behind it. Calls into java.* and other JDK packages are left out of callees unless includeJdk is true, and jdkCallsHidden counts those call sites; a requested method whose body cannot be read, being abstract, an interface method or in a jar without source, is listed under withoutBody with the reason rather than answering an empty list, and a deeper callee in that state carries body with the reason; calls inside lambdas count for the enclosing method, calls inside anonymous and local classes do not."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -128,6 +128,9 @@ public final class GetCallHierarchyTool implements IMcpTool {
 			Callees callees = new Callees(args.getBoolean("includeJdk", false), counter, monitor); //$NON-NLS-1$
 			result.put("callees", callees.of(methods, depth)); //$NON-NLS-1$
 			result.put("jdkCallsHidden", callees.jdkCallsHidden()); //$NON-NLS-1$
+			if (callees.withoutBody().size() > 0) {
+				result.put("withoutBody", callees.withoutBody()); //$NON-NLS-1$
+			}
 		}
 		result.put("total", counter.used()) //$NON-NLS-1$
 				.put("truncated", counter.exhausted()); //$NON-NLS-1$
