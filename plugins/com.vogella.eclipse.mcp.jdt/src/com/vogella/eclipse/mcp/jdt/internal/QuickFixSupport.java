@@ -18,11 +18,13 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IJavaElement;
+import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.manipulation.ChangeCorrectionProposalCore;
+import org.eclipse.jdt.internal.corext.refactoring.changes.MoveCompilationUnitChange;
 import org.eclipse.jdt.internal.corext.refactoring.changes.RenameCompilationUnitChange;
 import org.eclipse.ltk.core.refactoring.Change;
 import org.eclipse.ltk.core.refactoring.CompositeChange;
@@ -266,11 +268,19 @@ final class QuickFixSupport {
 		return files;
 	}
 
-	/** The path a compilation unit rename gives its file, or null for any other change. */
+	/** The path a compilation unit rename or move gives its file, or null for any other change. */
 	private static String renamedTo(Change change) {
 		if (change instanceof RenameCompilationUnitChange rename && rename.getModifiedElement() instanceof IJavaElement unit
 				&& unit.getResource() != null) {
 			return unit.getResource().getFullPath().removeLastSegments(1).append(rename.getNewName()).toString();
+		}
+		if (change instanceof MoveCompilationUnitChange move && move.getCu() != null
+				&& move.getDestinationPackage() != null
+				&& move.getDestinationPackage().getParent().getResource() != null) {
+			// the destination package may not exist yet, so build its folder from the source root
+			IPackageFragment target = move.getDestinationPackage();
+			return target.getParent().getResource().getFullPath().append(target.getElementName().replace('.', '/'))
+					.append(move.getCu().getElementName()).toString();
 		}
 		return null;
 	}

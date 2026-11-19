@@ -104,7 +104,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 
 		CompilationUnit astRoot = QuickFixSupport.parse(unit, monitor);
 		if (astRoot == null) {
-			return McpToolResult.error("The request was cancelled."); //$NON-NLS-1$
+			return McpToolResult.error("The call ran out of time before the file was parsed."); //$NON-NLS-1$
 		}
 		List<IProblem> matching = QuickFixSupport.problems(astRoot, true).stream()
 				.filter(problem -> problem.getID() == problemId)
@@ -158,6 +158,9 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			partialFailure = found.partialFailure();
 		} catch (CoreException e) {
 			throw new McpToolException("Could not compute the quick fixes", e); //$NON-NLS-1$
+		} catch (OperationCanceledException e) {
+			// the monitor is cancelled only by the server's call timeout
+			return McpToolResult.error("The call ran out of time while the fixes were computed, so nothing was changed."); //$NON-NLS-1$
 		} catch (RuntimeException e) {
 			return failed("compute the quick fixes", e); //$NON-NLS-1$
 		}

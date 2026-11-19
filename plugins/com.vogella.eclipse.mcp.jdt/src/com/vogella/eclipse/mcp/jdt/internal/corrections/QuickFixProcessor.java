@@ -297,6 +297,7 @@ public final class QuickFixProcessor {
 				break;
 			case IProblem.SealedMissingClassModifier:
 			case IProblem.SealedMissingInterfaceModifier:
+			case IProblem.SealedMissingSealedModifier:
 				modifier.getSealedMissingModifierProposal(context, problem, proposals);
 				break;
 			case IProblem.SealedNotDirectSuperInterface:

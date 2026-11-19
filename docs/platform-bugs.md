@@ -166,9 +166,9 @@ assists JDT LS takes from its own `QuickAssistProcessor`. Also not offered:
 enabling preview features (JDT UI's `PreviewFeaturesSubProcessor` has no core
 counterpart), changing the workspace compliance (only the project's is
 offered), the fixes for unreachable or misordered catch blocks, missing
-packages and modules, and enum switch expressions with a default, two of the
-sealed type fixes (`SealedMissingSealedModifier`,
-`SealedSealedTypeMissingPermits`; the other sealed fixes are ported), and the
+packages and modules, and enum switch expressions with a default, one of the
+sealed type fixes (`SealedSealedTypeMissingPermits`; the other sealed fixes
+are ported), and the
 module Javadoc tags (`JavadocMissingUsesTag`, `JavadocMissingProvidesTag`),
 whose subprocessor methods are bound but not dispatched.
 

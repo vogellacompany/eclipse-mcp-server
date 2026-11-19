@@ -79,7 +79,7 @@ public final class GetQuickFixesTool implements IMcpTool {
 		CompilationUnit astRoot = QuickFixSupport.parse(unit, monitor);
 		if (astRoot == null) {
 			// the parser answers null when the monitor is cancelled
-			return McpToolResult.error("The request was cancelled."); //$NON-NLS-1$
+			return McpToolResult.error("The call ran out of time before the file was parsed."); //$NON-NLS-1$
 		}
 		List<IProblem> problems = QuickFixSupport.problems(astRoot, includeWarnings);
 		int inFile = problems.size();
@@ -93,7 +93,7 @@ public final class GetQuickFixesTool implements IMcpTool {
 				break;
 			}
 			if (monitor.isCanceled() && listed.size() == 0) {
-				return McpToolResult.error("The request was cancelled."); //$NON-NLS-1$
+				return McpToolResult.error("The call ran out of time before the first problem's fixes were computed."); //$NON-NLS-1$
 			}
 			if (listed.size() > 0 && (monitor.isCanceled() || CallBudget.leftMillis() == 0)) {
 				// answer with what is done rather than let the call time out with nothing; the monitor is cancelled

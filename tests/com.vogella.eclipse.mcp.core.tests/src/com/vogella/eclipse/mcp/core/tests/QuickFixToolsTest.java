@@ -340,6 +340,22 @@ class QuickFixToolsTest {
 	}
 
 	@Test
+	void namesTheFileAMoveToAnotherPackageCreates() throws Exception {
+		holder("""
+				package other;
+				public class Holder {
+				}
+				""");
+
+		Map<String, Object> problem = problem(IProblem.PackageIsNotExpectedPackage);
+		Map<String, Object> preview = apply(problem, fixContaining(problem, "Move"), true);
+
+		// the destination package does not exist yet, and the preview still names the file the move creates
+		String changes = String.valueOf(preview.get("changes"));
+		assertTrue(changes.contains("newFile") && changes.contains("/other/Holder.java"), changes);
+	}
+
+	@Test
 	void renamesTheTypeToMatchItsFile() throws Exception {
 		IFile file = holder("""
 				package example;
