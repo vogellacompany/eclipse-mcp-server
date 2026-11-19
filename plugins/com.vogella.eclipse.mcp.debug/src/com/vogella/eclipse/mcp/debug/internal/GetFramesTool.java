@@ -41,7 +41,7 @@ public final class GetFramesTool implements IMcpTool {
 				{
 				  "type": "object",
 				  "properties": {
-				    "sessionId":      {"type":"string","description":"The session to read. Omitted means the only live one."},
+				    "sessionId":      {"type":"string","description":"The session to read. Omitted means the only live one, provided MCP started it; a session started by hand in the IDE is reached only by its id from eclipse_debug_status."},
 				    "thread":         {"type":"string","description":"Thread name, defaulting to the single suspended thread. Refused with the list when several are suspended and none is named."},
 				    "frame":          {"type":"integer","default":0,"minimum":0,"maximum":500,"description":"Stack frame index, 0 being the top."},
 				    "variablePath":   {"type":"string","description":"Dotted path from the frame's variables into the object graph, e.g. this.buffer.count. Numeric segments address array elements."},

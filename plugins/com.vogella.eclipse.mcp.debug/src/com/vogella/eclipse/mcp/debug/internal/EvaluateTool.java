@@ -48,7 +48,7 @@ public final class EvaluateTool implements IMcpTool {
 				  "type": "object",
 				  "required": ["expression"],
 				  "properties": {
-				    "sessionId":      {"type":"string","description":"The session to evaluate in. Omitted means the only live one."},
+				    "sessionId":      {"type":"string","description":"The session to evaluate in. Omitted means the only live one, provided MCP started it; a session started by hand in the IDE is reached only by its id from eclipse_debug_status."},
 				    "expression":     {"type":"string","description":"Java expression or statement, evaluated against the selected frame."},
 				    "thread":         {"type":"string","description":"Thread name, defaulting to the single suspended thread."},
 				    "frame":          {"type":"integer","default":0,"minimum":0,"maximum":500,"description":"Stack frame index the expression is evaluated against."},

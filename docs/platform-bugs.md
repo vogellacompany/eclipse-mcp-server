@@ -146,6 +146,13 @@ the previous generation of child metadata.
 
 Not seen here once both managers are refreshed.
 
+### SWT Cocoa: `Display.post` of a shifted character presses the unshifted key
+
+Found 2026-11-18 while making `eclipse_press_key` type `H`, `!` and the like on macOS.
+`Display.post` (`org.eclipse.swt.widgets.Display`, Cocoa, `case SWT.KeyDown`) looks the character up in the current keyboard layout with `UCKeyTranslate`, first without and then with Shift, so it finds the right key for `!`, but it then builds the event with `CGEventCreateKeyboardEvent` for that key code alone and never adds Shift, so `!` arrives as `1` and `H` as `h`.
+`CocoaKeys.needsShift` repeats the layout lookup by name and `KeyboardTools.PressKey` posts Shift around such a character itself, reporting `shiftAdded`; when the layout cannot be read it only shifts upper case letters and says `keyboardLayoutUnread`.
+Nothing filed upstream yet.
+
 ## API gaps rather than defects
 
 ### JDT: no headless quick fix API

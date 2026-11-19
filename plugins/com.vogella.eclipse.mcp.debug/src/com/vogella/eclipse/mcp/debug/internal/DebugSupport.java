@@ -43,7 +43,8 @@ final class DebugSupport {
 
 	/**
 	 * Resolves a session by id, or the single live one when no id is given, and
-	 * refuses with what exists instead of guessing.
+	 * refuses with what exists instead of guessing. The implicit default never
+	 * resolves to a session the person started in the IDE.
 	 */
 	static Session requireSession(String sessionId) {
 		DebugSessionRegistry registry = DebugSessionRegistry.getInstance();
@@ -58,6 +59,13 @@ final class DebugSupport {
 		List<Session> all = registry.all();
 		Session single = registry.singleLive();
 		if (single != null) {
+			// a session the person started in the IDE is theirs: reach it only by name,
+			// so that an implicit default never terminates or steps a program under them
+			if (!single.startedByMcp()) {
+				throw new Refusal(
+						"The only live session, %s, was started in the IDE, not by MCP. Pass 'sessionId' \"%s\" to act on it anyway." //$NON-NLS-1$
+								.formatted(single.id(), single.id()));
+			}
 			return single;
 		}
 		if (all.isEmpty()) {

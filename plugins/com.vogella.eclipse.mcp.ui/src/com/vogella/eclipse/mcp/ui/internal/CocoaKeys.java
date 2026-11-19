@@ -16,31 +16,47 @@ final class CocoaKeys {
 
 	private static final int SHIFT_STATE = (1 << 9) >> 8 & 0xFF;
 
+	/** SWT's Cocoa internals, looked up once; {@code null} when any of them is missing. */
+	private static final Method[] NATIVES = COCOA ? lookUp() : null;
+
 	private CocoaKeys() {
 	}
 
-	/**
-	 * {@code true} when the layout types {@code character} only with Shift, mirroring the two passes of
-	 * {@code Display.post}; for an unreadable layout an upper case letter is taken to need it. UI thread only.
-	 */
-	static boolean needsShift(char character) {
+	/** {@code getCurrentKeyLayout}, {@code LMGetKbdType} and {@code UCKeyTranslate}, or {@code null}. */
+	private static Method[] lookUp() {
 		try {
 			Class<?> os = Class.forName("org.eclipse.swt.internal.cocoa.OS", true, Display.class.getClassLoader()); //$NON-NLS-1$
 			Method layoutOf = Display.class.getDeclaredMethod("getCurrentKeyLayout"); //$NON-NLS-1$
 			layoutOf.setAccessible(true);
-			long layout = ((Long) layoutOf.invoke(null)).longValue();
-			if (layout == 0) {
-				return fallback(character);
-			}
-			int keyboard = ((Byte) os.getMethod("LMGetKbdType").invoke(null)).intValue(); //$NON-NLS-1$
-			Method translate = os.getMethod("UCKeyTranslate", long.class, short.class, short.class, int.class, int.class, //$NON-NLS-1$
-					int.class, int[].class, int.class, long[].class, char[].class);
-			if (typedBy(translate, layout, keyboard, 0, character)) {
-				return false;
-			}
-			return typedBy(translate, layout, keyboard, SHIFT_STATE, character);
+			return new Method[] { layoutOf, os.getMethod("LMGetKbdType"), //$NON-NLS-1$
+					os.getMethod("UCKeyTranslate", long.class, short.class, short.class, int.class, int.class, //$NON-NLS-1$
+							int.class, int[].class, int.class, long[].class, char[].class) };
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-			return fallback(character);
+			return null;
+		}
+	}
+
+	/**
+	 * Whether the layout types {@code character} only with Shift, mirroring the two passes of {@code Display.post}:
+	 * {@code TRUE} or {@code FALSE} when the layout was read, {@code null} when it could not be, in which case a caller
+	 * falls back to {@link #fallback(char)} and says so. UI thread only.
+	 */
+	static Boolean needsShift(char character) {
+		if (NATIVES == null) {
+			return null;
+		}
+		try {
+			long layout = ((Long) NATIVES[0].invoke(null)).longValue();
+			if (layout == 0) {
+				return null;
+			}
+			int keyboard = ((Byte) NATIVES[1].invoke(null)).intValue();
+			if (typedBy(NATIVES[2], layout, keyboard, 0, character)) {
+				return Boolean.FALSE;
+			}
+			return Boolean.valueOf(typedBy(NATIVES[2], layout, keyboard, SHIFT_STATE, character));
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+			return null;
 		}
 	}
 
@@ -58,7 +74,8 @@ final class CocoaKeys {
 		return false;
 	}
 
-	private static boolean fallback(char character) {
+	/** The guess for an unreadable layout: an upper case letter needs Shift. */
+	static boolean fallback(char character) {
 		return Character.isUpperCase(character) && Character.toLowerCase(character) != character;
 	}
 }
