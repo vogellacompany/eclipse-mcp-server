@@ -32,7 +32,7 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
  */
 public final class ApplyQuickFixTool implements IMcpTool {
 
-	/** Time beyond the call's margin to keep for parsing the file again after the fix. */
+	/** Time beyond the call's margin to keep for performing the fix, and again for parsing the file after it. */
 	private static final long CHECK_RESERVE_MILLIS = 2000;
 
 	@Override
@@ -196,12 +196,11 @@ public final class ApplyQuickFixTool implements IMcpTool {
 				change.dispose();
 				return McpToolResult.of(result.toString());
 			}
-			if (monitor.isCanceled() || CallBudget.leftMillis() == 0) {
-				// the caller gave up, or would not hear the answer: change nothing it can no longer see
-				boolean cancelled = monitor.isCanceled();
+			// the monitor is cancelled only by the server's call timeout; a perform started without some time left
+			// could be cut off after writing part of the change, with its answer never heard
+			if (monitor.isCanceled() || CallBudget.leftMillis() < reserveMillis()) {
 				change.dispose();
-				return McpToolResult.error((cancelled ? "The request was cancelled" : "The call ran out of time") //$NON-NLS-1$ //$NON-NLS-2$
-						+ " before the fix was applied, so nothing was changed."); //$NON-NLS-1$
+				return McpToolResult.error("The call ran out of time before the fix was applied, so nothing was changed."); //$NON-NLS-1$
 			}
 			// a performed composite change drops its children, so read the files first
 			List<String> touched = QuickFixSupport.files(change);
@@ -256,15 +255,12 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			// what is left tells the caller whether to look for another fix; a move leaves the old unit behind
 			// with the call's time used up, report the applied fix rather than let the check turn it into a timeout
 			// the margin alone may not cover a parse with bindings in a large workspace, so keep some time for it
-			// with a short configured timeout the reserve shrinks to half the call, so the check still runs
-			long reserve = Math.min(CHECK_RESERVE_MILLIS, CallBudget.maxWaitSeconds() * 1000L / 2);
-			boolean outOfTime = CallBudget.leftMillis() < reserve;
+			boolean outOfTime = CallBudget.leftMillis() < reserveMillis();
 			CompilationUnit after = unit.exists() && !outOfTime ? QuickFixSupport.parse(unit, monitor) : null;
 			if (after == null) {
 				// no parse, no claim about what is left
 				result.put("checkSkipped", !unit.exists() ? "The fix moved or renamed the file, so it was not checked again." //$NON-NLS-1$ //$NON-NLS-2$
-						: outOfTime ? "The call ran out of time, so the file was not checked again." //$NON-NLS-1$
-								: "The request was cancelled before the file was checked again."); //$NON-NLS-1$
+						: "The call ran out of time, so the file was not checked again."); //$NON-NLS-1$
 			} else {
 				List<IProblem> left = QuickFixSupport.problems(after, false);
 				JsonArray remaining = new JsonArray();
@@ -278,6 +274,11 @@ public final class ApplyQuickFixTool implements IMcpTool {
 					+ Objects.requireNonNullElse(e.getMessage(), e.getClass().getName()));
 		}
 		return McpToolResult.of(result.toString());
+	}
+
+	/** Time beyond the call's margin a step needs left; with a short configured timeout it shrinks to half the call. */
+	private static long reserveMillis() {
+		return Math.min(CHECK_RESERVE_MILLIS, CallBudget.maxWaitSeconds() * 1000L / 2);
 	}
 
 	/** Releases the validation state of a change that was never performed, without hiding the original failure. */
