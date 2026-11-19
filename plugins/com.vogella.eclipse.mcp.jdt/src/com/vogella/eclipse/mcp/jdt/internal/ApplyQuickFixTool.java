@@ -42,7 +42,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Applies one JDT quick fix to a compiler problem, as listed by eclipse_get_quick_fixes. MODIFIES SOURCE FILES, and possibly other files or project settings the fix touches, and runs as a dry run unless dryRun is set to false, reporting each file and text edit the fix makes. Name the problem by its problemId and its offset (or its line, when only one problem with that id is on it), adding its message when several problems with that id share the offset, such as two unhandled exceptions of one call, and the fix by its label exactly as listed; the fixes are computed again from the file's current content, so an unknown label is refused with the ones now offered. A fix that would ask for a name or a choice in the editor applies JDT's first suggestion."; //$NON-NLS-1$
+		return "Applies one JDT quick fix to a compiler problem, as listed by eclipse_get_quick_fixes. MODIFIES SOURCE FILES, and possibly other files or project settings the fix touches, and runs as a dry run unless dryRun is set to false, reporting each file and text edit the fix makes. Name the problem by its problemId and its offset (or its line, when only one problem with that id is on it), adding its message when several problems with that id share the offset, such as two unhandled exceptions of one call, and the fix by its label exactly as listed; the fixes are computed again from the file's current content, so an unknown label is refused with the ones now offered. A fix that would ask for a name or a choice in the editor applies JDT's first suggestion, so organize imports picks the first candidate for an ambiguous name, which may differ from what the editor would pick."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -84,7 +84,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			// a malformed argument, not a changed file
 			return McpToolResult.error("'problemId' must be a problem id as eclipse_get_quick_fixes lists it."); //$NON-NLS-1$
 		}
-		if (args.has("offset") && offset < 0 || args.has("line") && line < 1 || QuickFixSupport.notAnInt(arguments, "offset") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		if ((args.has("offset") && offset < 0) || (args.has("line") && line < 1) || QuickFixSupport.notAnInt(arguments, "offset") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				|| QuickFixSupport.notAnInt(arguments, "line")) { //$NON-NLS-1$
 			return McpToolResult.error("'offset' must be a whole number, 0 or more, and 'line' a whole number, 1 or more."); //$NON-NLS-1$
 		}

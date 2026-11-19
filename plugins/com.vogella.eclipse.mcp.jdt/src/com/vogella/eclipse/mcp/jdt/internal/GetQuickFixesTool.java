@@ -60,7 +60,7 @@ public final class GetQuickFixesTool implements IMcpTool {
 			return McpToolResult.error("The argument 'path' is required."); //$NON-NLS-1$
 		}
 		int line = args.getInt("line", 0, 0, Integer.MAX_VALUE); //$NON-NLS-1$
-		if (args.has("line") && line < 1 || QuickFixSupport.notAnInt(arguments, "line")) { //$NON-NLS-1$ //$NON-NLS-2$
+		if ((args.has("line") && line < 1) || QuickFixSupport.notAnInt(arguments, "line")) { //$NON-NLS-1$ //$NON-NLS-2$
 			return McpToolResult.error("'line' is 1-based, so it must be a whole number, 1 or more."); //$NON-NLS-1$
 		}
 		boolean includeWarnings = args.getBoolean("includeWarnings", true); //$NON-NLS-1$
@@ -149,10 +149,12 @@ public final class GetQuickFixesTool implements IMcpTool {
 			result.put("outOfTime", Boolean.TRUE); //$NON-NLS-1$
 			IProblem last = problems.get(listed.size() - 1);
 			result.put("waitNote", ("Computing the fixes ran out of the call's time" //$NON-NLS-1$
-					+ " after %d of %d problems, the last on line %d. " //$NON-NLS-1$
+					+ " after %d of %d problems%s. " //$NON-NLS-1$
 					+ (line > 0 ? "The rest of this line was not reached, and asking for the line again starts from its first problem." //$NON-NLS-1$
 							: "Ask again with 'line' for each later line to list the rest.")).formatted(Integer.valueOf(listed.size()), //$NON-NLS-1$
-							Integer.valueOf(problems.size()), Integer.valueOf(last.getSourceLineNumber())));
+							Integer.valueOf(problems.size()),
+							// a problem without a position has no line to name
+							last.getSourceLineNumber() > 0 ? ", the last on line " + last.getSourceLineNumber() : "")); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		return McpToolResult.of(result.toString());
 	}
