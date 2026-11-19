@@ -103,7 +103,7 @@ public final class GetTypeHierarchyTool implements IMcpTool {
 				List<String> all = names(hierarchy.getAllSubtypes(type));
 				result.put("subtypes", toArray(all, maxResults)); //$NON-NLS-1$
 				result.put("subtypeTotal", all.size()); //$NON-NLS-1$
-				truncated |= all.size() > maxResults || direct.size() > maxResults;
+				truncated |= all.size() > maxResults;
 			}
 		} catch (JavaModelException e) {
 			throw new McpToolException("Could not compute the type hierarchy of " + type.getFullyQualifiedName(), e); //$NON-NLS-1$

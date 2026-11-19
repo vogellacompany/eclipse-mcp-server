@@ -89,6 +89,14 @@ class FindImplementationsToolTest {
 				Map.of("typeName", "example.Shapes", "memberName", "unit", "project", PROJECT)), "nothing can override");
 	}
 
+	@Test
+	void refusesAFinalMethodAndSaysWhy() throws Exception {
+		fixtureProject();
+
+		TestFixture.assertRefused(TestFixture.call(TOOL,
+				Map.of("typeName", "example.Shapes", "memberName", "name", "project", PROJECT)), "is final");
+	}
+
 	@SuppressWarnings("unchecked")
 	private static List<Map<?, ?>> implementations(Map<String, Object> result) {
 		return (List<Map<?, ?>>) result.get("implementations");
@@ -132,6 +140,7 @@ class FindImplementationsToolTest {
 		TestFixture.addType(project, "example", "Shapes", """
 				package example;
 				public class Shapes {
+					public final String name() { return "shapes"; }
 					static Shape<Double> unit() {
 						return new Shape<>() {
 							@Override

@@ -3,6 +3,7 @@ package com.vogella.eclipse.mcp.jdt.internal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -141,6 +142,8 @@ public final class FindImplementationsTool implements IMcpTool {
 		} catch (JavaModelException e) {
 			throw new McpToolException("Could not read the subtypes of " + type.getFullyQualifiedName(), e); //$NON-NLS-1$
 		}
+		// an anonymous class matched through soleCandidate can answer for two overloads of the same arity
+		found = new ArrayList<>(new LinkedHashSet<>(found));
 		found.sort(Comparator.comparing((IMember member) -> member.isBinary())
 				.thenComparing(FindImplementationsTool::labelOf));
 
@@ -209,15 +212,24 @@ public final class FindImplementationsTool implements IMcpTool {
 					.formatted(type.getFullyQualifiedName(), memberName));
 		}
 		List<IMethod> overridable = new ArrayList<>();
+		boolean onlyFinal = true;
 		for (IMethod method : methods) {
 			try {
 				int flags = method.getFlags();
 				if (!method.isConstructor() && !Flags.isStatic(flags) && !Flags.isPrivate(flags)) {
+					if (Flags.isFinal(flags)) {
+						continue;
+					}
+					onlyFinal = false;
 					overridable.add(method);
 				}
 			} catch (JavaModelException e) {
 				throw new McpToolException("Could not read the flags of " + JavaModelSupport.describe(method), e); //$NON-NLS-1$
 			}
+		}
+		if (overridable.isEmpty() && onlyFinal && methods.stream().anyMatch(FindImplementationsTool::isFinal)) {
+			throw new ToolInputException("'%s#%s' is final, so its own declaration is the only implementation." //$NON-NLS-1$
+					.formatted(type.getFullyQualifiedName(), memberName));
 		}
 		if (overridable.isEmpty()) {
 			throw new ToolInputException("'%s#%s' is static, private or a constructor, so nothing can override it." //$NON-NLS-1$
@@ -240,6 +252,14 @@ public final class FindImplementationsTool implements IMcpTool {
 			}
 		}
 		return candidates.size() == 1 ? candidates.get(0) : null;
+	}
+
+	private static boolean isFinal(IMethod method) {
+		try {
+			return Flags.isFinal(method.getFlags());
+		} catch (JavaModelException e) {
+			return false;
+		}
 	}
 
 	private static boolean isConcrete(IType type) throws JavaModelException {
