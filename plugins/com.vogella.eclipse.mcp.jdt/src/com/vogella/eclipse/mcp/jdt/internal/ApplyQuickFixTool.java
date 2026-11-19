@@ -31,6 +31,9 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
  */
 public final class ApplyQuickFixTool implements IMcpTool {
 
+	/** Time beyond the call's margin to keep for parsing the file again after the fix. */
+	private static final long CHECK_RESERVE_MILLIS = 2000;
+
 	@Override
 	public String getName() {
 		return "eclipse_apply_quick_fix"; //$NON-NLS-1$
@@ -246,7 +249,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			}
 			// what is left tells the caller whether to look for another fix; a move leaves the old unit behind
 			// with the call's time used up, report the applied fix rather than let the check turn it into a timeout
-			boolean outOfTime = CallBudget.leftMillis() == 0;
+			// the margin alone may not cover a parse with bindings in a large workspace, so keep some time for it
+			boolean outOfTime = CallBudget.leftMillis() < CHECK_RESERVE_MILLIS;
 			CompilationUnit after = unit.exists() && !outOfTime ? QuickFixSupport.parse(unit, monitor) : null;
 			if (after == null) {
 				// no parse, no claim about what is left

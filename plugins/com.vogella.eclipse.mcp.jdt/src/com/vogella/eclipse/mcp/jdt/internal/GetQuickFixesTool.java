@@ -6,6 +6,7 @@ import java.util.Objects;
 
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.CompilationUnit;
@@ -115,6 +116,13 @@ public final class GetQuickFixesTool implements IMcpTool {
 				if (found.partialFailure() != null) {
 					entry.put("partialError", found.partialFailure()); //$NON-NLS-1$
 				}
+			} catch (OperationCanceledException e) {
+				// JDT stopped on the cancelled monitor, which is the call's time running out, not a failure of this problem
+				if (listed.size() == 0) {
+					return McpToolResult.error("The call ran out of time before the first problem's fixes were computed."); //$NON-NLS-1$
+				}
+				outOfTime = true;
+				break;
 			} catch (IllegalStateException e) {
 				if (e.getCause() instanceof LinkageError) {
 					// a mismatched installation fails every problem alike, so say it once
