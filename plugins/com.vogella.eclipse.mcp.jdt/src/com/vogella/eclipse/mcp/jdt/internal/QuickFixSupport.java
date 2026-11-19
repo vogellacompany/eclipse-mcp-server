@@ -23,6 +23,7 @@ import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.manipulation.ChangeCorrectionProposalCore;
+import org.eclipse.jdt.internal.corext.refactoring.changes.RenameCompilationUnitChange;
 import org.eclipse.ltk.core.refactoring.Change;
 import org.eclipse.ltk.core.refactoring.CompositeChange;
 import org.eclipse.ltk.core.refactoring.TextChange;
@@ -207,6 +208,13 @@ final class QuickFixSupport {
 			entry.put("kind", change.getClass().getSimpleName()); //$NON-NLS-1$
 			if (change.getModifiedElement() instanceof IJavaElement element) {
 				entry.put("element", element.getElementName()); //$NON-NLS-1$
+				if (element.getResource() != null) {
+					entry.put("file", element.getResource().getFullPath().toString()); //$NON-NLS-1$
+				}
+				if (renamedTo(change) instanceof String target) {
+					// a rename, such as a unit renamed to its public class, names the file it becomes
+					entry.put("newFile", target); //$NON-NLS-1$
+				}
 			} else if (change.getModifiedElement() instanceof IResource resource) {
 				entry.put("element", resource.getFullPath().toString()); //$NON-NLS-1$
 			} else if (change.getModifiedElement() instanceof IPath file) {
@@ -244,8 +252,11 @@ final class QuickFixSupport {
 			// the project's compiler options live in its JDT core preference file
 			files.add("/" + options.projectName() + "/.settings/org.eclipse.jdt.core.prefs"); //$NON-NLS-1$ //$NON-NLS-2$
 		} else if (change.getModifiedElement() instanceof IJavaElement element && element.getResource() != null) {
-			// a move, rename or new file
+			// a move, rename or new file; a renamed unit also touches the file it becomes
 			files.add(element.getResource().getFullPath().toString());
+			if (renamedTo(change) instanceof String target) {
+				files.add(target);
+			}
 		} else if (change.getModifiedElement() instanceof IResource resource) {
 			files.add(resource.getFullPath().toString());
 		} else if (change.getModifiedElement() instanceof IPath path) {
@@ -256,6 +267,15 @@ final class QuickFixSupport {
 	}
 
 	/** The files of the change whose buffer is still dirty, because an editor held unsaved edits to them. */
+	/** The path a compilation unit rename gives its file, or null for any other change. */
+	private static String renamedTo(Change change) {
+		if (change instanceof RenameCompilationUnitChange rename && rename.getModifiedElement() instanceof IJavaElement unit
+				&& unit.getResource() != null) {
+			return unit.getResource().getFullPath().removeLastSegments(1).append(rename.getNewName()).toString();
+		}
+		return null;
+	}
+
 	static List<String> unsavedFiles(List<IPath> textFiles) {
 		List<String> unsaved = new ArrayList<>();
 		for (IPath path : textFiles) {

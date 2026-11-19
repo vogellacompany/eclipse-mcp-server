@@ -324,6 +324,22 @@ class QuickFixToolsTest {
 	}
 
 	@Test
+	void namesTheFileARenameOfTheUnitCreates() throws Exception {
+		holder("""
+				package example;
+				public class Other {
+				}
+				""");
+
+		Map<String, Object> problem = problem(IProblem.PublicClassMustMatchFileName);
+		Map<String, Object> preview = apply(problem, fixContaining(problem, "Other.java"), true);
+
+		// the preview names the path the unit gets, not only the one it has
+		String changes = String.valueOf(preview.get("changes"));
+		assertTrue(changes.contains("newFile") && changes.contains("/example/Other.java"), changes);
+	}
+
+	@Test
 	void renamesTheTypeToMatchItsFile() throws Exception {
 		IFile file = holder("""
 				package example;

@@ -137,7 +137,9 @@ public final class GetQuickFixesTool implements IMcpTool {
 		}
 		JsonObject result = new JsonObject().put("file", path) //$NON-NLS-1$
 				.put("total", Integer.valueOf(problems.size())) //$NON-NLS-1$
-				.put("truncated", Boolean.valueOf(problems.size() > listed.size())) //$NON-NLS-1$
+				// only maxResults truncates: a list cut by the call's time says so with outOfTime instead, since a
+				// larger maxResults would not reach further
+				.put("truncated", Boolean.valueOf(!outOfTime && problems.size() > listed.size())) //$NON-NLS-1$
 				.put("problems", listed); //$NON-NLS-1$
 		if (line > 0) {
 			// 'total' counts the problems on the asked line, so also say how many of the same kinds the whole file has
