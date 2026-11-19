@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.jdt.internal;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,7 @@ import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IMember;
 import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.IType;
+import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.search.IJavaSearchConstants;
 import org.eclipse.jdt.core.search.IJavaSearchScope;
 import org.eclipse.jdt.core.search.SearchEngine;
@@ -29,8 +31,8 @@ import com.vogella.eclipse.mcp.core.json.JsonArray;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
 /**
- * Walks the callers of a method, so that reachability can be judged rather than
- * only whether something is referenced at all.
+ * Walks the callers or callees of a method, so that reachability can be judged rather than
+ * only whether something is referenced at all, and what a method depends on without reading it.
  */
 public final class GetCallHierarchyTool implements IMcpTool {
 
@@ -43,7 +45,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Returns the callers of a Java method (callees are not implemented), to the requested depth, using the JDT search engine. For dead code the useful question is not whether something is referenced but whether it is reachable from anything that is itself reachable, and a one level reference list cannot answer that. A method with callers that are themselves uncalled is still dead."; //$NON-NLS-1$
+		return "Returns the callers or the callees of a Java method, to the requested depth. Callers come from the JDT search engine; callees come from the resolved bindings of the method body, so an overloaded or inherited call names the exact method it binds to, which a text read of the body cannot. For dead code the useful question is not whether something is referenced but whether it is reachable from anything that is itself reachable, and a one level reference list cannot answer that. A method with callers that are themselves uncalled is still dead. A callee is the declared target of the call: an interface or abstract method is reported as such, and eclipse_find_implementations says what can run behind it. Calls into java.* and other JDK packages are left out of callees unless includeJdk is true, and jdkCallsHidden counts those call sites; a requested method whose body cannot be read, being abstract, an interface method or in a jar without source, is listed under withoutBody with the reason rather than answering an empty list, and a deeper callee in that state carries body with the reason; a callee in a jar is marked origin binary and not followed, since its body is not source; the creation of an anonymous class reads new Type() {...}; calls inside lambdas count for the enclosing method, calls inside anonymous and local classes do not."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -58,8 +60,10 @@ public final class GetCallHierarchyTool implements IMcpTool {
 				    "methodName": {"type":"string","description":"Deprecated alias for memberName."},
 				    "project":    {"type":"string","description":"Project used to resolve the type and to scope the search. Defaults to the whole workspace."},
 				    "direction":  {"type":"string","enum":["callers","callees","both"],"default":"callers"},
+				    "paramTypes": {"type":"array","items":{"type":"string"},"description":"Selects one overload of memberName by its parameter types, as in eclipse_find_references. Without it all overloads are followed."},
+				    "includeJdk": {"type":"boolean","default":false,"description":"Callees only: also list calls into java.*, javax.*, jdk.*, sun.*, com.sun.* and com.oracle.*, which otherwise dominate the answer."},
 				    "depth":      {"type":"integer","default":2,"minimum":1,"maximum":5,"description":"How many levels to follow. Each level costs another search, so keep it small."},
-				    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000,"description":"Maximum nodes in the whole tree."},
+				    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000,"description":"Maximum nodes in the whole answer, callers and callees together."},
 				    """ + JavaModelSupport.REFRESH_PROPERTY + """
 				  },
 				  "additionalProperties": false
@@ -80,9 +84,11 @@ public final class GetCallHierarchyTool implements IMcpTool {
 			return McpToolResult
 					.error("Unknown direction '%s', expected one of callers, callees, both.".formatted(direction)); //$NON-NLS-1$
 		}
-		if (!"callers".equals(direction)) { //$NON-NLS-1$
-			return McpToolResult.error(
-					"Only 'callers' is implemented. Callees need the AST of every method body, which is a different and much more expensive traversal than the search engine provides; ask for it and it will be built rather than faked."); //$NON-NLS-1$
+		List<String> paramTypes;
+		try {
+			paramTypes = JavaModelSupport.paramTypes(arguments);
+		} catch (ToolInputException e) {
+			return McpToolResult.error(e.getMessage());
 		}
 		int depth = args.getInt("depth", 2, 1, 5); //$NON-NLS-1$
 		int maxResults = args.getInt("maxResults", 200, 1, 2000); //$NON-NLS-1$
@@ -99,31 +105,41 @@ public final class GetCallHierarchyTool implements IMcpTool {
 			refreshed = JavaModelSupport.refreshUnlessSkipped(args, args.getString("project"), monitor); //$NON-NLS-1$
 			type = JavaModelSupport.findType(typeName, projects, monitor);
 			methods = JavaModelSupport.findMembers(type, methodName).stream().filter(IMethod.class::isInstance)
+					.filter(m -> paramTypes == null || JavaModelSupport.takesParameters((IMethod) m, paramTypes))
 					.toList();
 		} catch (ToolInputException e) {
 			return McpToolResult.error(e.getMessage());
 		}
 		if (methods.isEmpty()) {
-			return McpToolResult.error("'%s' has no method named '%s'.".formatted(typeName, methodName)); //$NON-NLS-1$
+			return McpToolResult.error((paramTypes == null ? "'%s' has no method named '%s'." //$NON-NLS-1$
+					: "'%s' has no overload of '%s' taking the given paramTypes.").formatted(typeName, methodName)); //$NON-NLS-1$
 		}
 
 		IJavaSearchScope scope = args.getString("project") == null ? SearchEngine.createWorkspaceScope() //$NON-NLS-1$
 				: SearchEngine.createJavaSearchScope(new IJavaElement[] { projects.get(0) }, true);
 		Counter counter = new Counter(maxResults);
-		Set<String> seen = new LinkedHashSet<>();
-		JsonArray callers = callersOf(methods, scope, depth, seen, counter, monitor);
-
-		JsonObject result = new JsonObject().put("resolved", type.getFullyQualifiedName() + '#' + methodName) //$NON-NLS-1$
-				.put("direction", "callers") //$NON-NLS-1$ //$NON-NLS-2$
-				.put("depth", depth) //$NON-NLS-1$
-				.put("total", counter.used()) //$NON-NLS-1$
-				.put("truncated", counter.exhausted()) //$NON-NLS-1$
-				.put("callers", callers); //$NON-NLS-1$
+		JsonObject result = new JsonObject().put("resolved", type.getFullyQualifiedName() + '#' //$NON-NLS-1$
+				+ (methods.size() == 1 ? JavaModelSupport.signatureOf(methods.get(0)) : methodName))
+				.put("direction", direction) //$NON-NLS-1$
+				.put("depth", depth); //$NON-NLS-1$
+		if (!"callees".equals(direction)) { //$NON-NLS-1$
+			result.put("callers", callersOf(methods, scope, depth, new LinkedHashSet<>(), new HashMap<>(), counter, monitor)); //$NON-NLS-1$
+		}
+		if (!"callers".equals(direction)) { //$NON-NLS-1$
+			Callees callees = new Callees(args.getBoolean("includeJdk", false), counter, monitor); //$NON-NLS-1$
+			result.put("callees", callees.of(methods, depth)); //$NON-NLS-1$
+			result.put("jdkCallsHidden", callees.jdkCallsHidden()); //$NON-NLS-1$
+			if (callees.withoutBody().size() > 0) {
+				result.put("withoutBody", callees.withoutBody()); //$NON-NLS-1$
+			}
+		}
+		result.put("total", counter.used()) //$NON-NLS-1$
+				.put("truncated", counter.exhausted()); //$NON-NLS-1$
 		return McpToolResult.of(refreshed.report(result).toString());
 	}
 
 	/** Bounds the whole tree rather than each level, so a wide first level cannot explode. */
-	private static final class Counter {
+	static final class Counter {
 		private final int max;
 		private int used;
 		private boolean truncated;
@@ -151,6 +167,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 	}
 
 	private JsonArray callersOf(List<IMember> targets, IJavaSearchScope scope, int depth, Set<String> seen,
+			Map<String, SourceText> texts,
 			Counter counter, IProgressMonitor monitor) throws McpToolException {
 		JsonArray nodes = new JsonArray();
 		if (depth <= 0) {
@@ -176,8 +193,12 @@ public final class GetCallHierarchyTool implements IMcpTool {
 					.put("caller", JavaModelSupport.describe(enclosing == null ? element : enclosing)); //$NON-NLS-1$
 			JavaModelSupport.describeLocation(match, node);
 			node.put("offset", match.getOffset()); //$NON-NLS-1$
+			int line = lineOf(element, match.getOffset(), texts);
+			if (line > 0) {
+				node.put("line", line); //$NON-NLS-1$
+			}
 			if (enclosing != null && depth > 1) {
-				JsonArray deeper = callersOf(List.of(enclosing), scope, depth - 1, seen, counter, monitor);
+				JsonArray deeper = callersOf(List.of(enclosing), scope, depth - 1, seen, texts, counter, monitor);
 				if (deeper.size() > 0) {
 					node.put("callers", deeper); //$NON-NLS-1$
 				}
@@ -185,6 +206,28 @@ public final class GetCallHierarchyTool implements IMcpTool {
 			nodes.add(node);
 		}
 		return nodes;
+	}
+
+	/** The line of {@code offset}, indexing each file once however many callers it holds. */
+	private static int lineOf(IJavaElement element, int offset, Map<String, SourceText> texts) {
+		if (!(element instanceof IMember member) || member.isBinary()) {
+			return -1;
+		}
+		String key = member.getTypeRoot().getHandleIdentifier();
+		SourceText text = texts.get(key);
+		if (text == null) {
+			try {
+				String source = member.getTypeRoot().getSource();
+				if (source == null) {
+					return -1;
+				}
+				text = SourceText.of(source);
+				texts.put(key, text);
+			} catch (JavaModelException e) {
+				return -1;
+			}
+		}
+		return text.lineOf(offset);
 	}
 
 	private List<SearchMatch> search(List<IMember> targets, IJavaSearchScope scope, IProgressMonitor monitor)

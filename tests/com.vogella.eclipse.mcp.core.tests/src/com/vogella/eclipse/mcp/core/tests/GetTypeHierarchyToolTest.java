@@ -50,6 +50,23 @@ class GetTypeHierarchyToolTest {
 	}
 
 	@Test
+	@SuppressWarnings("unchecked")
+	void separatesTheDirectNeighboursFromTheWholeHierarchy() throws Exception {
+		createFixtureProject();
+
+		Map<String, Object> down = TestFixture.callAndParse("eclipse_get_type_hierarchy",
+				Map.of("typeName", "example.Base", "project", PROJECT, "direction", "subtypes"));
+		assertEquals(List.of("example.Derived"), down.get("directSubtypes"), "got " + down);
+		assertEquals(List.of("example.Derived", "example.Leaf"), down.get("subtypes"), "got " + down);
+		assertEquals(Integer.valueOf(2), down.get("subtypeTotal"), "got " + down);
+
+		Map<String, Object> up = TestFixture.callAndParse("eclipse_get_type_hierarchy",
+				Map.of("typeName", "example.Leaf", "project", PROJECT, "direction", "supertypes"));
+		assertEquals("example.Derived", up.get("superclass"), "got " + up);
+		assertTrue(((List<String>) up.get("interfaces")).contains("java.lang.Runnable"), "got " + up);
+	}
+
+	@Test
 	void reportsTruncation() throws Exception {
 		createFixtureProject();
 
@@ -80,6 +97,13 @@ class GetTypeHierarchyToolTest {
 				package example;
 
 				public class Derived extends Base {
+				}
+				""");
+		TestFixture.addType(javaProject, "example", "Leaf", """
+				package example;
+
+				public class Leaf extends Derived implements Runnable {
+					public void run() { }
 				}
 				""");
 		TestFixture.build(javaProject.getProject());

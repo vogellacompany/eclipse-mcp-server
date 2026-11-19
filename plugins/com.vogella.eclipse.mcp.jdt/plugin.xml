@@ -12,6 +12,7 @@
       <tool class="com.vogella.eclipse.mcp.jdt.internal.FormatTool"/>
       <tool class="com.vogella.eclipse.mcp.jdt.internal.GetClasspathTool"/>
       <tool class="com.vogella.eclipse.mcp.jdt.internal.GetCallHierarchyTool"/>
+      <tool class="com.vogella.eclipse.mcp.jdt.internal.FindImplementationsTool"/>
       <tool class="com.vogella.eclipse.mcp.jdt.internal.RenameTool"/>
       <tool class="com.vogella.eclipse.mcp.jdt.internal.RunTestsTool"/>
       <tool class="com.vogella.eclipse.mcp.jdt.internal.SetJavaVersionTool"/>
