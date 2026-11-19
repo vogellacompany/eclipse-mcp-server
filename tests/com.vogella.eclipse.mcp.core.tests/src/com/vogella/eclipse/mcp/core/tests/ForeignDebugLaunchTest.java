@@ -35,6 +35,10 @@ class ForeignDebugLaunchTest {
 			manager.addLaunch(launch);
 			McpToolResult status = TestFixture.call("eclipse_debug_status", Map.of());
 			assertTrue(status.text().contains("debug-"), "the launch started outside the server is missing: " + status.text());
+			// the person's own session is never the implicit default of a tool that changes it
+			McpToolResult terminate = TestFixture.call("eclipse_debug_control", Map.of("action", "terminate"));
+			assertTrue(terminate.isError(), "an implicit terminate reached the person's session: " + terminate.text());
+			assertTrue(running.isAlive(), "the launch started outside the server was terminated");
 		} finally {
 			running.destroyForcibly();
 			manager.removeLaunch(launch);
