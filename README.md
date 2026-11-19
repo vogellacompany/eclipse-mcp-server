@@ -22,6 +22,7 @@ https://vogellacompany.github.io/eclipse-mcp-server/
 ```
 
 and install the **Eclipse MCP Server** feature.
+It needs Eclipse 2026-06 or newer: the Java tools build on JDT APIs that release added, so on an older IDE the install is refused.
 The site lists the newest build only; older versions are available as the repository zip attached to each GitHub release, through *Add > Archive*.
 
 ## Building

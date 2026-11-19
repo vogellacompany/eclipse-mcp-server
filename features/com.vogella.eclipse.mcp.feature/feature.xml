@@ -21,6 +21,11 @@
       Eclipse Public License 2.0
    </license>
 
+   <requires>
+      <!-- the quick fix tools build on the correction classes that 2026-06 moved into this bundle -->
+      <import plugin="org.eclipse.jdt.core.manipulation" version="1.24.100" match="greaterOrEqual"/>
+   </requires>
+
    <plugin id="com.vogella.eclipse.mcp.core" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="com.vogella.eclipse.mcp.basic" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="com.vogella.eclipse.mcp.server" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
