@@ -182,6 +182,29 @@ class GetCallHierarchyToolTest {
 	}
 
 	@Test
+	void namesTheCreationOfAnAnonymousClassAfterWhatItImplements() throws Exception {
+		IJavaProject project = fixtureProject();
+		TestFixture.addType(project, "example", "Tasks", """
+				package example;
+				public class Tasks {
+					Runnable task() {
+						return new Runnable() {
+							@Override
+							public void run() { }
+						};
+					}
+				}
+				""");
+		TestFixture.build(project.getProject());
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("typeName", "example.Tasks", "memberName",
+				"task", "project", PROJECT, "direction", "callees", "includeJdk", Boolean.TRUE));
+
+		assertTrue(((List<?>) result.get("callees")).stream().map(Map.class::cast)
+				.anyMatch(n -> "new java.lang.Runnable() {...}".equals(n.get("callee"))), "got " + result);
+	}
+
+	@Test
 	void reportsBothDirectionsInOneCall() throws Exception {
 		fixtureProject();
 

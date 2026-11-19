@@ -260,7 +260,9 @@ final class Callees {
 					return;
 				}
 				IMethod target = declared.getJavaElement() instanceof IMethod found ? found : null;
-				String label = target != null ? JavaModelSupport.describe(target) : labelOf(declared, typeName);
+				String label = declaringType != null && declaringType.isAnonymous() && declared.isConstructor()
+						? anonymousCreation(declaringType)
+						: target != null ? JavaModelSupport.describe(target) : labelOf(declared, typeName);
 				String key = target != null ? target.getHandleIdentifier() : label;
 				Call earlier = calls.get(key);
 				calls.put(key, earlier != null ? earlier.again()
@@ -287,6 +289,13 @@ final class Callees {
 
 	private static boolean isJdk(String typeName) {
 		return JDK_PACKAGES.stream().anyMatch(typeName::startsWith);
+	}
+
+	/** An anonymous class has no name of its own, so its creation is named after what it implements. */
+	private static String anonymousCreation(ITypeBinding anonymous) {
+		ITypeBinding[] interfaces = anonymous.getInterfaces();
+		ITypeBinding parent = interfaces.length > 0 ? interfaces[0] : anonymous.getSuperclass();
+		return "new " + (parent == null ? "Object" : typeNameOf(parent)) + "() {...}"; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 	}
 
 	/** The simple name a constructor carries, the last segment of its binary or qualified type name. */
