@@ -1,11 +1,9 @@
-name: Release
+name: Update site
 
 on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -13,11 +11,11 @@ permissions:
 
 # two runs must not race the gh-pages publish; a newer pending run replaces an older one
 concurrency:
-  group: release
+  group: update-site
   cancel-in-progress: false
 
 jobs:
-  release:
+  update-site:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +27,7 @@ jobs:
           cache: maven
 
       - name: Build
-        run: mvn -B clean verify
+        run: ./mvnw -B clean verify
 
       # The directory is named after what was actually built, qualifier included,
       # so a rebuild of the same version never lands on an existing URL.
@@ -79,14 +77,3 @@ jobs:
           git commit -m "Publish ${{ steps.version.outputs.value }}"
           git push --force origin HEAD:gh-pages
 
-      - name: Attach the repository archive to the release
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          built=$(find update-site/com.vogella.eclipse.mcp.repository/target -maxdepth 1 -name '*.zip' | head -1)
-          # the built name carries the Maven -SNAPSHOT suffix, which is misleading on a release
-          archive="com.vogella.eclipse.mcp.repository-${GITHUB_REF_NAME#v}.zip"
-          cp "$built" "$archive"
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes || true
-          gh release upload "$GITHUB_REF_NAME" "$archive" --clobber

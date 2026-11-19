@@ -6,14 +6,15 @@
 
   <groupId>com.vogella.eclipse.mcp</groupId>
   <artifactId>com.vogella.eclipse.mcp.parent</artifactId>
-  <version>4.0.0-SNAPSHOT</version>
+  <version>5.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <name>Eclipse MCP Server</name>
 
   <properties>
-    <tycho.version>5.0.3</tycho.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- same value as .mvn/maven.config, for m2e and other imports that read only the POM -->
+    <tycho.version>5.0.4</tycho.version>
     <!-- the super POM of Maven 3.10 and later pins this to 1980, and Tycho takes the build qualifier from it -->
     <maven.build.timestamp.format>yyyy-MM-dd'T'HH:mm:ss'Z'</maven.build.timestamp.format>
     <project.build.outputTimestamp>${maven.build.timestamp}</project.build.outputTimestamp>
@@ -27,6 +28,21 @@
   </modules>
 
   <build>
+    <pluginManagement>
+      <plugins>
+        <!-- Tycho does not pin these, so they would otherwise come from whichever Maven runs the build -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-clean-plugin</artifactId>
+          <version>3.5.0</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-resources-plugin</artifactId>
+          <version>3.5.0</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
     <plugins>
       <plugin>
         <groupId>org.eclipse.tycho</groupId>
