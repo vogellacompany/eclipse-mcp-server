@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.jdt.core.Flags;
 import org.eclipse.jdt.core.IMember;
 import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.ISourceRange;
@@ -151,6 +152,13 @@ final class Callees {
 		} catch (JavaModelException e) {
 			return "noSource"; //$NON-NLS-1$
 		}
+		try {
+			if (Flags.isNative(method.getFlags())) {
+				return "native"; //$NON-NLS-1$
+			}
+		} catch (JavaModelException e) {
+			// fall through to the common case
+		}
 		return "abstract"; //$NON-NLS-1$
 	}
 
@@ -282,9 +290,14 @@ final class Callees {
 	}
 
 	/** A label for a binding without a Java element, such as an implicit default constructor. */
+	/** The simple name a constructor carries, the last segment of its binary or qualified type name. */
+	private static String constructorName(String typeName) {
+		return typeName.substring(Math.max(typeName.lastIndexOf('.'), typeName.lastIndexOf('$')) + 1);
+	}
+
 	private static String labelOf(IMethodBinding binding, String typeName) {
 		StringBuilder label = new StringBuilder(typeName).append('.')
-				.append(binding.isConstructor() ? binding.getDeclaringClass().getErasure().getName() : binding.getName())
+				.append(binding.isConstructor() ? constructorName(typeName) : binding.getName())
 				.append('(');
 		ITypeBinding[] parameters = binding.getParameterTypes();
 		for (int i = 0; i < parameters.length; i++) {

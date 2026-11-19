@@ -170,7 +170,7 @@ public final class FindImplementationsTool implements IMcpTool {
 						: '#' + (methods.size() == 1 ? JavaModelSupport.signatureOf(methods.get(0)) : memberName)))
 				.put("implementations", entries) //$NON-NLS-1$
 				.put("total", found.size()) //$NON-NLS-1$
-				.put("truncated", found.size() > maxResults); //$NON-NLS-1$
+				.put("truncated", found.size() > maxResults || monitor.isCanceled()); //$NON-NLS-1$
 		return McpToolResult.of(refreshed.report(result).toString());
 	}
 
