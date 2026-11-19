@@ -125,10 +125,12 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			return McpToolResult.error(("The file has no problem %d at %s. It may already be fixed, or the file changed; " //$NON-NLS-1$
 					+ "list the current ones with eclipse_get_quick_fixes.").formatted(Integer.valueOf(problemId), where)); //$NON-NLS-1$
 		}
-		if (offset < 0 && matching.stream().map(IProblem::getSourceStart).distinct().count() > 1) {
-			return McpToolResult.error("Line %d has %d problems with id %d. Name one by its 'offset': %s".formatted( //$NON-NLS-1$
-					Integer.valueOf(line), Integer.valueOf(matching.size()), Integer.valueOf(problemId),
-					matching.stream().map(problem -> String.valueOf(problem.getSourceStart())).distinct().toList()));
+		List<String> offsets = matching.stream().map(problem -> String.valueOf(problem.getSourceStart())).distinct()
+				.toList();
+		if (offset < 0 && offsets.size() > 1) {
+			// several problems at one offset differ only by message, so count the places the caller can name
+			return McpToolResult.error("Line %d has problems with id %d at %d offsets. Name one by its 'offset': %s".formatted( //$NON-NLS-1$
+					Integer.valueOf(line), Integer.valueOf(problemId), Integer.valueOf(offsets.size()), offsets));
 		}
 		// JDT reports one problem per exception type at the same node, told apart only by the message
 		List<String> messages = matching.stream().map(IProblem::getMessage).distinct().toList();

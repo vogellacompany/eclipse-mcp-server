@@ -118,7 +118,13 @@ public final class QuickFixProcessor {
 		try {
 			suppressWarnings.getSuppressWarningsProposals(context, location, proposals);
 		} catch (RuntimeException e) {
-			runtimeFailure = runtimeFailure == null ? e : runtimeFailure;
+			// keep a second failure with the first, so the log shows both
+			Exception first = coreFailure != null ? coreFailure : runtimeFailure;
+			if (first == null) {
+				runtimeFailure = e;
+			} else {
+				first.addSuppressed(e);
+			}
 		}
 		Exception failure = coreFailure != null ? coreFailure : runtimeFailure;
 		if (failure != null) {
