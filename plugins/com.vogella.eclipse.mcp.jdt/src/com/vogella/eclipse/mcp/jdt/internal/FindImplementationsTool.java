@@ -2,6 +2,7 @@ package com.vogella.eclipse.mcp.jdt.internal;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,7 +40,7 @@ public final class FindImplementationsTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Finds the implementations of a Java type or method: the classes, enums, records, anonymous classes and lambdas that implement an interface or extend a class, or, with memberName, the methods that override or implement that method in every subtype. It answers 'what actually runs behind this call', which eclipse_get_call_hierarchy's callees and eclipse_find_references stop short of. Overriding is decided the way the compiler decides it, so a generic method implemented with a concrete type argument counts. Abstract classes and interfaces are left out unless includeAbstract is true, and abstract methods likewise. Each entry is one line: the type or method, its kind, and path and line for source, or library for a jar."; //$NON-NLS-1$
+		return "Finds the implementations of a Java type or method: the classes, enums, records, anonymous classes and lambdas that implement an interface or extend a class, or, with memberName, the methods that override or implement that method in every subtype; a concrete subtype that declares no override of its own is listed under inheritedBy of the implementation it inherits, so the set of types is complete. It answers 'what actually runs behind this call', which eclipse_get_call_hierarchy's callees and eclipse_find_references stop short of. Overriding is decided the way the compiler decides it, so a generic method implemented with a concrete type argument counts. Abstract classes and interfaces are left out unless includeAbstract is true, and abstract methods likewise. Each entry is one line: the type or method, its kind, and path and line for source, or library for a jar."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -104,6 +105,8 @@ public final class FindImplementationsTool implements IMcpTool {
 		}
 
 		List<IMember> found = new ArrayList<>();
+		Map<String, IMethod> declaredIn = new HashMap<>();
+		Map<IMethod, List<String>> inheritedBy = new HashMap<>();
 		try {
 			for (IType subtype : hierarchy.getAllSubtypes(type)) {
 				if (monitor.isCanceled()) {
@@ -124,10 +127,16 @@ public final class FindImplementationsTool implements IMcpTool {
 					if (overriding == null && (subtype.isAnonymous() || subtype.isLambda())) {
 						overriding = soleCandidate(subtype, method);
 					}
-					if (overriding != null && (includeAbstract || !Flags.isAbstract(overriding.getFlags()))) {
-						found.add(overriding);
+					if (overriding != null) {
+						declaredIn.put(key(method, subtype), overriding);
+						if (includeAbstract || !Flags.isAbstract(overriding.getFlags())) {
+							found.add(overriding);
+						}
 					}
 				}
+			}
+			if (!methods.isEmpty()) {
+				collectInheritors(type, hierarchy, methods, declaredIn, inheritedBy, includeBinary);
 			}
 		} catch (JavaModelException e) {
 			throw new McpToolException("Could not read the subtypes of " + type.getFullyQualifiedName(), e); //$NON-NLS-1$
@@ -136,7 +145,16 @@ public final class FindImplementationsTool implements IMcpTool {
 				.thenComparing(FindImplementationsTool::labelOf));
 
 		JsonArray entries = new JsonArray();
-		found.stream().limit(maxResults).map(FindImplementationsTool::entryOf).forEach(entries::add);
+		found.stream().limit(maxResults).map(member -> {
+			JsonObject entry = entryOf(member);
+			List<String> inheritors = inheritedBy.get(member);
+			if (inheritors != null) {
+				JsonArray names = new JsonArray();
+				inheritors.stream().sorted().forEach(names::add);
+				entry.put("inheritedBy", names); //$NON-NLS-1$
+			}
+			return entry;
+		}).forEach(entries::add);
 		JsonObject result = new JsonObject()
 				.put("resolved", type.getFullyQualifiedName() + (memberName == null ? "" //$NON-NLS-1$ //$NON-NLS-2$
 						: '#' + (methods.size() == 1 ? JavaModelSupport.signatureOf(methods.get(0)) : memberName)))
@@ -144,6 +162,40 @@ public final class FindImplementationsTool implements IMcpTool {
 				.put("total", found.size()) //$NON-NLS-1$
 				.put("truncated", found.size() > maxResults); //$NON-NLS-1$
 		return McpToolResult.of(refreshed.report(result).toString());
+	}
+
+	private static String key(IMethod method, IType type) {
+		return method.getHandleIdentifier() + '|' + type.getHandleIdentifier();
+	}
+
+	/**
+	 * Records, for each concrete subtype that declares no override of its own, the nearest
+	 * superclass implementation it runs, so a type that only inherits one is not missing.
+	 */
+	private static void collectInheritors(IType base, ITypeHierarchy hierarchy, List<IMethod> methods,
+			Map<String, IMethod> declaredIn, Map<IMethod, List<String>> inheritedBy, boolean includeBinary)
+			throws JavaModelException {
+		for (IType subtype : hierarchy.getAllSubtypes(base)) {
+			if (!isConcrete(subtype) || (!includeBinary && subtype.isBinary())) {
+				continue;
+			}
+			for (IMethod method : methods) {
+				if (declaredIn.containsKey(key(method, subtype))) {
+					continue;
+				}
+				for (IType up = hierarchy.getSuperclass(subtype); up != null && !up.equals(base); up = hierarchy
+						.getSuperclass(up)) {
+					IMethod implementation = declaredIn.get(key(method, up));
+					if (implementation != null) {
+						if (!Flags.isAbstract(implementation.getFlags())) {
+							inheritedBy.computeIfAbsent(implementation, k -> new ArrayList<>())
+									.add(labelOf(subtype));
+						}
+						break;
+					}
+				}
+			}
+		}
 	}
 
 	private static List<IMethod> methodsOf(IType type, String memberName, List<String> paramTypes)

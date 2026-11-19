@@ -63,9 +63,10 @@ class FindImplementationsToolTest {
 				Map.of("typeName", "example.Shape", "memberName", "scale", "project", PROJECT));
 
 		List<?> methods = implementations(result).stream().map(entry -> entry.get("method")).toList();
-		// Square inherits Polygon's implementation, so it does not appear on its own
+		// Square inherits Polygon's implementation, so it is listed under that one
 		assertEquals(List.of("anonymous in example.Shapes.unit() scale(Double)", "example.Circle.scale(Double)",
 				"example.Kind.scale(Double)", "example.Polygon.scale(Double)"), methods, "got " + result);
+		assertEquals(List.of("example.Square"), implementations(result).get(3).get("inheritedBy"), "got " + result);
 	}
 
 	@Test

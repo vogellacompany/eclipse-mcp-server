@@ -97,12 +97,17 @@ final class Callees {
 			if (call.count() > 1) {
 				node.put("calls", call.count()); //$NON-NLS-1$
 			}
-			if (call.target() == null || call.target().isBinary()) {
+			if (call.binary()) {
 				node.put("origin", "binary"); //$NON-NLS-1$ //$NON-NLS-2$
-			} else if (depth > 1 && expanded.add(call.target().getHandleIdentifier())) {
-				JsonArray deeper = calleesOf(call.target(), depth - 1, new JsonArray(), null);
-				if (deeper.size() > 0) {
-					node.put("callees", deeper); //$NON-NLS-1$
+			} else if (depth > 1 && call.target() != null) {
+				if (expanded.add(call.target().getHandleIdentifier())) {
+					JsonArray deeper = calleesOf(call.target(), depth - 1, new JsonArray(), null);
+					if (deeper.size() > 0) {
+						node.put("callees", deeper); //$NON-NLS-1$
+					}
+				} else {
+					// already walked elsewhere in this answer; an absent key would read as "calls nothing"
+					node.put("repeated", true); //$NON-NLS-1$
 				}
 			}
 			nodes.add(node);
@@ -111,9 +116,9 @@ final class Callees {
 	}
 
 	/** One callee of a body: the first line calling it and how often it is called. */
-	private record Call(String label, IMethod target, int line, int count) {
+	private record Call(String label, IMethod target, boolean binary, int line, int count) {
 		Call again() {
-			return new Call(label, target, line, count + 1);
+			return new Call(label, target, binary, line, count + 1);
 		}
 	}
 
@@ -202,7 +207,7 @@ final class Callees {
 				}
 				IMethodBinding declared = binding.getMethodDeclaration();
 				ITypeBinding declaringType = declared.getDeclaringClass();
-				String typeName = declaringType == null ? "" : declaringType.getErasure().getQualifiedName(); //$NON-NLS-1$
+				String typeName = typeNameOf(declaringType);
 				if (!includeJdk && isJdk(typeName)) {
 					jdkCallsHidden++;
 					return;
@@ -212,10 +217,25 @@ final class Callees {
 				String key = target != null ? target.getHandleIdentifier() : label;
 				Call earlier = calls.get(key);
 				calls.put(key, earlier != null ? earlier.again()
-						: new Call(label, target, unit.getLineNumber(node.getStartPosition()), 1));
+						: new Call(label, target,
+								target != null ? target.isBinary() : declaringType == null || !declaringType.isFromSource(),
+								unit.getLineNumber(node.getStartPosition()), 1));
 			}
 		});
 		return new ArrayList<>(calls.values());
+	}
+
+	/** Local and anonymous types have no qualified name, so they fall back to their binary name. */
+	private static String typeNameOf(ITypeBinding type) {
+		if (type == null) {
+			return ""; //$NON-NLS-1$
+		}
+		ITypeBinding erasure = type.getErasure();
+		String name = erasure.getQualifiedName();
+		if (name.isEmpty()) {
+			name = erasure.getBinaryName() != null ? erasure.getBinaryName() : erasure.getName();
+		}
+		return name;
 	}
 
 	private static boolean isJdk(String typeName) {
