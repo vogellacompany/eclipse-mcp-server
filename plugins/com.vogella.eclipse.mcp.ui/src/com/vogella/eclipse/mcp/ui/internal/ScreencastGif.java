@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.swt.SWT;
@@ -107,11 +108,23 @@ public final class ScreencastGif {
 		if (frames.isEmpty()) {
 			throw new IOException("There are no frames to write"); //$NON-NLS-1$
 		}
-		ImageData[] indexed = new ImageData[frames.size()];
+		List<ImageData> quantized = new ArrayList<>(frames.size());
+		for (ImageData frame : frames) {
+			quantized.add(quantize(frame));
+		}
+		return writeIndexed(quantized, delaysMillis, loop, out);
+	}
+
+	/** Like {@link #write}, for frames that {@link #quantize} already reduced to the palette. */
+	public static long writeIndexed(List<ImageData> frames, int[] delaysMillis, boolean loop, Path out)
+			throws IOException {
+		if (frames.isEmpty()) {
+			throw new IOException("There are no frames to write"); //$NON-NLS-1$
+		}
+		ImageData[] indexed = frames.toArray(ImageData[]::new);
 		int width = 0;
 		int height = 0;
 		for (int i = 0; i < indexed.length; i++) {
-			indexed[i] = quantize(frames.get(i));
 			indexed[i].delayTime = Math.max(1, (delaysMillis[i] + 5) / 10);
 			indexed[i].disposalMethod = SWT.DM_FILL_NONE;
 			width = Math.max(width, indexed[i].width);

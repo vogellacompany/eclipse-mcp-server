@@ -122,7 +122,7 @@ public final class ScreencastTools {
 
 		@Override
 		public String getDescription() {
-			return "Starts recording a shell or a part as a sequence of PNG frames, and returns a sessionId for eclipse_stop_screencast, which assembles them into an animated GIF. This is what shows a change in motion rather than before and after: a tab overflowing while a sash is dragged, a hover appearing, a view repainting after a theme switch. WRITES FILES to a directory of its own under the temp directory, or under directory when given, and changes nothing in the IDE. Each frame is painted on the UI thread through Control.print, the same path eclipse_screenshot uses, so it records what the IDE paints and NOT native popups, menus or dialogs, and the window decorations are missing from a shell recording. A frame costs the UI thread one paint; 2 to 5 frames a second is what a full shell sustains without slowing the IDE, and a single part is cheaper. Recording stops on its own at maxFrames or when the target is disposed, and the stop answer reports late ticks, which is what a busy UI thread looks like from here: gaps in the recording rather than a smooth lie."; //$NON-NLS-1$
+			return "Starts recording a shell or a part as a sequence of PNG frames, and returns a sessionId for eclipse_stop_screencast, which assembles them into an animated GIF. This is what shows a change in motion rather than before and after: a tab overflowing while a sash is dragged, a hover appearing, a view repainting after a theme switch. WRITES FILES to a directory of its own under the temp directory, or under directory when given, and changes nothing in the IDE. Each frame is painted on the UI thread through Control.print, the same path eclipse_screenshot uses, so it records what the IDE paints and NOT native popups, menus or dialogs, and the window decorations are missing from a shell recording. A frame costs the UI thread one paint; 2 to 5 frames a second is what a full shell sustains without slowing the IDE, and a single part is cheaper. Recording stops on its own at maxFrames or when the target is disposed, and the stop answer reports late ticks, which is what a busy UI thread looks like from here: gaps in the recording rather than a smooth lie. When a paint recorder and its renderer are available, method auto (the default) records every repaint of every shell instead, which becomes a smooth MP4 (or a GIF without ffmpeg) on stop; it records whole shells only, so a part, bounds, parts, caption, resume, maxWidth, or a non-default intervalMillis or maxFrames keeps the frames method. The answer says which method ran under method, and why frames were used under methodReason."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -143,7 +143,9 @@ public final class ScreencastTools {
 					    "caption":        {"type":"string","description":"Text drawn on every frame of this segment, white on a dark bar, for a recording a person reads."},
 					    "captionPosition":{"type":"string","enum":["over","above","below"],"default":"over","description":"over draws the bar translucently over the bottom of the picture; above and below add an opaque bar of the bar's height to the frame outside the picture, so a cropped editor's page tabs stay readable. With resume, omitted keeps the previous segment's."},
 					    "resume":         {"type":"string","description":"Session id of a STOPPED screencast to continue in the same frame directory as one more segment, so screenshots can be taken between segments and still end up in one GIF, or 'latest' for the most recently stopped one, which is what a static scenario needs since ids count up per IDE session. The target, interval and crop stay; maxFrames counts the new segment; caption replaces the previous segment's. The pause between the segments is shown as gapMillis."},
-					    "gapMillis":      {"type":"integer","default":1000,"minimum":0,"maximum":60000,"description":"With resume, how long the last frame of the previous segment stays before the new one starts."}
+					    "gapMillis":      {"type":"integer","default":1000,"minimum":0,"maximum":60000,"description":"With resume, how long the last frame of the previous segment stays before the new one starts."},
+					    "method":         {"type":"string","enum":["auto","paint","frames"],"default":"auto","description":"paint records the paint passes of every shell (smooth, whole shells only), frames paints the target on a timer. auto takes paint when it is available and nothing here needs frames."},
+					    "maxSeconds":     {"type":"integer","default":300,"minimum":1,"maximum":3600,"description":"With method paint, the recording stops on its own after this long."}
 					  },
 					  "additionalProperties": false
 					}"""; //$NON-NLS-1$
@@ -158,8 +160,8 @@ public final class ScreencastTools {
 				return McpToolResult.error("The target 'part' needs a 'part' id. Use eclipse_list_ui_targets."); //$NON-NLS-1$
 			}
 			String shellTitle = args.getString("shellTitle"); //$NON-NLS-1$
-			int interval = args.getInt("intervalMillis", 500, 100, 10000); //$NON-NLS-1$
-			int maxFrames = args.getInt("maxFrames", 120, 1, 1000); //$NON-NLS-1$
+			int interval = args.getInt("intervalMillis", DEFAULT_INTERVAL, 100, 10000); //$NON-NLS-1$
+			int maxFrames = args.getInt("maxFrames", DEFAULT_MAX_FRAMES, 1, 1000); //$NON-NLS-1$
 			// 0 is no cap, which keeps every frame pixel-exact
 			int maxWidth = args.getInt("maxWidth", 0, 0, 4000); //$NON-NLS-1$
 			String caption = args.getString("caption"); //$NON-NLS-1$
@@ -178,6 +180,43 @@ public final class ScreencastTools {
 				return McpToolResult.error("Pass either 'bounds' or 'parts', not both."); //$NON-NLS-1$
 			}
 			String resume = args.getString("resume"); //$NON-NLS-1$
+			String method = args.getString("method", AUTO); //$NON-NLS-1$
+			if (!List.of(AUTO, PAINT, FRAMES).contains(method)) {
+				return McpToolResult.error("'method' is auto, paint or frames."); //$NON-NLS-1$
+			}
+			List<String> framesOnly = framesOnly(target, bounds, partIds, caption, resume, maxWidth);
+			// a caller that tunes the frame timer asked for frames, so auto keeps them for it;
+			// one that echoes the defaults did not
+			if (interval != DEFAULT_INTERVAL) {
+				framesOnly.add("intervalMillis"); //$NON-NLS-1$
+			}
+			if (maxFrames != DEFAULT_MAX_FRAMES) {
+				framesOnly.add("maxFrames"); //$NON-NLS-1$
+			}
+			String methodReason = null;
+			int maxSeconds = args.getInt("maxSeconds", 300, 1, 3600); //$NON-NLS-1$
+			if (!FRAMES.equals(method)) {
+				String unavailable = PaintRecording.unavailableReason();
+				String noRenderer = PaintRecording.rendererMissingReason();
+				if (PAINT.equals(method)) {
+					if (!framesOnly.isEmpty()) {
+						return McpToolResult.error("method paint records whole shells and cannot take %s; use method frames for them." //$NON-NLS-1$
+								.formatted(String.join(", ", framesOnly))); //$NON-NLS-1$
+					}
+					if (unavailable != null) {
+						return McpToolResult.error("method paint is not available: %s. Use method frames.".formatted(unavailable)); //$NON-NLS-1$
+					}
+					return startPaint(shellTitle, args.getString("directory"), maxSeconds, //$NON-NLS-1$
+							noRenderer);
+				}
+				if (unavailable == null && noRenderer == null && framesOnly.isEmpty()) {
+					return startPaint(shellTitle, args.getString("directory"), maxSeconds, //$NON-NLS-1$
+							null);
+				}
+				methodReason = unavailable != null ? unavailable
+						: noRenderer != null ? noRenderer : "paint recording cannot take " + String.join(", ", framesOnly); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+			String chosenReason = methodReason;
 			if (resume != null) {
 				boolean latest = "latest".equalsIgnoreCase(resume) || "true".equalsIgnoreCase(resume); //$NON-NLS-1$ //$NON-NLS-2$
 				if (latest && !ClientSessions.canAssumeASingleClient()) {
@@ -273,9 +312,79 @@ public final class ScreencastTools {
 									Integer.valueOf(session.frameWidth()));
 				}
 				return describe(session).put("maxFrames", Integer.valueOf(maxFrames)) //$NON-NLS-1$
+						.put("method", FRAMES).put("methodReason", chosenReason) //$NON-NLS-1$ //$NON-NLS-2$
 						.put("note", note); //$NON-NLS-1$
 			});
 		}
+
+		private static McpToolResult startPaint(String shellTitle, String given, int maxSeconds, String noRenderer) {
+			return UiThread.call(UI_TIMEOUT_SECONDS, () -> {
+				Display display = Workbenches.display();
+				Shell shell = ScreenshotTools.Capture.findShell(display, shellTitle);
+				if (shell == null) {
+					throw new IllegalArgumentException(shellTitle == null ? "This IDE has no window to record." //$NON-NLS-1$
+							: "No shell matching '%s'.".formatted(shellTitle)); //$NON-NLS-1$
+				}
+				PaintRecording.Session session;
+				Path directory;
+				try {
+					directory = given != null ? Files.createDirectories(Path.of(given))
+							: Files.createTempDirectory("eclipse-screencast-"); //$NON-NLS-1$
+				} catch (IOException | RuntimeException e) {
+					throw new IllegalArgumentException("Could not create the recording directory: " + e.getMessage(), e); //$NON-NLS-1$
+				}
+				try {
+					session = PaintRecording.getInstance().start(display, shell, directory, maxSeconds);
+				} catch (IOException e) {
+					throw new IllegalStateException(e.getMessage(), e);
+				}
+				String note = "Recording every repaint of every shell; the frame rate of the video is chosen on stop. Drive the IDE now, then call eclipse_stop_screencast with this sessionId. Native menus, native dialogs and the window decorations are not recorded; titleBars on stop draws a title bar with each shell's title, and pointer the mouse pointer over the IDE's shells."; //$NON-NLS-1$
+				if (noRenderer != null) {
+					note += " The recording cannot be turned into a video here (%s), so stop returns only the recording file.".formatted(noRenderer); //$NON-NLS-1$
+				}
+				return new JsonObject().put("sessionId", session.id()).put("method", PAINT) //$NON-NLS-1$ //$NON-NLS-2$
+						.put("target", "shell '" + shell.getText() + "'") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+						.put("directory", session.directory().toString()) //$NON-NLS-1$
+						.put("recordingPath", session.recording().toString()) //$NON-NLS-1$
+						.put("maxSeconds", Integer.valueOf(maxSeconds)).put("running", Boolean.TRUE) //$NON-NLS-1$ //$NON-NLS-2$
+						.put("note", note); //$NON-NLS-1$
+			});
+		}
+	}
+
+	static final int DEFAULT_INTERVAL = 500;
+
+	static final int DEFAULT_MAX_FRAMES = 120;
+
+	static final String AUTO = "auto"; //$NON-NLS-1$
+
+	static final String PAINT = "paint"; //$NON-NLS-1$
+
+	static final String FRAMES = "frames"; //$NON-NLS-1$
+
+	/** The arguments given that only the frames method can honour. */
+	public static List<String> framesOnly(String target, String bounds, List<String> parts, String caption, String resume,
+			int maxWidth) {
+		List<String> given = new ArrayList<>();
+		if ("part".equals(target)) { //$NON-NLS-1$
+			given.add("a part"); //$NON-NLS-1$
+		}
+		if (bounds != null) {
+			given.add("bounds"); //$NON-NLS-1$
+		}
+		if (!parts.isEmpty()) {
+			given.add("parts"); //$NON-NLS-1$
+		}
+		if (caption != null) {
+			given.add("caption"); //$NON-NLS-1$
+		}
+		if (resume != null) {
+			given.add("resume"); //$NON-NLS-1$
+		}
+		if (maxWidth > 0) {
+			given.add("maxWidth"); //$NON-NLS-1$
+		}
+		return given;
 	}
 
 	/** Stops recording and assembles the GIF. */
@@ -288,7 +397,7 @@ public final class ScreencastTools {
 
 		@Override
 		public String getDescription() {
-			return "Stops a screencast and assembles its frames into an animated GIF, whose path is returned along with the frame directory. Each frame stays as long as it really did on screen, so a stall in the IDE is visible as a held frame. The GIF uses a fixed 256 colour palette, which posterises gradients; the PNG frames stay lossless in the directory for anything better, such as ffmpeg through eclipse_run_command. averagePaintMillis is what one frame cost the UI thread, which is added to the interval between frames; lateTicks and maxLatenessMillis say how long the timer waited past its due time, which is the recording's own measurement of how busy the IDE was with other things."; //$NON-NLS-1$
+			return "Stops a screencast and assembles its frames into an animated GIF, whose path is returned along with the frame directory. Each frame stays as long as it really did on screen, so a stall in the IDE is visible as a held frame. The GIF uses a fixed 256 colour palette, which posterises gradients; the PNG frames stay lossless in the directory for anything better, such as ffmpeg through eclipse_run_command. averagePaintMillis is what one frame cost the UI thread, which is added to the interval between frames; lateTicks and maxLatenessMillis say how long the timer waited past its due time, which is the recording's own measurement of how busy the IDE was with other things. A paint recording (method paint) is rendered instead into an MP4 through ffmpeg, or a GIF when no ffmpeg is found, at fps and zoom chosen here, reported under video; a long one may still be rendering when the call returns, and calling again with its sessionId collects it."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -298,10 +407,16 @@ public final class ScreencastTools {
 					  "type": "object",
 					  "properties": {
 					    "sessionId":  {"type":"string","description":"Session returned by eclipse_start_screencast. Omit for the most recent."},
-					    "gif":        {"type":"boolean","default":true,"description":"Assemble the animated GIF. Off leaves only the PNG frames."},
+					    "gif":        {"type":"boolean","default":true,"description":"Assemble the animated GIF, or for a paint recording render the video. Off leaves only the PNG frames, or only the recording file."},
 					    "loop":       {"type":"boolean","default":true,"description":"Loop the GIF instead of playing it once."},
-					    "outputPath": {"type":"string","description":"Absolute file for the GIF. Defaults to screencast.gif in the frame directory."},
-					    "keepFrames": {"type":"boolean","default":true,"description":"Leave the PNG frames on disk after the GIF is written."}
+					    "outputPath": {"type":"string","description":"Absolute file for the GIF, or for a paint recording the video: MP4 unless the name ends in .gif or no ffmpeg is found. Defaults to a file in the recording's directory."},
+					    "keepFrames": {"type":"boolean","default":true,"description":"Leave the PNG frames on disk after the GIF is written. Frames method only."},
+					    "fps":        {"type":"integer","default":30,"minimum":1,"maximum":60,"description":"For a paint recording, the frame rate of the video. Without ffmpeg the GIF lowers it to stay within maxFrames."},
+					    "zoom":       {"type":"integer","minimum":25,"maximum":400,"description":"For a paint recording, the zoom in percent the video is rendered at; defaults to the zoom it was recorded at."},
+					    "allShells":  {"type":"boolean","default":false,"description":"For a paint recording, show every shell at its screen position instead of only the recorded one, so dialogs and popups painted by SWT appear where they opened."},
+					    "titleBars":  {"type":"boolean","default":false,"description":"For a paint recording, draw a title bar with the shell's title above each shell, since the real window decorations are not recorded."},
+					    "pointer":    {"type":"boolean","default":true,"description":"For a paint recording, draw the mouse pointer where it was over the IDE's shells. The answer reports pointer false when the renderer cannot draw it."},
+					    "maxFrames":  {"type":"integer","default":600,"minimum":1,"maximum":3000,"description":"For a paint recording written as a GIF, the most frames it may have."}
 					  },
 					  "additionalProperties": false
 					}"""; //$NON-NLS-1$
@@ -312,10 +427,18 @@ public final class ScreencastTools {
 			ToolArguments args = ToolArguments.of(arguments);
 			String sessionId = args.getString("sessionId"); //$NON-NLS-1$
 			Screencast registry = Screencast.getInstance();
+			PaintRecording paintRegistry = PaintRecording.getInstance();
 			if (sessionId == null && !ClientSessions.canAssumeASingleClient()) {
-				return McpToolResult.error(ClientSessions.ambiguousDefault("screencast", "sessionId", registry.ids())); //$NON-NLS-1$ //$NON-NLS-2$
+				List<String> ids = new ArrayList<>(registry.ids());
+				ids.addAll(paintRegistry.ids());
+				return McpToolResult.error(ClientSessions.ambiguousDefault("screencast", "sessionId", ids)); //$NON-NLS-1$ //$NON-NLS-2$
 			}
-			Screencast.Session session = sessionId == null ? registry.findLatest() : registry.find(sessionId);
+			PaintRecording.Session painted = sessionId == null ? paintRegistry.findLatest() : paintRegistry.find(sessionId);
+			Screencast.Session latestFrames = registry.findLatest();
+			if (painted != null && (sessionId != null || latestFrames == null || prefersPaint(painted, latestFrames))) {
+				return stopPaint(painted, args);
+			}
+			Screencast.Session session = sessionId == null ? latestFrames : registry.find(sessionId);
 			if (session == null) {
 				return McpToolResult.error(sessionId == null ? "No screencast has been started." //$NON-NLS-1$
 						: "No screencast with the id '%s'.".formatted(sessionId)); //$NON-NLS-1$
@@ -371,6 +494,56 @@ public final class ScreencastTools {
 					? "The UI thread delivered %d frames late, so the recording has gaps where the IDE was busy; each frame's delay in the GIF is the time it really stayed." //$NON-NLS-1$
 							.formatted(Integer.valueOf(session.lateTicks()))
 					: "Every frame arrived on time.").toString()); //$NON-NLS-1$
+		}
+
+		/** Without a sessionId, a running recording wins over a stopped one, then the newer one. */
+		private static boolean prefersPaint(PaintRecording.Session painted, Screencast.Session frames) {
+			if (painted.running() != frames.running()) {
+				return painted.running();
+			}
+			return painted.startedAt() >= frames.startedAt();
+		}
+
+		private static McpToolResult stopPaint(PaintRecording.Session session, ToolArguments args) {
+			if (session.running()) {
+				McpToolResult stopped = UiThread.call(UI_TIMEOUT_SECONDS, () -> {
+					session.stop("stop"); //$NON-NLS-1$
+					return new JsonObject();
+				});
+				if (stopped.isError()) {
+					return stopped;
+				}
+			}
+			// a stop that another thread began finishes on the UI thread, which the hop above waited behind
+			if (!session.awaitStopped(2000)) {
+				return McpToolResult.error("Recording '%s' is still being stopped; call again in a moment.".formatted(session.id())); //$NON-NLS-1$
+			}
+			JsonObject result = new JsonObject().put("sessionId", session.id()).put("method", PAINT) //$NON-NLS-1$ //$NON-NLS-2$
+					.put("directory", session.directory().toString()) //$NON-NLS-1$
+					.put("recordingPath", session.recording().toString()) //$NON-NLS-1$
+					.put("stoppedBy", session.stoppedBy()) //$NON-NLS-1$
+					.put("recordedMillis", Long.valueOf(session.elapsedMillis())); //$NON-NLS-1$
+			if (!args.getBoolean("gif", true)) { //$NON-NLS-1$
+				return McpToolResult.of(result.put("video", null) //$NON-NLS-1$
+						.put("note", "gif false: the recording was stopped and not rendered; call again without it to render it.") //$NON-NLS-1$ //$NON-NLS-2$
+						.toString());
+			}
+			String output = args.getString("outputPath"); //$NON-NLS-1$
+			PaintRecording.Options options = new PaintRecording.Options(args.getInt("fps", 30, 1, 60), //$NON-NLS-1$
+					args.getInt("zoom", 0, 0, 400), args.getBoolean("allShells", false), //$NON-NLS-1$ //$NON-NLS-2$
+					args.getBoolean("titleBars", false), args.getBoolean("pointer", true), //$NON-NLS-1$ //$NON-NLS-2$
+					args.getInt("maxFrames", 600, 1, 3000), //$NON-NLS-1$
+					args.getBoolean("loop", true), output == null ? null : Path.of(output)); //$NON-NLS-1$
+			// what is left of the call after the UI hop, not a fresh budget, or the answer outlives the call
+			int budget = (int) Math.max(1, CallBudget.leftMillis() / 1000);
+			JsonObject rendered = PaintRecording.awaitExport(session.export(options), budget);
+			if (rendered == null) {
+				return McpToolResult.of(result.put("video", null).put("note", //$NON-NLS-1$ //$NON-NLS-2$
+						"The video was still being rendered after %d seconds. Call again with this sessionId to collect it; while it renders, the options of the call that started it apply." //$NON-NLS-1$
+								.formatted(Integer.valueOf(budget)))
+						.toString());
+			}
+			return McpToolResult.of(result.put("video", rendered).toString()); //$NON-NLS-1$
 		}
 	}
 }

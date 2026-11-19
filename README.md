@@ -23,20 +23,20 @@ https://vogellacompany.github.io/eclipse-mcp-server/
 
 and install the **Eclipse MCP Server** feature.
 It needs Eclipse 2026-06 or newer: the Java tools build on JDT APIs that release added, so on an older IDE the install is refused.
-The site lists the newest build only; older versions are available as the repository zip attached to each GitHub release, through *Add > Archive*.
+The site lists the newest build only.
 
 ## Building
 
-Requires JDK 25 and Maven 3.9 or newer.
+Requires JDK 25; the Maven wrapper brings Maven 3.10.1.
 
 ```bash
-mvn clean verify
+./mvnw clean verify
 ```
 
 The p2 repository ends up in `update-site/com.vogella.eclipse.mcp.repository/target/repository`.
 To work on the code in Eclipse, import the projects with *Search for nested projects* enabled and set `target-platform/com.vogella.eclipse.mcp.target/com.vogella.eclipse.mcp.target.target` as the active target platform.
 
-Every push to `main` publishes to the update site; pushing a `v<version>` tag additionally creates a GitHub release with the repository zip.
+Every push to `main` publishes to the update site.
 
 ## Enabling the server
 
@@ -243,7 +243,7 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_list_perspectives`, ✎ `eclipse_switch_perspective`, `eclipse_reset_perspective` | Perspectives |
 | ✎ `eclipse_manage_window`, `eclipse_set_shell_bounds`, `eclipse_set_ide_visibility`, `eclipse_set_model_visibility` | Windows, their bounds, and what of the IDE is visible |
 | `eclipse_list_themes`, `eclipse_list_theme_definitions`, ✎ `eclipse_set_theme`, `eclipse_register_theme`, `eclipse_apply_css` | Themes and live CSS |
-| `eclipse_get_display_info`, `eclipse_screenshot`, `eclipse_start_screencast`, `eclipse_stop_screencast` | Display scaling, PNG captures and GIF recordings |
+| `eclipse_get_display_info`, `eclipse_screenshot`, `eclipse_start_screencast`, `eclipse_stop_screencast` | Display scaling, PNG captures, and GIF or MP4 recordings |
 | `eclipse_wait_until_settled` | Wait until the UI has stopped changing |
 | `eclipse_wait_for` | Wait until a shell, widget, selection, editor or job condition holds |
 | ✎ `eclipse_run_script` | Run several tools in sequence with expectations, optionally in one UI turn |
