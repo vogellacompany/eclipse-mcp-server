@@ -89,7 +89,7 @@ public final class KeyboardTools {
 
 		@Override
 		public String getDescription() {
-			return "Inserts text at the caret of the active, or named, text editor by editing its document, the way a typed key ends up in the file: the caret moves behind the text and the editor becomes dirty. CHANGES THE DOCUMENT. This is the deterministic way to set up an editor state, independent of focus and keyboard layout, so prefer it over eclipse_press_key for entering characters. A current selection is replaced. It does NOT open content assist or run any key binding; use eclipse_press_key for Ctrl+Space and the like. The answer reports the new caret offset and line. Nothing is saved. In an application without the IDE workbench, such as a pure E4 RCP application, there are no text editors, so it inserts at the caret of the focused Text or StyledText instead."; //$NON-NLS-1$
+			return "Inserts text at the caret of the active, or named, text editor by editing its document, the way a typed key ends up in the file: the caret moves behind the text and the editor becomes dirty. CHANGES THE DOCUMENT. This is the deterministic way to set up an editor state, independent of focus and keyboard layout, so prefer it over eclipse_press_key for entering characters. A current selection is replaced. It does NOT open content assist or run any key binding; use eclipse_press_key for Ctrl+Space and the like. The answer reports the new caret offset and line. Nothing is saved. Without 'part', when the focus is a Text or StyledText in a dialog or wizard, it inserts at that caret instead, which fires the field's Modify listeners as typing does; so it does in an application without the IDE workbench, such as a pure E4 RCP application, where there are no text editors."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -118,6 +118,9 @@ public final class KeyboardTools {
 				return UiThread.call(UI_TIMEOUT_SECONDS, () -> intoFocusedWidget(text));
 			}
 			return UiThread.call(UI_TIMEOUT_SECONDS, () -> {
+				if (part == null && focusOutsideTheWorkbenchWindow()) {
+					return intoFocusedWidget(text);
+				}
 				ITextEditor editor = textEditor(part);
 				IDocument document = editor.getDocumentProvider().getDocument(editor.getEditorInput());
 				if (document == null) {
@@ -154,7 +157,15 @@ public final class KeyboardTools {
 		}
 	}
 
-	/** Without the IDE there are no text editors, so the text goes in at the caret of the focused text widget. */
+	/** Whether the focus is in a dialog or wizard rather than in the workbench window, whose editors this edits. */
+	private static boolean focusOutsideTheWorkbenchWindow() {
+		Control focus = Workbenches.display().getFocusControl();
+		IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+		return focus != null && (focus instanceof Text || focus instanceof StyledText)
+				&& (window == null || focus.getShell() != window.getShell());
+	}
+
+	/** The text goes in at the caret of the focused text widget: without the IDE, or in a dialog or wizard. */
 	private static JsonObject intoFocusedWidget(String text) {
 		Control focus = Workbenches.display().getFocusControl();
 		int caret;
@@ -175,7 +186,7 @@ public final class KeyboardTools {
 		return new JsonObject().put("widget", focus.getClass().getName()) //$NON-NLS-1$
 				.put("inserted", Integer.valueOf(text.length())) //$NON-NLS-1$
 				.put("caretOffset", Integer.valueOf(caret)) //$NON-NLS-1$
-				.put("note", "Inserted at the caret of the focused text widget, since this application has no text editors."); //$NON-NLS-1$ //$NON-NLS-2$
+				.put("note", "Inserted at the caret of the focused text widget, not into an editor's document."); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	/** Posts real key events to the focused control. */
@@ -190,7 +201,7 @@ public final class KeyboardTools {
 
 		@Override
 		public String getDescription() {
-			return "Posts real key events through Display.post to whatever control has focus, for the cases the document API cannot reach: Ctrl+Space to open content assist, Escape to close a popup, Enter to accept a proposal, arrow keys to move the selection in a proposal table, Tab, Backspace. CHANGES WHAT THE IDE DOES, which is whatever that key does with the current focus. Take a key like 'Ctrl+Space', 'Escape', 'Down', 'Enter', 'Tab', 'BackSpace', or a single character. There is no Menu key: Shift+F10 opens the focused control's context menu instead, and on GTK it opens at the pointer rather than at the selected row, so put the pointer there first with eclipse_click and button none. Display.post goes to the window that has OS focus, so this refuses when the IDE is not the active window rather than sending the key somewhere else; it first waits up to waitForForegroundMillis (0 disables the wait) for focus that is merely late, and foregroundWaitMillis in the answer is the time waited, foregroundWaitState how the wait ended (foreground, timedOut, uiBusy or probeFailed) and foregroundWaitClamped whether what was left of the call cut it short, all null when no wait was made because waitForForegroundMillis is 0, the delivery is synthetic or the call runs on the UI thread; a call cancelled before the key is sent answers an error and sends no key. On Wayland Display.post is often ignored by the compositor; the answer reports whether the post was accepted and whether focus was inside the IDE, and for entering plain characters eclipse_type_text is the reliable path. count repeats the key. delivery synthetic, or auto when the post is refused or the IDE is inactive, sends the key at SWT level instead: Tab, Shift+Tab, Escape, Enter and Ctrl+PageUp/PageDown traverse as SWT would, other keys reach the KeyDown and KeyUp listeners of the focus control or of path; the answer says synthetic true."; //$NON-NLS-1$
+			return "Posts real key events through Display.post to whatever control has focus, for the cases the document API cannot reach: Ctrl+Space to open content assist, Escape to close a popup, Enter to accept a proposal, arrow keys to move the selection in a proposal table, Tab, Backspace. CHANGES WHAT THE IDE DOES, which is whatever that key does with the current focus. Take a key like 'Ctrl+Space', 'Escape', 'Down', 'Enter', 'Tab', 'BackSpace', or a single character. There is no Menu key: Shift+F10 opens the focused control's context menu instead, and on GTK it opens at the pointer rather than at the selected row, so put the pointer there first with eclipse_click and button none. Display.post goes to the window that has OS focus, so this refuses when the IDE is not the active window rather than sending the key somewhere else; it first waits up to waitForForegroundMillis (0 disables the wait) for focus that is merely late, and foregroundWaitMillis in the answer is the time waited, foregroundWaitState how the wait ended (foreground, timedOut, uiBusy or probeFailed) and foregroundWaitClamped whether what was left of the call cut it short, all null when no wait was made because waitForForegroundMillis is 0, the delivery is synthetic or the call runs on the UI thread; a call cancelled before the key is sent answers an error and sends no key. On Wayland Display.post is often ignored by the compositor; the answer reports whether the post was accepted and whether focus was inside the IDE, and for entering plain characters eclipse_type_text is the reliable path. On Cocoa a single character the keyboard layout types with Shift, such as an upper case letter or '!', gets Shift added (shiftAdded), since Display.post there would type the unshifted key. count repeats the key. delivery synthetic, or auto when the post is refused or the IDE is inactive, sends the key at SWT level instead: Tab, Shift+Tab, Escape, Enter and Ctrl+PageUp/PageDown traverse as SWT would, other keys reach the KeyDown and KeyUp listeners of the focus control or of path; the answer says synthetic true."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -343,8 +354,9 @@ public final class KeyboardTools {
 		}
 
 		/** Posts the key through the window system; the answer keeps "posted" so the caller can decide on a fallback. */
-		private static JsonObject postKey(Display display, String key, Stroke stroke, int count) {
+		private static JsonObject postKey(Display display, String key, Stroke given, int count) {
 			Control focus = display.getFocusControl();
+			Stroke stroke = withCocoaShift(given);
 			boolean posted = true;
 			for (int i = 0; i < count && posted; i++) {
 				posted = post(display, stroke);
@@ -354,6 +366,7 @@ public final class KeyboardTools {
 					.put("posted", Boolean.valueOf(posted)) //$NON-NLS-1$
 					.put("focusControl", focus == null ? null : focus.getClass().getSimpleName()) //$NON-NLS-1$
 					.put("focusInsideIde", Boolean.valueOf(focus != null)) //$NON-NLS-1$
+					.put("shiftAdded", stroke == given ? null : Boolean.TRUE) //$NON-NLS-1$
 					.put("delivery", "os") //$NON-NLS-1$ //$NON-NLS-2$
 					.put("synthetic", Boolean.FALSE); //$NON-NLS-1$
 			String wayland = System.getenv("WAYLAND_DISPLAY"); //$NON-NLS-1$
@@ -365,6 +378,18 @@ public final class KeyboardTools {
 						"The session is Wayland, where a posted event may be silently ignored by the compositor even though the post was accepted. Verify the effect with a screenshot; if nothing happened, use eclipse_type_text or a command."); //$NON-NLS-1$
 			}
 			return result;
+		}
+
+		/** The stroke with Shift added where Cocoa's Display.post would otherwise type the unshifted character. */
+		private static Stroke withCocoaShift(Stroke stroke) {
+			Integer shift = Integer.valueOf(SWT.SHIFT);
+			if (!CocoaKeys.COCOA || stroke.character() == 0 || stroke.modifiers().contains(shift)
+					|| !CocoaKeys.needsShift(stroke.character())) {
+				return stroke;
+			}
+			List<Integer> modifiers = new ArrayList<>(stroke.modifiers());
+			modifiers.add(shift);
+			return new Stroke(modifiers, stroke.keyCode(), stroke.character());
 		}
 
 		private static boolean post(Display display, Stroke stroke) {
@@ -414,7 +439,8 @@ public final class KeyboardTools {
 			modifiers.add(modifier);
 		}
 		int keyCode = named(main);
-		char character = 0;
+		// Display.post finds a key that has no SWT constant by its character, so Space needs one
+		char character = keyCode == ' ' ? ' ' : 0;
 		if (keyCode == 0) {
 			if (List.of("menu", "contextmenu", "apps", "application").contains(main.toLowerCase(Locale.ROOT))) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 				throw new IllegalArgumentException(

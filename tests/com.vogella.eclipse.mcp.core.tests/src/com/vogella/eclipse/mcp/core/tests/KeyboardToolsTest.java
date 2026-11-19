@@ -27,6 +27,7 @@ class KeyboardToolsTest {
 		Map<String, Object> ctrlSpace = TestFixture.parse(KeyboardTools.describe("Ctrl+Space").toString());
 		assertEquals(Integer.valueOf(' '), ctrlSpace.get("keyCode"));
 		assertEquals(List.of(Integer.valueOf(SWT.CTRL)), ctrlSpace.get("modifiers"));
+		assertEquals(" ", ctrlSpace.get("character"), "Display.post finds the space key by its character");
 
 		Map<String, Object> escape = TestFixture.parse(KeyboardTools.describe("Escape").toString());
 		assertEquals(Integer.valueOf(SWT.ESC), escape.get("keyCode"));
