@@ -45,7 +45,7 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
  */
 final class Callees {
 
-	private static final List<String> JDK_PACKAGES = List.of("java.", "javax.", "jdk.", "sun.", "com.sun."); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
+	private static final List<String> JDK_PACKAGES = List.of("java.", "javax.", "jdk.", "sun.", "com.sun.", "com.oracle."); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
 
 	private final boolean includeJdk;
 
@@ -289,12 +289,12 @@ final class Callees {
 		return JDK_PACKAGES.stream().anyMatch(typeName::startsWith);
 	}
 
-	/** A label for a binding without a Java element, such as an implicit default constructor. */
 	/** The simple name a constructor carries, the last segment of its binary or qualified type name. */
 	private static String constructorName(String typeName) {
 		return typeName.substring(Math.max(typeName.lastIndexOf('.'), typeName.lastIndexOf('$')) + 1);
 	}
 
+	/** A label for a binding without a Java element, such as an implicit default constructor. */
 	private static String labelOf(IMethodBinding binding, String typeName) {
 		StringBuilder label = new StringBuilder(typeName).append('.')
 				.append(binding.isConstructor() ? constructorName(typeName) : binding.getName())
