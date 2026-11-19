@@ -266,7 +266,6 @@ final class QuickFixSupport {
 		return files;
 	}
 
-	/** The files of the change whose buffer is still dirty, because an editor held unsaved edits to them. */
 	/** The path a compilation unit rename gives its file, or null for any other change. */
 	private static String renamedTo(Change change) {
 		if (change instanceof RenameCompilationUnitChange rename && rename.getModifiedElement() instanceof IJavaElement unit
@@ -276,6 +275,7 @@ final class QuickFixSupport {
 		return null;
 	}
 
+	/** The files of the change whose buffer is still dirty, because an editor held unsaved edits to them. */
 	static List<String> unsavedFiles(List<IPath> textFiles) {
 		List<String> unsaved = new ArrayList<>();
 		for (IPath path : textFiles) {

@@ -9,6 +9,7 @@ import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.CompilationUnit;
@@ -232,6 +233,10 @@ public final class ApplyQuickFixTool implements IMcpTool {
 			// performing reports its own failures above, so this is before anything was written
 			disposeQuietly(change);
 			throw new McpToolException("Could not prepare the quick fix's change; nothing was changed", e); //$NON-NLS-1$
+		} catch (OperationCanceledException e) {
+			// the monitor is cancelled by the server's call timeout, not by a failure of JDT
+			disposeQuietly(change);
+			return McpToolResult.error("The call ran out of time before the fix was applied, so nothing was changed."); //$NON-NLS-1$
 		} catch (RuntimeException e) {
 			// performing reports its own failures above, so this is before anything was written
 			disposeQuietly(change);
