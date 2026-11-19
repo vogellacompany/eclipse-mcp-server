@@ -86,6 +86,20 @@ public final class QuickFixProcessor {
 	private final NullAnnotations nullAnnotations = new NullAnnotations();
 	private Exception partialFailure;
 
+	/** The first failure a subprocessor override caught on this thread so that the rest of its stage goes on. */
+	private static final ThreadLocal<CoreException> SWALLOWED = new ThreadLocal<>();
+
+	/**
+	 * Logs a failure that an override catches so that the base subprocessor can go on with its other fixes, and keeps
+	 * it for {@link #partialFailure}.
+	 */
+	static void swallowed(CoreException e) {
+		ILog.get().log(e.getStatus());
+		if (SWALLOWED.get() == null) {
+			SWALLOWED.set(e);
+		}
+	}
+
 	/**
 	 * The failure of a subprocessor in the last {@link #getCorrections} call whose other fixes were kept, or null when
 	 * every subprocessor finished.
@@ -102,6 +116,16 @@ public final class QuickFixProcessor {
 	public List<ChangeCorrectionProposalCore> getCorrections(ICompilationUnit unit, CompilationUnit astRoot,
 			IProblem problem) throws CoreException {
 		partialFailure = null;
+		SWALLOWED.remove();
+		try {
+			return corrections(unit, astRoot, problem);
+		} finally {
+			SWALLOWED.remove();
+		}
+	}
+
+	private List<ChangeCorrectionProposalCore> corrections(ICompilationUnit unit, CompilationUnit astRoot,
+			IProblem problem) throws CoreException {
 		CodeTemplates.ensureInstalled();
 		IProblemLocation location = new ProblemLocation(problem);
 		IInvocationContext context = new InvocationContext(unit, astRoot, location.getOffset(), location.getLength());
@@ -140,6 +164,10 @@ public final class QuickFixProcessor {
 			partialFailure = failure;
 		}
 
+		if (partialFailure == null) {
+			// a single fix an override dropped, already in the Error Log
+			partialFailure = SWALLOWED.get();
+		}
 		List<ChangeCorrectionProposalCore> sorted = new ArrayList<>(proposals);
 		// a factory returns null for a fix that needs JDT UI, and the subprocessors also hand lists over with addAll
 		sorted.removeIf(Objects::isNull);

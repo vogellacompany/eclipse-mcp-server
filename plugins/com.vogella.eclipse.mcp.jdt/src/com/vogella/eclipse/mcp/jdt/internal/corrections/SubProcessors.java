@@ -6,7 +6,6 @@ import java.util.Objects;
 
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.CoreException;
-import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IField;
@@ -138,7 +137,7 @@ final class SubProcessors {
 			}
 			return new CUCorrectionProposalCore(change.getName(), change.getCompilationUnit(), change, relevance);
 		} catch (CoreException e) {
-			ILog.get().log(e.getStatus());
+			QuickFixProcessor.swallowed(e);
 			return null;
 		}
 	}
@@ -667,7 +666,7 @@ final class SubProcessors {
 			try {
 				new UnresolvedElements().collectConstructorProposals(context, problem, proposals);
 			} catch (CoreException e) {
-				ILog.get().log(e.getStatus());
+				QuickFixProcessor.swallowed(e);
 			}
 		}
 
@@ -677,7 +676,7 @@ final class SubProcessors {
 			try {
 				new UnresolvedElements().collectVariableProposals(context, problem, binding, proposals);
 			} catch (CoreException e) {
-				ILog.get().log(e.getStatus());
+				QuickFixProcessor.swallowed(e);
 			}
 		}
 	}
@@ -748,6 +747,7 @@ final class SubProcessors {
 			try {
 				return proposal.hasProposal() ? proposal : null;
 			} catch (CoreException e) {
+				QuickFixProcessor.swallowed(e);
 				return null;
 			}
 		}
