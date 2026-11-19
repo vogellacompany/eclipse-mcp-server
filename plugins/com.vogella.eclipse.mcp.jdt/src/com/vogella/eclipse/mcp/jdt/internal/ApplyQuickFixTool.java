@@ -79,7 +79,7 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		if (path == null || label == null || !args.has("problemId")) { //$NON-NLS-1$
 			return McpToolResult.error("The arguments 'path', 'problemId' and 'fix' are required."); //$NON-NLS-1$
 		}
-		if (problemId == Integer.MIN_VALUE || problemId == 0 || QuickFixSupport.notAnInt(arguments, "problemId")) { //$NON-NLS-1$
+		if (problemId == Integer.MIN_VALUE || QuickFixSupport.notAnInt(arguments, "problemId")) { //$NON-NLS-1$
 			// a malformed argument, not a changed file
 			return McpToolResult.error("'problemId' must be a problem id as eclipse_get_quick_fixes lists it."); //$NON-NLS-1$
 		}
