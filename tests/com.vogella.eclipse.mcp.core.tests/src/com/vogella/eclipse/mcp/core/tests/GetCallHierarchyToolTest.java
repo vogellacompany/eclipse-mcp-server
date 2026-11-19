@@ -83,6 +83,52 @@ class GetCallHierarchyToolTest {
 		assertTrue(refreshed.get("refreshMillis") instanceof Number, "got " + refreshed);
 	}
 
+	@Test
+	void listsTheCalleesOfAMethodOncePerTargetWithTheirCount() throws Exception {
+		fixtureProject();
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("typeName", "example.Caller", "memberName",
+				"a", "project", PROJECT, "direction", "callees", "depth", Integer.valueOf(1)));
+
+		List<?> callees = (List<?>) result.get("callees");
+		Map<?, ?> target = callees.stream().map(Map.class::cast)
+				.filter(node -> "example.Target.target()".equals(node.get("callee"))).findFirst().orElseThrow(
+						() -> new AssertionError("Target.target() missing in " + result));
+		assertEquals(Integer.valueOf(3), target.get("calls"), "got " + target);
+		assertEquals(Integer.valueOf(5), target.get("line"), "the first call, got " + target);
+		assertFalse(result.containsKey("callers"), "callers were not asked for, got " + result);
+	}
+
+	@Test
+	void followsCalleesIntoSourceToTheRequestedDepthAndHidesJdkCalls() throws Exception {
+		fixtureProject();
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("typeName", "example.Caller", "memberName",
+				"b", "project", PROJECT, "direction", "callees", "depth", Integer.valueOf(2)));
+
+		Map<?, ?> a = (Map<?, ?>) ((List<?>) result.get("callees")).get(0);
+		assertEquals("example.Caller.a()", a.get("callee"), "got " + result);
+		List<?> deeper = (List<?>) a.get("callees");
+		assertTrue(deeper.stream().map(Map.class::cast).anyMatch(n -> "example.Target.target()".equals(n.get("callee"))),
+				"a calls target, got " + a);
+		assertTrue(deeper.stream().map(Map.class::cast).noneMatch(n -> String.valueOf(n.get("callee")).startsWith("java.")),
+				"JDK calls are hidden by default, got " + a);
+		assertTrue(((Number) result.get("jdkCallsHidden")).intValue() > 0, "a builds a StringBuilder, got " + result);
+	}
+
+	@Test
+	void reportsBothDirectionsInOneCall() throws Exception {
+		fixtureProject();
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("typeName", "example.Caller", "memberName",
+				"a", "project", PROJECT, "direction", "both", "depth", Integer.valueOf(1)));
+
+		Map<?, ?> caller = (Map<?, ?>) ((List<?>) result.get("callers")).get(0);
+		assertEquals("example.Caller.b()", caller.get("caller"), "got " + result);
+		assertEquals(Integer.valueOf(10), caller.get("line"), "got " + caller);
+		assertFalse(((List<?>) result.get("callees")).isEmpty(), "got " + result);
+	}
+
 	private IJavaProject fixtureProject() throws Exception {
 		IJavaProject project = fixture.createJavaProject(PROJECT);
 		TestFixture.addType(project, "example", "Target", """
@@ -99,6 +145,7 @@ class GetCallHierarchyToolTest {
 						t.target();
 						t.target();
 						t.target();
+						new StringBuilder().append(t).toString();
 					}
 					void b() { a(); }
 				}

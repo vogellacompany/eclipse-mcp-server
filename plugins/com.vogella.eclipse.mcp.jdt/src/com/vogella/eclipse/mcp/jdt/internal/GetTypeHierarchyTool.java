@@ -34,7 +34,7 @@ public final class GetTypeHierarchyTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Returns the supertypes and subtypes of a Java type as known to JDT, including types from the classpath."; //$NON-NLS-1$
+		return "Returns the supertypes and subtypes of a Java type as known to JDT, including types from the classpath. The full lists are sorted names; superclass, interfaces and directSubtypes give the immediate neighbours, which is the shape of the tree without paying for all of it, and supertypeTotal and subtypeTotal count what maxResults cut. To find the classes that can actually run behind an interface or an abstract method, use eclipse_find_implementations."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -89,14 +89,21 @@ public final class GetTypeHierarchyTool implements IMcpTool {
 			ITypeHierarchy hierarchy = wantSubtypes ? newHierarchy(type, projectName, projects, monitor)
 					: type.newSupertypeHierarchy(monitor);
 			if (wantSupertypes) {
+				IType superclass = hierarchy.getSuperclass(type);
+				result.put("superclass", superclass == null ? null : superclass.getFullyQualifiedName()); //$NON-NLS-1$
+				result.put("interfaces", toArray(names(hierarchy.getSuperInterfaces(type)), maxResults)); //$NON-NLS-1$
 				List<String> all = names(hierarchy.getAllSupertypes(type));
 				result.put("supertypes", toArray(all, maxResults)); //$NON-NLS-1$
+				result.put("supertypeTotal", all.size()); //$NON-NLS-1$
 				truncated |= all.size() > maxResults;
 			}
 			if (wantSubtypes) {
+				List<String> direct = names(hierarchy.getSubtypes(type));
+				result.put("directSubtypes", toArray(direct, maxResults)); //$NON-NLS-1$
 				List<String> all = names(hierarchy.getAllSubtypes(type));
 				result.put("subtypes", toArray(all, maxResults)); //$NON-NLS-1$
-				truncated |= all.size() > maxResults;
+				result.put("subtypeTotal", all.size()); //$NON-NLS-1$
+				truncated |= all.size() > maxResults || direct.size() > maxResults;
 			}
 		} catch (JavaModelException e) {
 			throw new McpToolException("Could not compute the type hierarchy of " + type.getFullyQualifiedName(), e); //$NON-NLS-1$

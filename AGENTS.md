@@ -117,7 +117,7 @@ A tool that needs editors, views, perspectives or commands refuses with `Workben
 Every list-returning tool honours `maxResults` and reports `total` and `truncated`.
 A picture is attached with `McpToolResult.withImage`, never as base64 inside the JSON; `eclipse_run_script` passes its steps' images on.
 Anything derived from files refreshes first through `WorkspaceSync.refresh`, since clients edit through their own shell; stale markers are worse than none.
-`eclipse_find_references`, `eclipse_get_call_hierarchy` and `eclipse_list_declarations` pay that refresh on every call, which in a workspace of hundreds of projects is most of the call, so they take `refresh` (default true, reported as `refreshed` and `refreshMillis`) to let a client that already refreshed skip it; the default stays on.
+`eclipse_find_references`, `eclipse_get_call_hierarchy`, `eclipse_find_implementations` and `eclipse_list_declarations` pay that refresh on every call, which in a workspace of hundreds of projects is most of the call, so they take `refresh` (default true, reported as `refreshed` and `refreshMillis`) to let a client that already refreshed skip it; the default stays on.
 Read what the answer needs off a widget before the action that may dispose it, and report disposal as a fact (`shellClosed`); a completed operation must never come back as a failed call.
 Never put a Java element's `toString()` into a message; use `getElementName()`, `getFullyQualifiedName()` or `JavaModelSupport.describe`.
 Build a lookup key in one helper, as `FindReferencesTool.locationOf` does; two spellings silently match nothing.
@@ -197,6 +197,8 @@ Do not undo these without understanding why they are there.
 - `SearchMatch.getResource()` names the owning project for a jar match; use `JavaModelSupport.describeLocation` and never `match.getResource().getFullPath()`.
 - `eclipse_run_tests` takes the test kind from the x-friends `TestKindRegistry.getContainerTestKindId`, because `JUnitLaunchConfigurationDelegate.preLaunchCheck` rechecks it and refuses a JUnit 6 project launched as junit5; a copy of that decision would drift from the delegate.
 - `eclipse_clean_up` deliberately depends on the discouraged `CleanUpConstants` and `*CleanUpCore` (no public alternative; `CleanUpRefactoring` drags in the UI). `RemoveUnusedImportsTool` stays on public API. Clean-up options are a tree, so `CleanUpEntry.companions` enables the parents a leaf needs.
+- Callees in `eclipse_get_call_hierarchy` come from the bindings of the method's AST (`Callees`), not the search engine, which has no callee query; the parse uses a focal position so only that body is resolved. Anonymous and local class bodies are not the method's calls, lambda bodies are.
+- `eclipse_find_implementations` decides overriding with the x-friends `MethodOverrideTester` from `jdt.core.manipulation`, which substitutes type arguments; `IType.findMethods` compares parameter signatures literally and misses `scale(Double)` implementing `scale(T)`.
 - `eclipse_delete` is an LTK resource delete, so PDE's participants do not fire and `plugin.xml` and `Export-Package` are not updated; the description says so and the answer reports dangling evidence. Do not drive JDT's internal delete processor.
 - `eclipse_list_declarations`:
   - `RegistryIndex.LITERAL_REFLECTION` needs `,` or `)` after the closing quote, so a concatenated `Class.forName` stays `undecidable`.

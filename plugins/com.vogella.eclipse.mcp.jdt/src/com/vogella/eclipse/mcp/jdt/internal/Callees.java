@@ -1,0 +1,257 @@
+package com.vogella.eclipse.mcp.jdt.internal;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.jdt.core.IMember;
+import org.eclipse.jdt.core.IMethod;
+import org.eclipse.jdt.core.ISourceRange;
+import org.eclipse.jdt.core.ITypeRoot;
+import org.eclipse.jdt.core.JavaModelException;
+import org.eclipse.jdt.core.dom.AST;
+import org.eclipse.jdt.core.dom.ASTNode;
+import org.eclipse.jdt.core.dom.ASTParser;
+import org.eclipse.jdt.core.dom.ASTVisitor;
+import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
+import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
+import org.eclipse.jdt.core.dom.ClassInstanceCreation;
+import org.eclipse.jdt.core.dom.CompilationUnit;
+import org.eclipse.jdt.core.dom.ConstructorInvocation;
+import org.eclipse.jdt.core.dom.CreationReference;
+import org.eclipse.jdt.core.dom.EnumConstantDeclaration;
+import org.eclipse.jdt.core.dom.ExpressionMethodReference;
+import org.eclipse.jdt.core.dom.IMethodBinding;
+import org.eclipse.jdt.core.dom.ITypeBinding;
+import org.eclipse.jdt.core.dom.MethodDeclaration;
+import org.eclipse.jdt.core.dom.MethodInvocation;
+import org.eclipse.jdt.core.dom.NodeFinder;
+import org.eclipse.jdt.core.dom.SuperConstructorInvocation;
+import org.eclipse.jdt.core.dom.SuperMethodInvocation;
+import org.eclipse.jdt.core.dom.SuperMethodReference;
+import org.eclipse.jdt.core.dom.TypeDeclarationStatement;
+import org.eclipse.jdt.core.dom.TypeMethodReference;
+
+import com.vogella.eclipse.mcp.core.json.JsonArray;
+import com.vogella.eclipse.mcp.core.json.JsonObject;
+
+/**
+ * Lists the methods a method body calls, from the resolved bindings of its AST, for
+ * {@code eclipse_get_call_hierarchy}'s callee direction.
+ */
+final class Callees {
+
+	private static final List<String> JDK_PACKAGES = List.of("java.", "javax.", "jdk.", "sun.", "com.sun."); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
+
+	private final boolean includeJdk;
+
+	private final GetCallHierarchyTool.Counter counter;
+
+	private final IProgressMonitor monitor;
+
+	private final Set<String> expanded = new HashSet<>();
+
+	private int jdkCallsHidden;
+
+	Callees(boolean includeJdk, GetCallHierarchyTool.Counter counter, IProgressMonitor monitor) {
+		this.includeJdk = includeJdk;
+		this.counter = counter;
+		this.monitor = monitor;
+	}
+
+	int jdkCallsHidden() {
+		return jdkCallsHidden;
+	}
+
+	/** The callees of every method in {@code methods}, each followed {@code depth} levels. */
+	JsonArray of(List<? extends IMember> methods, int depth) {
+		JsonArray nodes = new JsonArray();
+		for (IMember method : methods) {
+			if (method instanceof IMethod m && expanded.add(m.getHandleIdentifier())) {
+				calleesOf(m, depth, nodes);
+			}
+		}
+		return nodes;
+	}
+
+	private JsonArray calleesOf(IMethod method, int depth, JsonArray nodes) {
+		for (Call call : callsIn(method)) {
+			if (monitor.isCanceled() || !counter.take()) {
+				return nodes;
+			}
+			JsonObject node = new JsonObject().put("callee", call.label()); //$NON-NLS-1$
+			if (call.line() > 0) {
+				node.put("line", call.line()); //$NON-NLS-1$
+			}
+			if (call.count() > 1) {
+				node.put("calls", call.count()); //$NON-NLS-1$
+			}
+			if (call.target() == null || call.target().isBinary()) {
+				node.put("origin", "binary"); //$NON-NLS-1$ //$NON-NLS-2$
+			} else if (depth > 1 && expanded.add(call.target().getHandleIdentifier())) {
+				JsonArray deeper = calleesOf(call.target(), depth - 1, new JsonArray());
+				if (deeper.size() > 0) {
+					node.put("callees", deeper); //$NON-NLS-1$
+				}
+			}
+			nodes.add(node);
+		}
+		return nodes;
+	}
+
+	/** One callee of a body: the first line calling it and how often it is called. */
+	private record Call(String label, IMethod target, int line, int count) {
+		Call again() {
+			return new Call(label, target, line, count + 1);
+		}
+	}
+
+	private List<Call> callsIn(IMethod method) {
+		MethodDeclaration declaration = declarationOf(method);
+		if (declaration == null || declaration.getBody() == null) {
+			return List.of();
+		}
+		CompilationUnit unit = (CompilationUnit) declaration.getRoot();
+		Map<String, Call> calls = new LinkedHashMap<>();
+		declaration.getBody().accept(new ASTVisitor() {
+			@Override
+			public boolean visit(AnonymousClassDeclaration node) {
+				return false;
+			}
+
+			@Override
+			public boolean visit(TypeDeclarationStatement node) {
+				return false;
+			}
+
+			@Override
+			public boolean visit(MethodInvocation node) {
+				record(node.resolveMethodBinding(), node);
+				return true;
+			}
+
+			@Override
+			public boolean visit(SuperMethodInvocation node) {
+				record(node.resolveMethodBinding(), node);
+				return true;
+			}
+
+			@Override
+			public boolean visit(ClassInstanceCreation node) {
+				record(node.resolveConstructorBinding(), node);
+				// the arguments are evaluated here, the anonymous body is not
+				node.arguments().forEach(argument -> ((ASTNode) argument).accept(this));
+				if (node.getExpression() != null) {
+					node.getExpression().accept(this);
+				}
+				return false;
+			}
+
+			@Override
+			public boolean visit(ConstructorInvocation node) {
+				record(node.resolveConstructorBinding(), node);
+				return true;
+			}
+
+			@Override
+			public boolean visit(SuperConstructorInvocation node) {
+				record(node.resolveConstructorBinding(), node);
+				return true;
+			}
+
+			@Override
+			public boolean visit(EnumConstantDeclaration node) {
+				record(node.resolveConstructorBinding(), node);
+				return true;
+			}
+
+			@Override
+			public void endVisit(ExpressionMethodReference node) {
+				record(node.resolveMethodBinding(), node);
+			}
+
+			@Override
+			public void endVisit(SuperMethodReference node) {
+				record(node.resolveMethodBinding(), node);
+			}
+
+			@Override
+			public void endVisit(TypeMethodReference node) {
+				record(node.resolveMethodBinding(), node);
+			}
+
+			@Override
+			public void endVisit(CreationReference node) {
+				record(node.resolveMethodBinding(), node);
+			}
+
+			private void record(IMethodBinding binding, ASTNode node) {
+				if (binding == null) {
+					return;
+				}
+				IMethodBinding declared = binding.getMethodDeclaration();
+				ITypeBinding declaringType = declared.getDeclaringClass();
+				String typeName = declaringType == null ? "" : declaringType.getErasure().getQualifiedName(); //$NON-NLS-1$
+				if (!includeJdk && isJdk(typeName)) {
+					jdkCallsHidden++;
+					return;
+				}
+				IMethod target = declared.getJavaElement() instanceof IMethod found ? found : null;
+				String label = target != null ? JavaModelSupport.describe(target) : labelOf(declared, typeName);
+				String key = target != null ? target.getHandleIdentifier() : label;
+				Call earlier = calls.get(key);
+				calls.put(key, earlier != null ? earlier.again()
+						: new Call(label, target, unit.getLineNumber(node.getStartPosition()), 1));
+			}
+		});
+		return new ArrayList<>(calls.values());
+	}
+
+	private static boolean isJdk(String typeName) {
+		return JDK_PACKAGES.stream().anyMatch(typeName::startsWith);
+	}
+
+	/** A label for a binding without a Java element, such as an implicit default constructor. */
+	private static String labelOf(IMethodBinding binding, String typeName) {
+		StringBuilder label = new StringBuilder(typeName).append('.')
+				.append(binding.isConstructor() ? binding.getDeclaringClass().getErasure().getName() : binding.getName())
+				.append('(');
+		ITypeBinding[] parameters = binding.getParameterTypes();
+		for (int i = 0; i < parameters.length; i++) {
+			label.append(i == 0 ? "" : ", ").append(parameters[i].getErasure().getName()); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		return label.append(')').toString();
+	}
+
+	/** The method's declaration in a fully resolved AST, or {@code null} without source. */
+	private static MethodDeclaration declarationOf(IMethod method) {
+		ITypeRoot root = method.getTypeRoot();
+		try {
+			ISourceRange name = method.getNameRange();
+			if (root == null || name == null || name.getOffset() < 0 || root.getSource() == null) {
+				return null;
+			}
+			ASTParser parser = ASTParser.newParser(AST.getJLSLatest());
+			parser.setSource(root);
+			parser.setResolveBindings(true);
+			parser.setBindingsRecovery(true);
+			// only the body around the focal position is kept, which makes parsing a large file cheap
+			parser.setFocalPosition(name.getOffset());
+			CompilationUnit unit = (CompilationUnit) parser.createAST(null);
+			ASTNode node = NodeFinder.perform(unit, name.getOffset(), name.getLength());
+			while (node != null && !(node instanceof MethodDeclaration)) {
+				if (node instanceof AbstractTypeDeclaration) {
+					return null;
+				}
+				node = node.getParent();
+			}
+			return (MethodDeclaration) node;
+		} catch (JavaModelException e) {
+			return null;
+		}
+	}
+}

@@ -640,6 +640,7 @@ class McpServerServiceTest {
 		// workspace and outruns the client timeout on a slow machine
 		case "eclipse_get_call_hierarchy" ->
 			Map.of("typeName", "example.Sample", "methodName", "run", "project", PROJECT, "depth", 1);
+		case "eclipse_find_implementations" -> Map.of("typeName", "example.Sample", "project", PROJECT);
 		// a dry run against the sample type, so the smoke test renames nothing
 		case "eclipse_rename" -> Map.of("typeName", "example.Sample", "newName", "Renamed");
 		case "eclipse_set_preference" ->
