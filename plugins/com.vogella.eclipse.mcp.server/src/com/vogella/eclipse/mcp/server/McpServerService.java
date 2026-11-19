@@ -19,7 +19,6 @@ import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
-import org.osgi.framework.Version;
 
 import com.vogella.eclipse.mcp.core.ClientSessions;
 import com.vogella.eclipse.mcp.core.McpServerDescription;
@@ -357,8 +356,7 @@ public final class McpServerService {
 		if (bundle == null) {
 			return "0.0.0"; //$NON-NLS-1$
 		}
-		Version version = bundle.getVersion();
-		return "%d.%d.%d".formatted(version.getMajor(), version.getMinor(), version.getMicro()); //$NON-NLS-1$
+		return McpServerDescription.versionOf(bundle);
 	}
 
 	private Server createJetty(int port, String token) {

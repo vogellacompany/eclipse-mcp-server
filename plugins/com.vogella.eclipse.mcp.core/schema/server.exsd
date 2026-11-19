@@ -45,7 +45,7 @@
    <element name="instructions" type="string">
       <annotation>
          <documentation>
-            Text added to the server instructions, as the element's content. Contributions are appended to the default instructions in the order of the contributing bundles' symbolic names. Tools named in the text that are not installed are listed by the server.
+            Text added to the server instructions, as the element's content. Contributions are appended to the default instructions in the order of the contributing bundles' symbolic names. Tools named in the text with the eclipse_ prefix that are not installed are listed by the server.
          </documentation>
          <appInfo>
             <meta.element translatable="true"/>
@@ -55,7 +55,7 @@
          <attribute name="replace" type="boolean">
             <annotation>
                <documentation>
-                  When true, the server's default instructions, which describe the IDE, are left out and only the contributed texts are sent.
+                  When true, the server's default instructions, which describe the IDE, are left out and only the contributed texts are sent, even when this contribution has no text of its own.
                </documentation>
             </annotation>
          </attribute>

@@ -17,7 +17,6 @@ class McpServerDescriptionTest {
 
 	@Test
 	void keepsTheDefaultsWithoutContributions() {
-		assertEquals(DEFAULTS, McpServerDescription.read(DEFAULTS));
 		assertEquals(DEFAULTS, McpServerDescription.compose(DEFAULTS, List.of(), List.of()));
 	}
 
@@ -46,5 +45,22 @@ class McpServerDescriptionTest {
 				List.of(new Info("com.example.z", "zeta", "9.0.0"), new Info("com.example.a", "alpha", null)));
 		assertEquals("alpha", composed.name());
 		assertEquals("4.0.0", composed.version());
+	}
+
+	@Test
+	void aReplacingContributionWithoutTextStillDropsTheDefault() {
+		McpServerDescription composed = McpServerDescription.compose(DEFAULTS,
+				List.of(new Instructions("com.example.product", " ", true),
+						new Instructions("com.example.addon", "Addon.", false)),
+				List.of());
+		assertEquals("Addon.", composed.instructions());
+	}
+
+	@Test
+	void skipsAServerInfoWithoutName() {
+		McpServerDescription composed = McpServerDescription.compose(DEFAULTS, List.of(),
+				List.of(new Info("com.example.a", " ", "1.0.0"), new Info("com.example.b", "beta", "2.0.0")));
+		assertEquals("beta", composed.name());
+		assertEquals("2.0.0", composed.version());
 	}
 }

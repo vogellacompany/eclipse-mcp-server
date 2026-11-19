@@ -63,7 +63,7 @@ No reference to the MCP SDK, Jetty or any UI bundle, so tools are written and te
 When a tool outside the UI bundle needs UI integration, core declares a hook and the immediate DS component `McpUiComponent` registers the implementation; the ui bundle has no activator and no `org.eclipse.ui.startup` extension, as `LogClearedHandlers` and `UiDispatch` do.
 A failing handler never turns a completed operation into a failed call.
 Core remains provider-independent and must not depend on basic.
-The server name, version and instructions come from `McpServerDescription`, which reads the `com.vogella.eclipse.mcp.core.server` extension point once at start; `withMissingTools` runs over the composed text, so a product's instructions also get the note on tools that are not installed.
+The server name, version and instructions come from `McpServerDescription`, which reads the `com.vogella.eclipse.mcp.core.server` extension point each time the server starts; `withMissingTools` runs over the composed text, so `eclipse_*` tools named in a product's instructions also get the note on tools that are not installed.
 
 **The server starts through a declarative service, not `org.eclipse.ui.startup`.**
 `McpServerComponent` is an immediate DS component that publishes `McpServerService`, so an RCP application runs the same path as the IDE.
