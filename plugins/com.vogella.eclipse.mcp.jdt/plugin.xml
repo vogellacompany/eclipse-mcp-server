@@ -20,6 +20,8 @@
       <tool class="com.vogella.eclipse.mcp.jdt.internal.DeleteTool"/>
       <tool class="com.vogella.eclipse.mcp.jdt.internal.RemoveUnusedImportsTool"/>
       <tool class="com.vogella.eclipse.mcp.jdt.internal.CleanUpTool"/>
+      <tool class="com.vogella.eclipse.mcp.jdt.internal.GetQuickFixesTool"/>
+      <tool class="com.vogella.eclipse.mcp.jdt.internal.ApplyQuickFixTool"/>
       <tool class="com.vogella.eclipse.mcp.jdt.internal.HotCodeReplaceTool"/>
    </extension>
 

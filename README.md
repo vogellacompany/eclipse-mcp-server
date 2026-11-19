@@ -22,6 +22,7 @@ https://vogellacompany.github.io/eclipse-mcp-server/
 ```
 
 and install the **Eclipse MCP Server** feature.
+It needs Eclipse 2026-06 or newer: the Java tools build on JDT APIs that release added, so on an older IDE the install is refused.
 The site lists the newest build only.
 
 ## Building
@@ -189,6 +190,7 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_get_source`, `eclipse_get_outline`, `eclipse_search_types` | Source and Javadoc of any type or single member on the classpath, a type's members with signatures and line ranges, type search by name |
 | ✎ `eclipse_rename` | Rename through the JDT refactoring |
 | ✎ `eclipse_clean_up`, `eclipse_remove_unused_imports`, `eclipse_organize_imports`, `eclipse_format` | JDT clean-ups, import handling and formatting |
+| `eclipse_get_quick_fixes`, ✎ `eclipse_apply_quick_fix` | A file's compiler problems with JDT's quick fixes for each, and applying one, without JDT UI |
 | ✎ `eclipse_set_java_version` | Set a project's compiler level and JDK |
 | ✎ `eclipse_run_tests`, `eclipse_get_test_results` | Run JUnit tests with optional VM arguments and read the results |
 | ✎ `eclipse_hot_code_replace` | Redefine classes in the running IDE |
