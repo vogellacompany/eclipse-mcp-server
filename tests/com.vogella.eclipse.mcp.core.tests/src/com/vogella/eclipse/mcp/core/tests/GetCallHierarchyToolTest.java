@@ -117,6 +117,28 @@ class GetCallHierarchyToolTest {
 	}
 
 	@Test
+	void listsTheCalleesOfEveryOverloadEvenWhenOneCallsAnother() throws Exception {
+		IJavaProject project = fixtureProject();
+		TestFixture.addType(project, "example", "Overloads", """
+				package example;
+				public class Overloads {
+					void run() { run(1); }
+					void run(int times) { new Target().target(); }
+				}
+				""");
+		TestFixture.build(project.getProject());
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("typeName", "example.Overloads",
+				"memberName", "run", "project", PROJECT, "direction", "callees", "depth", Integer.valueOf(2)));
+
+		List<Map<?, ?>> callees = ((List<?>) result.get("callees")).stream().<Map<?, ?>>map(n -> (Map<?, ?>) n).toList();
+		assertTrue(callees.stream().anyMatch(n -> "run()".equals(n.get("from"))
+				&& "example.Overloads.run(int)".equals(n.get("callee"))), "got " + result);
+		assertTrue(callees.stream().anyMatch(n -> "run(int)".equals(n.get("from"))
+				&& "example.Target.target()".equals(n.get("callee"))), "run(int) is walked as a root too, got " + result);
+	}
+
+	@Test
 	void reportsBothDirectionsInOneCall() throws Exception {
 		fixtureProject();
 

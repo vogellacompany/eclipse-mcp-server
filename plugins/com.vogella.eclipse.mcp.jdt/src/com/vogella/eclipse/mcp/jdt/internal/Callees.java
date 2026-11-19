@@ -67,23 +67,30 @@ final class Callees {
 		return jdkCallsHidden;
 	}
 
-	/** The callees of every method in {@code methods}, each followed {@code depth} levels. */
+	/**
+	 * The callees of every method in {@code methods}, each followed {@code depth} levels.
+	 * With several overloads each top-level callee names the overload calling it in {@code from}.
+	 */
 	JsonArray of(List<? extends IMember> methods, int depth) {
+		List<IMethod> roots = methods.stream().filter(IMethod.class::isInstance).map(IMethod.class::cast)
+				.filter(m -> expanded.add(m.getHandleIdentifier())).toList();
+		// every root is marked before any is walked, so one overload calling another is listed, not expanded twice
 		JsonArray nodes = new JsonArray();
-		for (IMember method : methods) {
-			if (method instanceof IMethod m && expanded.add(m.getHandleIdentifier())) {
-				calleesOf(m, depth, nodes);
-			}
+		for (IMethod root : roots) {
+			calleesOf(root, depth, nodes, roots.size() > 1 ? JavaModelSupport.signatureOf(root) : null);
 		}
 		return nodes;
 	}
 
-	private JsonArray calleesOf(IMethod method, int depth, JsonArray nodes) {
+	private JsonArray calleesOf(IMethod method, int depth, JsonArray nodes, String from) {
 		for (Call call : callsIn(method)) {
 			if (monitor.isCanceled() || !counter.take()) {
 				return nodes;
 			}
 			JsonObject node = new JsonObject().put("callee", call.label()); //$NON-NLS-1$
+			if (from != null) {
+				node.put("from", from); //$NON-NLS-1$
+			}
 			if (call.line() > 0) {
 				node.put("line", call.line()); //$NON-NLS-1$
 			}
@@ -93,7 +100,7 @@ final class Callees {
 			if (call.target() == null || call.target().isBinary()) {
 				node.put("origin", "binary"); //$NON-NLS-1$ //$NON-NLS-2$
 			} else if (depth > 1 && expanded.add(call.target().getHandleIdentifier())) {
-				JsonArray deeper = calleesOf(call.target(), depth - 1, new JsonArray());
+				JsonArray deeper = calleesOf(call.target(), depth - 1, new JsonArray(), null);
 				if (deeper.size() > 0) {
 					node.put("callees", deeper); //$NON-NLS-1$
 				}

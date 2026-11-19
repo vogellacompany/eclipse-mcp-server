@@ -62,7 +62,7 @@ public final class GetCallHierarchyTool implements IMcpTool {
 				    "paramTypes": {"type":"array","items":{"type":"string"},"description":"Selects one overload of memberName by its parameter types, as in eclipse_find_references. Without it all overloads are followed."},
 				    "includeJdk": {"type":"boolean","default":false,"description":"Callees only: also list calls into java.*, javax.*, jdk.*, sun.* and com.sun.*, which otherwise dominate the answer."},
 				    "depth":      {"type":"integer","default":2,"minimum":1,"maximum":5,"description":"How many levels to follow. Each level costs another search, so keep it small."},
-				    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000,"description":"Maximum nodes in the whole tree."},
+				    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000,"description":"Maximum nodes in the whole answer, callers and callees together."},
 				    """ + JavaModelSupport.REFRESH_PROPERTY + """
 				  },
 				  "additionalProperties": false
