@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.p2.internal;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -20,6 +21,8 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
 /** Reports which installed units have updates, changing nothing. */
 public final class CheckForUpdatesTool implements IMcpTool {
 
+	private static final int DEFAULT_MAX_RESULTS = 200;
+
 	@Override
 	public String getName() {
 		return "eclipse_check_for_updates"; //$NON-NLS-1$
@@ -37,7 +40,8 @@ public final class CheckForUpdatesTool implements IMcpTool {
 				  "type": "object",
 				  "properties": {
 				    "units":   {"type":"array","items":{"type":"string"},"description":"Only check these installed unit ids. Scopes the whole check to the repositories that can supply them, which is one round trip instead of one per configured site. Omit to ask the broad question."},
-				    "refresh": {"type":"boolean","default":true,"description":"Re-read the repository metadata before resolving. Off means the answer may be stale; the repository timestamps say how stale."}
+				    "refresh": {"type":"boolean","default":true,"description":"Re-read the repository metadata before resolving. Off means the answer may be stale; the repository timestamps say how stale."},
+				    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000,"description":"Cap on the reported updates. total counts them all and truncated says the list was cut."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -50,7 +54,9 @@ public final class CheckForUpdatesTool implements IMcpTool {
 			return McpToolResult.error(
 					"No p2 provisioning agent is available. This IDE was probably not installed through p2, so it cannot update itself."); //$NON-NLS-1$
 		}
-		boolean refresh = ToolArguments.of(arguments).getBoolean("refresh", true); //$NON-NLS-1$
+		ToolArguments args = ToolArguments.of(arguments);
+		boolean refresh = args.getBoolean("refresh", true); //$NON-NLS-1$
+		int maxResults = args.getInt("maxResults", DEFAULT_MAX_RESULTS, 1, 2000); //$NON-NLS-1$
 		List<String> unitIds = Provisioning.stringList(arguments, "units"); //$NON-NLS-1$
 		var units = Provisioning.installedUnits(agent, unitIds);
 		if (!unitIds.isEmpty() && units.isEmpty()) {
@@ -65,7 +71,7 @@ public final class CheckForUpdatesTool implements IMcpTool {
 		operation.setProvisioningContext(Provisioning.scope(agent, locations));
 		IStatus status = operation.resolveModal(monitor);
 		JsonObject result = new JsonObject().put("resolution", status.isOK() ? "ok" : status.getMessage()); //$NON-NLS-1$ //$NON-NLS-2$
-		JsonArray updates = new JsonArray();
+		List<JsonObject> entries = new ArrayList<>();
 		Update[] possible = operation.getPossibleUpdates();
 		boolean widened = false;
 		if (locations != null && (possible == null || possible.length == 0)) {
@@ -77,12 +83,14 @@ public final class CheckForUpdatesTool implements IMcpTool {
 		}
 		if (possible != null) {
 			for (Update update : possible) {
-				updates.add(new JsonObject().put("unit", update.toUpdate.getId()) //$NON-NLS-1$
+				entries.add(new JsonObject().put("unit", update.toUpdate.getId()) //$NON-NLS-1$
 						.put("fromVersion", update.toUpdate.getVersion().toString()) //$NON-NLS-1$
 						.put("toVersion", update.replacement.getVersion().toString()) //$NON-NLS-1$
 						.put("name", update.replacement.getProperty("org.eclipse.equinox.p2.name", null))); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 		}
+		CappedList capped = CappedList.cap(entries, maxResults);
+		JsonArray updates = capped.listed();
 		result.put("metadataRefreshed", refresh) //$NON-NLS-1$
 				.put("scopedToUnits", unitIds.isEmpty() ? null : String.join(", ", unitIds)) //$NON-NLS-1$
 				.put("widenedToAllRepositories", Boolean.valueOf(widened)); //$NON-NLS-1$
@@ -90,11 +98,12 @@ public final class CheckForUpdatesTool implements IMcpTool {
 			result.put("scopeNote", //$NON-NLS-1$
 					"Scoping to the repositories that can supply the named units found nothing, so every enabled repository was searched instead. That scope is where the INSTALLED version lives, and an update is published somewhere else: with a composite whose child location changes per release, the child the current version came from is the one that will never hold a newer one."); //$NON-NLS-1$
 		}
-		if (updates.size() == 0 && !refresh) {
+		if (capped.total() == 0 && !refresh) {
 			result.put("caveat", //$NON-NLS-1$
 					"Nothing was found, but the repository metadata was read from p2's cache rather than from the network, so a newly published build would not be visible. Run again with refresh true before concluding that this IDE is current."); //$NON-NLS-1$
 		}
-		return McpToolResult.of(result.put("total", updates.size()) //$NON-NLS-1$
+		return McpToolResult.of(result.put("total", Integer.valueOf(capped.total())) //$NON-NLS-1$
+				.put("truncated", Boolean.valueOf(capped.truncated())) //$NON-NLS-1$
 				.put("updates", updates) //$NON-NLS-1$
 				.put("configuredRepositories", repositories) //$NON-NLS-1$
 				.toString());
