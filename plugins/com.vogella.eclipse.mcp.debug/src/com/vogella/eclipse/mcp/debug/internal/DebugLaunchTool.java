@@ -109,6 +109,9 @@ public final class DebugLaunchTool implements IMcpTool {
 					? replaceExisting(registry, configuration.getName())
 					: null;
 			DebugSessionRegistry.Session session = registry.prepare(configuration.getName());
+			if (session == null) {
+				return McpToolResult.error("A launch of '%s' started through MCP is still starting; wait for it or use its session id".formatted(configuration.getName())); //$NON-NLS-1$
+			}
 			if (args.getBoolean("quiet", true)) { //$NON-NLS-1$
 				session.holdQuiet();
 			}
@@ -130,9 +133,13 @@ public final class DebugLaunchTool implements IMcpTool {
 						registry.attachLaunched(session, launched);
 					}
 				} catch (CoreException | RuntimeException e) {
-					session.failed(e.getMessage() == null ? String.valueOf(e) : e.getMessage());
+					registry.fail(session, e.getMessage() == null ? String.valueOf(e) : e.getMessage());
 				} finally {
 					CompileErrorPrompt.restore();
+					// an uncaught Error or a missing launch must not leave the name pending forever
+					if (!session.registered()) {
+						registry.fail(session, "The launch produced no debug session."); //$NON-NLS-1$
+					}
 				}
 				return org.eclipse.core.runtime.Status.OK_STATUS;
 			}).schedule();

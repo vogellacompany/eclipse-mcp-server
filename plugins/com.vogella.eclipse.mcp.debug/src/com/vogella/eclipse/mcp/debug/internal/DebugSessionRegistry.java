@@ -262,11 +262,20 @@ public final class DebugSessionRegistry {
 
 	/**
 	 * Creates the session a tool is about to launch, before the job runs, so that no
-	 * launch event can arrive unassigned.
+	 * launch event can arrive unassigned. Returns {@code null} to refuse a second launch
+	 * of a configuration whose first launch has not attached or failed yet.
 	 */
 	public synchronized Session prepare(String configName) {
 		listen();
 		prune();
+		Session existing = pending.get(configName);
+		if (existing != null) {
+			if (!existing.registered()) {
+				return null;
+			}
+			// a resolved session should already be gone from pending; never let it block a launch
+			clearPending(existing);
+		}
 		String id = "debug-" + ids.incrementAndGet(); //$NON-NLS-1$
 		Session session = new Session(id, true, configName);
 		sessions.put(id, session);
@@ -488,13 +497,23 @@ public final class DebugSessionRegistry {
 	}
 
 	/** Attaches a launch the launch job got back, for one that produced no launch event. */
-	void attachLaunched(Session session, ILaunch launched) {
-		synchronized (this) {
-			if (session.expectedConfigName() != null) {
-				pending.remove(session.expectedConfigName(), session);
-			}
-		}
+	public void attachLaunched(Session session, ILaunch launched) {
+		clearPending(session);
 		session.attach(launched);
+	}
+
+	/** Frees a session's pending slot and records why its launch failed. */
+	public void fail(Session session, String message) {
+		clearPending(session);
+		session.failed(message);
+	}
+
+	/** Frees a session's pending slot, leaving a newer session under the same name alone. */
+	private synchronized void clearPending(Session session) {
+		String name = session.expectedConfigName();
+		if (name != null) {
+			pending.remove(name, session);
+		}
 	}
 
 	/** Assigns an id to every debug launch in the IDE, ours or not. */
@@ -602,9 +621,7 @@ public final class DebugSessionRegistry {
 			Session session = iterator.next().getValue();
 			if (session.terminatedAt() > 0 && now - session.terminatedAt() > KEEP_TERMINATED_MILLIS) {
 				iterator.remove();
-				if (session.expectedConfigName() != null) {
-					pending.remove(session.expectedConfigName());
-				}
+				clearPending(session);
 			}
 		}
 		while (sessions.size() > MAX_SESSIONS && dropOldestTerminated()) {
