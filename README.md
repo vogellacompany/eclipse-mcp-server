@@ -141,6 +141,7 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_read_file`, `eclipse_read_working_copy`, `eclipse_search_text`, `eclipse_find_resources` | Read files as saved or with the unsaved changes of their working copy, search their text, find files by name in workspace, target platform and installation |
 | `eclipse_read_image` | Return a PNG, JPEG, GIF or WebP from a project as an image the model can see |
 | ✎ `eclipse_write_file`, `eclipse_edit_file` | Write a file or replace a passage, keeping the old content in local history |
+| ✎ `eclipse_edit_working_copy` | Replace a passage in the unsaved text of an open editor, without saving |
 | `eclipse_get_local_history`, ✎ `eclipse_restore_local_history` | List, read and restore the versions Eclipse keeps of a file, including a deleted one |
 | ✎ `eclipse_delete` | Delete a source file, reporting registry and manifest entries that would dangle |
 | ✎ `eclipse_refresh`, `eclipse_save_workspace` | Pick up external changes, save the workspace |

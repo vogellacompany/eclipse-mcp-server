@@ -32,7 +32,7 @@ public final class EditFileTool implements IMcpTool {
 	private static final int CONTEXT_LINES = 3;
 
 	/** Occurrence lines reported for one edit; {@code replacements} still gives the full count. */
-	private static final int MAX_CHANGED_LINES = 100;
+	static final int MAX_CHANGED_LINES = 100;
 
 	@Override
 	public String getName() {
@@ -41,7 +41,7 @@ public final class EditFileTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Replaces one passage of a workspace file with another. MODIFIES THE WORKSPACE. This is how a file is changed without resending it: eclipse_write_file takes the complete content, so changing one line of an 800 line file through it means reading and returning all 800. THE EDIT IS CHECKED AGAINST WHAT YOU BELIEVE IS THERE: oldText that matches nothing is refused, and oldText that matches more than once is refused with the count unless replaceAll is set, so an edit made on a stale reading of the file fails instead of landing somewhere unintended. Line endings need no attention: a file written with CRLF is matched against text given with LF, and the answer reports lineDelimiter when that is what happened. Give enough surrounding text to be unique rather than a bare identifier. Writing goes through the workspace, so the file keeps its charset, the resource tree sees the change at once, and the previous content goes into the local history where Compare With > Local History recovers it. The answer shows the changed lines with context. Use eclipse_format afterwards for Java."; //$NON-NLS-1$
+		return "Replaces one passage of a workspace file with another. MODIFIES THE WORKSPACE. This is how a file is changed without resending it: eclipse_write_file takes the complete content, so changing one line of an 800 line file through it means reading and returning all 800. THE EDIT IS CHECKED AGAINST WHAT YOU BELIEVE IS THERE: oldText that matches nothing is refused, and oldText that matches more than once is refused with the count unless replaceAll is set, so an edit made on a stale reading of the file fails instead of landing somewhere unintended. Line endings need no attention: a file written with CRLF is matched against text given with LF, and the answer reports lineDelimiter when that is what happened. Give enough surrounding text to be unique rather than a bare identifier. Writing goes through the workspace, so the file keeps its charset, the resource tree sees the change at once, and the previous content goes into the local history where Compare With > Local History recovers it. The answer shows the changed lines with context. Use eclipse_format afterwards for Java. For a file with unsaved changes in an open editor, eclipse_edit_working_copy changes the editor's text instead of writing the disk underneath it."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -160,7 +160,7 @@ public final class EditFileTool implements IMcpTool {
 	}
 
 	/** The lines the first occurrences start on, since one number cannot describe a replaceAll. */
-	private static JsonArray changedLines(String content, String oldText) {
+	static JsonArray changedLines(String content, String oldText) {
 		var lines = new JsonArray();
 		int line = 1;
 		int counted = 0;
@@ -189,13 +189,13 @@ public final class EditFileTool implements IMcpTool {
 	 * with mixed endings is one an editor has already half converted, and its next
 	 * line break is the one this edit has to land beside.
 	 */
-	private static boolean usesCrlf(String content) {
+	static boolean usesCrlf(String content) {
 		int at = content.indexOf('\n');
 		return at > 0 && content.charAt(at - 1) == '\r';
 	}
 
 	/** The text with every bare LF turned into CRLF, leaving CRLF that is already there. */
-	private static String toCrlf(String text) {
+	static String toCrlf(String text) {
 		return text.replace("\r\n", "\n").replace("\n", "\r\n"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 	}
 

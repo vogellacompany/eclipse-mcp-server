@@ -644,6 +644,8 @@ class McpServerServiceTest {
 		// a dry run against the fixture, so the smoke test edits nothing
 		case "eclipse_edit_file" -> Map.of("path", "/" + PROJECT + "/src/example/Sample.java",
 				"oldText", "class Sample", "newText", "class Sample", "dryRun", Boolean.TRUE);
+		// nothing has the fixture open, so this answers workingCopy false and edits nothing
+		case "eclipse_edit_working_copy" -> Map.of("path", SAMPLE, "oldText", "class Sample", "newText", "class Sample");
 		// dry run: the smoke test must not launch a JVM
 		case "eclipse_run_tests" -> Map.of("project", PROJECT, "dryRun", Boolean.TRUE);
 		case "eclipse_open" -> Map.of("path", SAMPLE);
