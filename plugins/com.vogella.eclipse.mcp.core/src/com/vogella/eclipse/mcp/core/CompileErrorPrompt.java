@@ -1,5 +1,7 @@
 package com.vogella.eclipse.mcp.core;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.eclipse.core.runtime.preferences.InstanceScope;
 
 /**
@@ -9,7 +11,8 @@ import org.eclipse.core.runtime.preferences.InstanceScope;
  * Launching with compile errors otherwise raises a modal dialog, which blocks a
  * call nobody is watching and reports as a launch that never started. The value
  * is set around the launch and put back afterwards, so a person's own Run As
- * keeps prompting.
+ * keeps prompting. Suppressions are counted so overlapping launches cannot
+ * restore each other's setting.
  */
 public final class CompileErrorPrompt {
 
@@ -25,6 +28,10 @@ public final class CompileErrorPrompt {
 	 */
 	private static final String PROCEED = "always"; //$NON-NLS-1$
 
+	private static final AtomicInteger SUPPRESSED = new AtomicInteger();
+
+	private static volatile String previous;
+
 	private CompileErrorPrompt() {
 	}
 
@@ -33,23 +40,39 @@ public final class CompileErrorPrompt {
 		return InstanceScope.INSTANCE.getNode(DEBUG_UI).get(KEY, null);
 	}
 
-	/** Answers the prompt for the next launch, returning what to pass to {@link #restore}. */
-	public static String suppress() {
-		String previous = effectiveValue();
+	/**
+	 * Answers the prompt for the next launch, returning the user's original value
+	 * to report. Only the first caller writes "always"; later ones just count.
+	 */
+	public static synchronized String suppress() {
+		if (SUPPRESSED.getAndIncrement() > 0) {
+			return previous;
+		}
+		previous = effectiveValue();
 		InstanceScope.INSTANCE.getNode(DEBUG_UI).put(KEY, PROCEED);
 		return previous;
 	}
 
 	/**
-	 * Puts the preference back. A key that was absent is removed rather than
-	 * written back as a value, or this would pin a setting the user never had.
+	 * Puts the preference back once the last suppressed launch has ended. A key
+	 * that was absent is removed rather than written back as a value, or this
+	 * would pin a setting the user never had.
 	 */
-	public static void restore(String previous) {
+	public static synchronized void restore() {
+		if (SUPPRESSED.get() == 0 || SUPPRESSED.decrementAndGet() > 0) {
+			return;
+		}
 		var node = InstanceScope.INSTANCE.getNode(DEBUG_UI);
 		if (previous == null) {
 			node.remove(KEY);
 		} else {
 			node.put(KEY, previous);
 		}
+		previous = null;
+	}
+
+	/** How many launches currently hold the suppression. */
+	public static int held() {
+		return SUPPRESSED.get();
 	}
 }
