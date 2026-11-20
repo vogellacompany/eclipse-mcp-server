@@ -171,7 +171,7 @@ public final class LaunchShortcutTool implements IMcpTool {
 			return McpToolResult.of(report(result, manager, knownConfigurations, started, maxResults).toString());
 		} finally {
 			manager.removeLaunchListener(listener);
-			CompileErrorPrompt.restore(promptWas);
+			CompileErrorPrompt.restore();
 		}
 	}
 
