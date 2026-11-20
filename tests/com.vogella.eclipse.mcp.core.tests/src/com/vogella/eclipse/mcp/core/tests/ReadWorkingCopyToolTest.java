@@ -3,8 +3,6 @@ package com.vogella.eclipse.mcp.core.tests;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
@@ -78,6 +76,18 @@ class ReadWorkingCopyToolTest {
 	}
 
 	@Test
+	void reportsTheRealSizeOfAWorkingCopyOverMaxBytes() throws Exception {
+		IFile file = fixture.write("Large.java", "class Large {\n}\n");
+		fixture.connect(file).getDocument().set("0123456789".repeat(10));
+
+		Map<String, Object> result = TestFixture.callAndParse(TOOL,
+				Map.of("path", file.getFullPath().toString(), "maxBytes", 40));
+
+		assertEquals(Boolean.FALSE, result.get("read"), "got " + result);
+		assertEquals(100, ((Number) result.get("bytes")).intValue(), "got " + result);
+	}
+
+	@Test
 	void reportsAMissingFile() throws Exception {
 		IFile file = fixture.write("Present.java", "class Present {\n}\n");
 		String missing = file.getProject().getFullPath().append("Missing.java").toString();
@@ -93,7 +103,7 @@ class ReadWorkingCopyToolTest {
 		IFile file = fixture.write("Shell.java", "class Shell {\n}\n");
 		fixture.connect(file);
 		// a client editing through its own shell, behind the workspace's back
-		Files.writeString(file.getLocation().toPath(), "class Shell {\n\tint onDisk;\n}\n", StandardCharsets.UTF_8);
+		WorkingCopyFixture.writeOutside(file, "class Shell {\n\tint onDisk;\n}\n");
 
 		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("path", file.getFullPath().toString()));
 
@@ -106,7 +116,7 @@ class ReadWorkingCopyToolTest {
 	void keepsUnsavedTextTheDiskHasMovedAwayFrom() throws Exception {
 		IFile file = fixture.write("Moved.java", "class Moved {\n}\n");
 		fixture.connect(file).getDocument().set("class Moved {\n\tint unsaved;\n}\n");
-		Files.writeString(file.getLocation().toPath(), "class Moved {\n\tint onDisk;\n}\n", StandardCharsets.UTF_8);
+		WorkingCopyFixture.writeOutside(file, "class Moved {\n\tint onDisk;\n}\n");
 
 		Map<String, Object> result = TestFixture.callAndParse(TOOL, Map.of("path", file.getFullPath().toString()));
 

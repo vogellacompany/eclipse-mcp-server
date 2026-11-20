@@ -100,7 +100,7 @@ public final class ReadWorkingCopyTool implements IMcpTool {
 		result.put("workingCopy", Boolean.TRUE) //$NON-NLS-1$
 				.put("dirty", Boolean.valueOf(workingCopy.dirty())) //$NON-NLS-1$
 				.put("synchronized", Boolean.valueOf(workingCopy.inSync())) //$NON-NLS-1$
-				.put("bytes", Integer.valueOf(Math.min(bytes, maxBytes))) //$NON-NLS-1$
+				.put("bytes", Integer.valueOf(bytes)) //$NON-NLS-1$
 				.put("charset", charset); //$NON-NLS-1$
 		if (bytes > maxBytes) {
 			return McpToolResult.of(result.put("read", Boolean.FALSE) //$NON-NLS-1$

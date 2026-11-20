@@ -5,6 +5,7 @@ import org.eclipse.core.filebuffers.ITextFileBuffer;
 import org.eclipse.core.filebuffers.ITextFileBufferManager;
 import org.eclipse.core.filebuffers.LocationKind;
 import org.eclipse.core.resources.IFile;
+import org.eclipse.jface.text.IDocument;
 
 import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.UiDispatch;
@@ -37,12 +38,16 @@ final class WorkingCopies {
 	 * to it in time throws {@link java.util.concurrent.TimeoutException}.
 	 */
 	static Snapshot read(IFile file) throws Exception {
-		ITextFileBuffer buffer = find(file);
-		if (buffer == null) {
+		// checked here first, so a file nobody has open never waits for the UI thread
+		if (find(file) == null) {
 			return null;
 		}
-		return UiDispatch.call(
-				() -> new Snapshot(buffer.getDocument().get(), buffer.isDirty(), buffer.isSynchronized()),
-				CallBudget.uiWaitSeconds(0));
+		return UiDispatch.call(() -> {
+			// looked up again: an editor that closed meanwhile has disposed the buffer it held
+			ITextFileBuffer buffer = find(file);
+			IDocument document = buffer == null ? null : buffer.getDocument();
+			return document == null ? null
+					: new Snapshot(document.get(), buffer.isDirty(), buffer.isSynchronized());
+		}, CallBudget.uiWaitSeconds(0));
 	}
 }
