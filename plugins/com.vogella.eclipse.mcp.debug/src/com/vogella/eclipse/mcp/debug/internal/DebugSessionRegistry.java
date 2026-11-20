@@ -10,6 +10,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.eclipse.core.runtime.CoreException;
@@ -88,7 +89,7 @@ public final class DebugSessionRegistry {
 
 		private volatile ILaunch launch;
 
-		private volatile long terminatedAt;
+		private final AtomicLong terminatedAt = new AtomicLong();
 
 		private volatile IThread suspendedThread;
 
@@ -97,7 +98,7 @@ public final class DebugSessionRegistry {
 		private volatile String failure;
 
 		private ScheduledFuture<?> autoTerminate;
-		private volatile boolean quietHeld;
+		private final AtomicBoolean quietHeld = new AtomicBoolean();
 
 		Session(String id, boolean startedByMcp, String expectedConfigName) {
 			this.id = id;
@@ -131,9 +132,7 @@ public final class DebugSessionRegistry {
 
 		void failed(String message) {
 			failure = message;
-			if (terminatedAt == 0) {
-				terminatedAt = System.currentTimeMillis();
-			}
+			terminatedAt.compareAndSet(0, System.currentTimeMillis());
 			cancelAutoTerminate();
 			releaseQuiet();
 			registered.countDown();
@@ -147,15 +146,14 @@ public final class DebugSessionRegistry {
 		 * would restore them before the exception that would trip them.
 		 */
 		void holdQuiet() {
-			if (!quietHeld) {
-				quietHeld = true;
+			if (quietHeld.compareAndSet(false, true)) {
 				LaunchPrompts.quiet();
 			}
 		}
 
 		private void releaseQuiet() {
-			if (quietHeld) {
-				quietHeld = false;
+			// failed() and terminated() can race here; only one must release the hold
+			if (quietHeld.compareAndSet(true, false)) {
 				LaunchPrompts.release();
 			}
 		}
@@ -174,17 +172,17 @@ public final class DebugSessionRegistry {
 
 		public boolean terminated() {
 			ILaunch current = launch;
-			if (terminatedAt == 0 && current != null && current.isTerminated()) {
-				terminatedAt = System.currentTimeMillis();
+			if (terminatedAt.get() == 0 && current != null && current.isTerminated()
+					&& terminatedAt.compareAndSet(0, System.currentTimeMillis())) {
 				cancelAutoTerminate();
 				// the one transition point, so the settings go back exactly once
 				releaseQuiet();
 			}
-			return terminatedAt > 0 || (current != null && current.isTerminated());
+			return terminatedAt.get() > 0 || (current != null && current.isTerminated());
 		}
 
 		long terminatedAt() {
-			return terminatedAt;
+			return terminatedAt.get();
 		}
 
 		/**
