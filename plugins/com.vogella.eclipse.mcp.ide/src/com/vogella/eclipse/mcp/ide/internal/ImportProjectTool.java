@@ -276,6 +276,7 @@ public final class ImportProjectTool implements IMcpTool {
 
 		JsonObject answer = new JsonObject().put("dryRun", Boolean.valueOf(dryRun)) //$NON-NLS-1$
 				.put("found", Integer.valueOf(proposals.size())) //$NON-NLS-1$
+				.put("total", Integer.valueOf(proposals.size())) //$NON-NLS-1$
 				.put("imported", Integer.valueOf(importedNames.size())) //$NON-NLS-1$
 				.put("listed", Integer.valueOf(projects.size())) //$NON-NLS-1$
 				.put("truncated", Boolean.valueOf(projects.size() < proposals.size())) //$NON-NLS-1$
