@@ -48,14 +48,7 @@ public final class CommandRegistry {
 
 	private final AtomicLong ids = new AtomicLong();
 
-	private final Map<String, Execution> executions = new LinkedHashMap<>() {
-		private static final long serialVersionUID = 1L;
-
-		@Override
-		protected boolean removeEldestEntry(Map.Entry<String, Execution> eldest) {
-			return size() > HISTORY && !eldest.getValue().isRunning();
-		}
-	};
+	private final Map<String, Execution> executions = new LinkedHashMap<>();
 
 	private String lastId;
 
@@ -186,6 +179,7 @@ public final class CommandRegistry {
 		String id = "command-" + ids.incrementAndGet(); //$NON-NLS-1$
 		Execution execution = new Execution(id, List.copyOf(command), directory.toString());
 		executions.put(id, execution);
+		evictFinished();
 		lastId = id;
 
 		Job job = Job.create("Running " + String.join(" ", command), (IProgressMonitor monitor) -> { //$NON-NLS-1$ //$NON-NLS-2$
@@ -226,6 +220,23 @@ public final class CommandRegistry {
 		job.setPriority(Job.LONG);
 		job.schedule();
 		return execution;
+	}
+
+	/** Drops the oldest finished commands until at most HISTORY remain; running ones are kept. */
+	private void evictFinished() {
+		while (executions.size() > HISTORY) {
+			String oldestFinished = null;
+			for (Map.Entry<String, Execution> entry : executions.entrySet()) {
+				if (!entry.getValue().isRunning()) {
+					oldestFinished = entry.getKey();
+					break;
+				}
+			}
+			if (oldestFinished == null) {
+				return;
+			}
+			executions.remove(oldestFinished);
+		}
 	}
 
 	/**
