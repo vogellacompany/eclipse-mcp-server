@@ -8,13 +8,23 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.vogella.eclipse.mcp.server.internal.PrivateFiles;
 import com.vogella.eclipse.mcp.server.internal.TokenStore;
 
 /**
@@ -96,6 +106,40 @@ class TokenStoreTest {
 		}
 		try (var listing = Files.list(directory)) {
 			assertTrue(listing.allMatch(path -> path.equals(file)), "only the token file should remain");
+		}
+	}
+
+	@Test
+	void concurrentWritesAllSucceedAndLeaveNoTemporaryBehind() throws Exception {
+		Path file = directory.resolve("token");
+		int writers = 8;
+		int rounds = 20;
+		List<String> contents = IntStream.range(0, writers).mapToObj(i -> "token-" + i).toList();
+		CyclicBarrier start = new CyclicBarrier(writers);
+		ExecutorService pool = Executors.newFixedThreadPool(writers);
+		List<Future<Void>> results = new ArrayList<>();
+		try {
+			for (String content : contents) {
+				results.add(pool.submit(() -> {
+					start.await();
+					for (int round = 0; round < rounds; round++) {
+						PrivateFiles.write(file, content);
+					}
+					return null;
+				}));
+			}
+			for (Future<Void> result : results) {
+				result.get(30, TimeUnit.SECONDS);
+			}
+		} finally {
+			pool.shutdownNow();
+		}
+		assertTrue(contents.contains(Files.readString(file).strip()), "the file holds one of the written tokens");
+		if (Files.getFileAttributeView(file, PosixFileAttributeView.class) != null) {
+			assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file)));
+		}
+		try (var listing = Files.list(directory)) {
+			assertTrue(listing.allMatch(path -> path.equals(file)), "no temporary file should be left behind");
 		}
 	}
 }
