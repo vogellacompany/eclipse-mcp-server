@@ -661,7 +661,7 @@ class McpServerServiceTest {
 		// a dry run against a name that matches nothing, so the smoke test changes nothing
 		case "eclipse_set_project_state" -> Map.of("state", "open", "namePattern", "no-such-project-*");
 		case "eclipse_organize_imports", "eclipse_format" -> Map.of("path", SAMPLE);
-		case "eclipse_read_file", "eclipse_get_local_history" -> Map.of("path", SAMPLE);
+		case "eclipse_read_file", "eclipse_read_working_copy", "eclipse_get_local_history" -> Map.of("path", SAMPLE);
 		// a dry run, so the smoke test restores nothing
 		case "eclipse_restore_local_history" -> Map.of("path", TARGET, "dryRun", Boolean.TRUE);
 		case "eclipse_read_image" -> Map.of("path", IMAGE);

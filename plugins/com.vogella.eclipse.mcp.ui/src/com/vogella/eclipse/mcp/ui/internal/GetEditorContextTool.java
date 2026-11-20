@@ -35,7 +35,7 @@ public final class GetEditorContextTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Returns the file currently open in the active Eclipse editor, the cursor position and the current selection, plus every open editor with its dirty flag. Use it to resolve vague references such as \"this method\" or \"the file I am looking at\", and to find out whether a file you are about to read from disk has unsaved changes in the IDE."; //$NON-NLS-1$
+		return "Returns the file currently open in the active Eclipse editor, the cursor position and the current selection, plus every open editor with its dirty flag. Use it to resolve vague references such as \"this method\" or \"the file I am looking at\", and to find out whether a file you are about to read from disk has unsaved changes in the IDE; eclipse_read_working_copy returns that unsaved text."; //$NON-NLS-1$
 	}
 
 	@Override
