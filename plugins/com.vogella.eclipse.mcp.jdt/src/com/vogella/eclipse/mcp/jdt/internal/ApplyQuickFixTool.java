@@ -231,6 +231,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 								: ".")); //$NON-NLS-1$
 			}
 		} catch (LinkageError e) {
+			// performing reports its own failures above, so this is before anything was written
+			disposeQuietly(change);
 			return failed("apply the quick fix", new IllegalStateException(QuickFixSupport.mismatch(e), e)); //$NON-NLS-1$
 		} catch (CoreException e) {
 			// performing reports its own failures above, so this is before anything was written
