@@ -109,7 +109,7 @@ The `workspace` field in the discovery file tells which workspace an endpoint se
 After `eclipse_restart`, compare `startedAt` to know the new server is up; some clients need a manual reconnect, in Claude Code through `/mcp`.
 
 Several clients can share one server.
-While more than one is connected, `eclipse_get_build_status`, `eclipse_get_test_results`, `eclipse_stop_sampling` and `eclipse_get_provisioning_status` refuse to guess "the most recent" entry, so pass the id explicitly.
+While more than one is connected, `eclipse_get_build_status`, `eclipse_get_test_results` and `eclipse_get_provisioning_status` refuse to guess "the most recent" entry, so pass the id explicitly.
 
 The server offers tools only: `initialize`, `ping`, `tools/list` and `tools/call`.
 Every tool returns pretty-printed JSON, and every list-returning tool honours `maxResults` and reports `total` and `truncated`.
@@ -155,7 +155,6 @@ Tools marked ✎ change something; the rest are read-only.
 | ✎ `eclipse_build`, `eclipse_cancel_build`, `eclipse_get_build_status` | Run builders as a job and poll the result |
 | `eclipse_wait_until_quiet`, `eclipse_pause` | Wait for builds and refreshes, or for a fixed time |
 | `eclipse_get_log_entries`, `eclipse_mark_log` | Read the Error Log, optionally from a marker |
-| `eclipse_get_startup_timing` | When the process, framework, application and main window started and what each bundle activation took, each measured or null with a reason |
 | ✎ `eclipse_clear_log`, `eclipse_log_status` | Empty the Error Log, write an entry into it |
 | `eclipse_get_preferences`, ✎ `eclipse_set_preference` | Read and write preferences, with the scope each value comes from |
 | ✎ `eclipse_run_command`, `eclipse_get_command_output` | Run a shell command in a named directory and poll its output |
@@ -192,8 +191,6 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_list_launch_configurations`, ✎ `eclipse_debug_launch` | List and start launches |
 | `eclipse_debug_status`, `eclipse_debug_get_frames` | Sessions, threads, frames and variables |
 | ✎ `eclipse_debug_evaluate`, `eclipse_debug_control` | Evaluate expressions, step, resume and terminate |
-| `eclipse_start_sampling`, `eclipse_stop_sampling`, `eclipse_show_trace` | Sample thread stacks to profile or diagnose a freeze, and render them as a flame graph |
-| `eclipse_start_flight_recording`, `eclipse_stop_flight_recording` | Record the IDE's JVM with Java Flight Recorder, or read any `.jfr`, and report allocation, time per thread and window, what was thrown, and a flame graph of bytes or time |
 
 **Git**
 

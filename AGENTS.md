@@ -111,7 +111,7 @@ A tool that needs one of them goes into the ide bundle, which reaches `UiThread`
 A tool that needs editors, views, perspectives or commands refuses with `Workbenches.noIde()`.
 
 **Optional dependencies live in one class each.**
-`CssStyling` (e4 CSS engine), `GitContent` (jgit, in the ide bundle) and `FlightRecording` (`jdk.jfr`) are imported optionally and callers catch `LinkageError`; never let one of their types into a signature a tool touches.
+`CssStyling` (e4 CSS engine) and `GitContent` (jgit, in the ide bundle) are imported optionally and callers catch `LinkageError`; never let one of their types into a signature a tool touches.
 `CocoaKeys`, `DisplayScaling`, `NativeAppKit`, `NativeComboList`, `NativeDialogs`, `NativeForeground`, `NativeScreen`, `NativeStacking` and `NativeWindowState` reach SWT internals (`DPIUtil`, `cocoa.NSApplication`, `gtk.GTK`, `win32.OS`) by name, so the bundle stays cross platform.
 
 **Answers.**
@@ -123,13 +123,8 @@ Read what the answer needs off a widget before the action that may dispose it, a
 Never put a Java element's `toString()` into a message; use `getElementName()`, `getFullyQualifiedName()` or `JavaModelSupport.describe`.
 Build a lookup key in one helper, as `FindReferencesTool.locationOf` does; two spellings silently match nothing.
 
-**Startup timing is observed, never reconstructed.**
-The platform keeps no record of its startup phases, so `StartupCaptureComponent` (basic) and `StartupUiCapture` (ui, started by `McpUiComponent`) write them into core's `StartupTimeline` as they happen, and `eclipse_get_startup_timing` answers a phase nobody saw as null with a reason, never an estimate.
-`StartupCaptureComponent.activate` runs nested in SCR like `McpServerComponent` and touches only the OSGi API and core's `StartupTimeline`, which holds no OSGi or Platform reference; basic does not require the `osgi.component` extender, because without SCR it loses only this capture, since its tools come from the extension point.
-Never load SWT off the UI thread to watch for the Display or an earlier shell: `Device`'s static initializer loads `Display`, so it races the main thread's own initialization and can hang the IDE on start.
-
 **"The most recent" is ambiguous with more than one client.**
-The build, test run, sampling and provisioning registries are per IDE, so those tools consult `ClientSessions` and refuse the implicit default when a second client is connected.
+The build, test run and provisioning registries are per IDE, so those tools consult `ClientSessions` and refuse the implicit default when a second client is connected.
 `ActiveSessions` counts `Mcp-Session-Id` headers and drops a session on its DELETE; with no provider (headless, tests) the count is one.
 
 ## Tests and CI
@@ -165,7 +160,6 @@ Do not undo these without understanding why they are there.
 - `McpServerService.start` binds the port before it loads the tools, and `ReadyGate` holds requests until they are loaded. Claude Code gives up reconnecting after five refused attempts, about 15 seconds, so loading first would leave it disconnected after most restarts. A held request waits at most `READY_WAIT_MILLIS`, 25 seconds, which is kept below Claude Code's 30 second connection timeout by hand.
 - `BundleJsonSchemaValidator` clears the context class loader, or networknt fails with `FileNotFoundException: classpath:draft/2020-12/schema`; any MCP client built inside the IDE needs the same (`McpServerServiceTest.schemaValidator()`).
 - The MCP SDK gets an explicit `jsonMapper` and `jsonSchemaValidator`; `ServiceLoader` discovery across bundles is fragile.
-- Profiles leave the server out through `ServerFrames` and report how much was dropped; `includeMcpFrames` profiles the server itself.
 
 ### Workspace, build and log tools
 
@@ -247,18 +241,6 @@ Do not undo these without understanding why they are there.
 - On native Wayland, `MutterRemoteDesktop` drives `eclipse_click` and `eclipse_drag` through mutter's `org.gnome.Mutter.RemoteDesktop` session: relative moves corrected by `getCursorLocation`, which Wayland reports only over this IDE's windows and never during a drag, so the moves run off the UI thread (the IDE sees them only once its event loop dispatched them) and a drag reads the pointer only after the release.
 - `eclipse_drag` moves the pointer through XTest, wiggles it on each point, and resolves the first leg before the press: SWT's X11 drag detection holds the UI thread for up to 500 ms after the press, so a UI call there delays the first move past it, and GTK starts its drag partway along the line, so a drop target only reacts to motion after that.
 - `eclipse_screenshot` reports a non-integer scale, and `crispWidth` snaps to a whole divisor.
-
-### Profiling
-
-- The sampler uses `ThreadMXBean` and must never need the UI thread or a workspace lock. Its budget counts ticks, not stacks, and parked threads are excluded by default.
-- `SamplingRegistry.align` roots truncated stacks at their shared outermost frame (`truncatedNote`), folds equal-count runs into `chain`, and lists frames on every sample under `onEveryStack`.
-- `FlightRecording.aggregate` reads a file once and filters afterwards: a `.jfr` is not in time order, so the recording start a time window is relative to is known only after the read. Its logic (`TimeProfile`, `ThrownEvents`, `StackAlignment`) holds no `jdk.jfr` type, so it stays testable and the optional import stays in one class.
-- The JVM reports a thrown Error once in `jdk.JavaErrorThrow` and twice in `jdk.JavaExceptionThrow`, which alone is throttled, so `ThrownEvents` counts the error events of a group and never adds the streams; `FlightRecordingToolsTest` pins this against the real JVM.
-- `IdleFrames` is the one idle definition for sampling, recordings and pages; a stack is idle only with a wait within its innermost four frames, because native callbacks run real work below a wait. The sampler also counts a WAITING or TIMED_WAITING thread as idle, which a recording cannot see. The server marks idle per stack through `FlameGraph.Builder.add`, and the page's script must not decide it again, or the answer and the page disagree.
-- `IdleFrames.nothingBusy` makes both answers and pages say that nothing was busy instead of naming a wait. The sampler measures busy stacks against ticks, not against all stacks, or one saturated thread among seventy parked ones would count as idle.
-- `ServerFrames` counts Jetty, Jackson and the like as the server's only outside its outermost own frame or as the code the server is running: a tool can dispatch to an application on the UI thread that uses them itself, and that work must stay in the profile. The outermost frame says nothing about a stack that was cut.
-- `ProductFamily` reads the running product only for a recording of this IDE; a `.jfr` given by `file` has only `productPrefixes`, since this IDE's product says nothing about another JVM.
-- The page gathers sibling frames below `THIN` pixels into an "N smaller" block that opens on click; its search walks the whole tree rather than what is drawn, or it misses what sits in a block.
 
 ### Debug
 

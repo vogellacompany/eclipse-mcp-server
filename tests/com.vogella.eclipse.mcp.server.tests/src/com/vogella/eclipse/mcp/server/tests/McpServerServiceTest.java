@@ -712,10 +712,6 @@ class McpServerServiceTest {
 		// a dry run naming a class no directory has, so nothing attaches to the test JVM
 		case "eclipse_hot_code_replace" -> Map.of("directory", System.getProperty("java.io.tmpdir"), "classes",
 				List.of("no.such.Type"), "dryRun", Boolean.TRUE);
-		// the shortest recording the schema allows, so the smoke test cannot leave one
-		// running in the test JVM for half an hour
-		case "eclipse_start_flight_recording" -> Map.of("durationSeconds", Integer.valueOf(1),
-				"maxSizeMegabytes", Integer.valueOf(1), "settings", "default");
 		// scoped to the fixture: an unscoped text search reads every file in the
 		// workspace and outruns the client timeout
 		case "eclipse_search_text" -> Map.of("pattern", "class", "projects", List.of(PROJECT));

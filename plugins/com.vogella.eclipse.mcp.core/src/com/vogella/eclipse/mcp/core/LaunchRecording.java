@@ -13,7 +13,7 @@ public final class LaunchRecording {
 
 	/** How a caller asks for one, and what each answer costs. */
 	public static final String SCHEMA_PROPERTY = """
-			{"type":"string","enum":["off","default","profile"],"default":"off","description":"Record the launched JVM with Java Flight Recorder. 'profile' includes allocation and execution samples at a few percent overhead, 'default' covers GC and threads at about one percent. The file is written when the program exits and is read with eclipse_stop_flight_recording by passing its path as 'file'. The IDE's own recording tools cannot see a launched process, which is what this is for."}"""; //$NON-NLS-1$
+			{"type":"string","enum":["off","default","profile"],"default":"off","description":"Record the launched JVM with Java Flight Recorder. 'profile' includes allocation and execution samples at a few percent overhead, 'default' covers GC and threads at about one percent. The file is written when the program exits and opens in JDK Mission Control or with 'jfr print'. Recording the IDE itself cannot see a launched process, which is what this is for."}"""; //$NON-NLS-1$
 
 	private LaunchRecording() {
 	}
@@ -78,10 +78,10 @@ public final class LaunchRecording {
 	/** What the caller has to know to get anything out of it. */
 	public static String note(Path file, int seconds) {
 		if (seconds > 0) {
-			return "The JVM records itself into %s and writes it after %d seconds WITHOUT ending the program, which is what makes a startup measurable: the application keeps running and the file is complete. THE RECORDING ENDS THERE: this is a duration, so it is one window and nothing is added afterwards, not even when the program exits, and the file keeps the timestamp of that dump. For a window later in the run, dump it from outside with 'jcmd <pid> JFR.dump name=%s filename=...', which leaves the recording running. Read the file with eclipse_stop_flight_recording passing file." //$NON-NLS-1$
+			return "The JVM records itself into %s and writes it after %d seconds WITHOUT ending the program, which is what makes a startup measurable: the application keeps running and the file is complete. THE RECORDING ENDS THERE: this is a duration, so it is one window and nothing is added afterwards, not even when the program exits, and the file keeps the timestamp of that dump. For a window later in the run, dump it from outside with 'jcmd <pid> JFR.dump name=%s filename=...', which leaves the recording running. Open the file in JDK Mission Control." //$NON-NLS-1$
 					.formatted(file, Integer.valueOf(seconds), NAME);
 		}
-		return "The JVM records itself into %s and writes it when it EXITS, so the file exists from the start but stays EMPTY while the program runs, and a program that is killed rather than ended leaves it empty. To measure something that must keep running, pass flightRecordingSeconds, or dump it from outside with 'jcmd <pid> JFR.dump name=%s filename=...', which leaves the process running. Read the file with eclipse_stop_flight_recording passing file." //$NON-NLS-1$
+		return "The JVM records itself into %s and writes it when it EXITS, so the file exists from the start but stays EMPTY while the program runs, and a program that is killed rather than ended leaves it empty. To measure something that must keep running, pass flightRecordingSeconds, or dump it from outside with 'jcmd <pid> JFR.dump name=%s filename=...', which leaves the process running. Open the file in JDK Mission Control." //$NON-NLS-1$
 				.formatted(file, NAME);
 	}
 }

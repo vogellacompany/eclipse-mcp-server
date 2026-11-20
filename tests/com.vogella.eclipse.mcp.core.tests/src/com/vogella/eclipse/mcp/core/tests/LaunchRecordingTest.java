@@ -98,7 +98,7 @@ class LaunchRecordingTest {
 		assertTrue(note.contains("EXITS"), note);
 		assertTrue(note.contains("EMPTY"), "the file is there but holds nothing while the program runs: " + note);
 		assertFalse(note.contains("is not there"), note);
-		assertTrue(note.contains("eclipse_stop_flight_recording"), note);
+		assertTrue(note.contains("JDK Mission Control"), note);
 		assertTrue(note.contains("jcmd"), "the way out for a program that must keep running: " + note);
 
 		String timed = LaunchRecording.note(FILE, 90);

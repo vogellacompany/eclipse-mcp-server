@@ -25,9 +25,6 @@
       <tool class="com.vogella.eclipse.mcp.ui.internal.ThemeTools$SetTheme"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ThemeTools$RegisterTheme"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ThemeDefinitionTool"/>
-      <tool class="com.vogella.eclipse.mcp.ui.internal.SamplingTools$Start"/>
-      <tool class="com.vogella.eclipse.mcp.ui.internal.SamplingTools$Stop"/>
-      <tool class="com.vogella.eclipse.mcp.ui.internal.ShowTraceTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ScreenshotTools$ListTargets"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ScreenshotTools$Capture"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.TextBoundsTools$TextBounds"/>

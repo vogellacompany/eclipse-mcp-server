@@ -27,7 +27,7 @@ public final class UiThread {
 	static final String NO_WORKBENCH = "There is no running workbench."; //$NON-NLS-1$
 
 	/** The answer for a wait that gave up, which also says the work will not run later. */
-	public static final String TIMED_OUT = "The Eclipse UI did not process the request within %d seconds. The request was withdrawn and will not run later, so retry it once the UI is responsive; eclipse_start_sampling with threads ui shows what it is doing. The wait is 'UI thread wait' (uiWaitSeconds) in Preferences > General > MCP Server, capped by the tool call timeout."; //$NON-NLS-1$
+	public static final String TIMED_OUT = "The Eclipse UI did not process the request within %d seconds. The request was withdrawn and will not run later, so retry it once the UI is responsive; a thread dump of the IDE, from jstack or jcmd, shows what it is doing. The wait is 'UI thread wait' (uiWaitSeconds) in Preferences > General > MCP Server, capped by the tool call timeout."; //$NON-NLS-1$
 
 	private UiThread() {
 	}

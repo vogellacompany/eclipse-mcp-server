@@ -8,7 +8,6 @@
       <tool class="com.vogella.eclipse.mcp.basic.internal.GetCommandOutputTool"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.GetProblemsTool"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.GetLogEntriesTool"/>
-      <tool class="com.vogella.eclipse.mcp.basic.internal.GetStartupTimingTool"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.GetPreferencesTool"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.BuildTool"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.CancelBuildTool"/>
@@ -33,8 +32,6 @@
       <tool class="com.vogella.eclipse.mcp.basic.internal.LogStateTools$Clear"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.LogStateTools$Write"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.MarkProblemsTool"/>
-      <tool class="com.vogella.eclipse.mcp.basic.internal.FlightRecordingTools$Start"/>
-      <tool class="com.vogella.eclipse.mcp.basic.internal.FlightRecordingTools$Stop"/>
       <tool class="com.vogella.eclipse.mcp.basic.internal.InstallBundleTool"/>
    </extension>
 

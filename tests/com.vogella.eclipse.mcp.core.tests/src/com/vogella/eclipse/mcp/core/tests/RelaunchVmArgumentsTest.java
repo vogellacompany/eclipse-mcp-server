@@ -176,7 +176,7 @@ class RelaunchVmArgumentsTest {
 		assertTrue(text.contains("REQUESTED, NOT OBSERVED"), text);
 		assertTrue(text.contains("EMPTY until"), "the file exists long before it can be read: " + text);
 		assertTrue(text.contains("WITHOUT ending the IDE"), text);
-		assertTrue(text.contains("eclipse_stop_flight_recording"), text);
+		assertTrue(text.contains("JDK Mission Control"), text);
 		assertTrue(text.contains("THIS RELAUNCH ONLY"), text);
 		assertTrue(text.contains("exit code 23"), "what does repeat the arguments has to be named: " + text);
 	}

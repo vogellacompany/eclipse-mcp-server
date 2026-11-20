@@ -128,7 +128,7 @@ public final class RelaunchVmArguments {
 					.put("seconds", Integer.valueOf(seconds)) //$NON-NLS-1$
 					.put("stackDepth", Integer.valueOf(stackDepth)) //$NON-NLS-1$
 					.put("eventSettings", json(eventSettings)) //$NON-NLS-1$
-					.put("readWith", "eclipse_stop_flight_recording with file set to this path") //$NON-NLS-1$ //$NON-NLS-2$
+					.put("readWith", "JDK Mission Control") //$NON-NLS-1$ //$NON-NLS-2$
 					.put("note", note(file, seconds)); //$NON-NLS-1$
 		}
 		List<String> vmArgs = vmArgs(arguments == null ? null : arguments.get("vmArgs")); //$NON-NLS-1$
@@ -341,7 +341,7 @@ public final class RelaunchVmArguments {
 						.formatted(Integer.valueOf(seconds))
 				: "written when the IDE EXITS, and an IDE that is killed leaves it empty; 'jcmd <pid> JFR.dump name=%s filename=...' copies it out earlier" //$NON-NLS-1$
 						.formatted(LaunchRecording.NAME);
-		return "REQUESTED, NOT OBSERVED: the new JVM starts recording during its own initialization, before any Eclipse code runs, into %s. The file exists from that moment but stays EMPTY until it is %s. No file at all means the relaunch did not take these arguments. After reconnecting, read it with eclipse_stop_flight_recording passing file; nothing is stopped by that." //$NON-NLS-1$
+		return "REQUESTED, NOT OBSERVED: the new JVM starts recording during its own initialization, before any Eclipse code runs, into %s. The file exists from that moment but stays EMPTY until it is %s. No file at all means the relaunch did not take these arguments. After reconnecting, open it in JDK Mission Control; nothing is stopped by that." //$NON-NLS-1$
 				.formatted(file, when);
 	}
 
