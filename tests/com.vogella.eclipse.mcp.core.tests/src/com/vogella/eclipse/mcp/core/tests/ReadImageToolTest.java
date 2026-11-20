@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Base64;
-import java.util.List;
 import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
@@ -81,17 +80,6 @@ class ReadImageToolTest {
 
 		assertTrue(result.isError());
 		assertTrue(result.images().isEmpty());
-	}
-
-	@Test
-	void aScriptPassesTheImagesOfItsStepsOn() throws Exception {
-		IFile file = file("icon.png", PNG);
-
-		McpToolResult result = TestFixture.call("eclipse_run_script", Map.of("steps",
-				List.of(Map.of("tool", TOOL, "arguments", Map.of("path", file.getFullPath().toString())))));
-
-		assertEquals(1, result.images().size(), result.text());
-		assertArrayEquals(PNG, result.images().get(0).data());
 	}
 
 	private IFile file(String name, byte[] content) throws Exception {

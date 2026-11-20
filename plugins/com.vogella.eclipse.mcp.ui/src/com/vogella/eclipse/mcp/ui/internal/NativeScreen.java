@@ -57,7 +57,7 @@ public final class NativeScreen {
 		for (Popup popup : popups(display)) {
 			boolean included = touches(area, popup.bounds());
 			found.add(new JsonObject().put("className", popup.className()) //$NON-NLS-1$
-					.put("bounds", Overlays.describe(popup.bounds())).put("included", Boolean.valueOf(included))); //$NON-NLS-1$ //$NON-NLS-2$
+					.put("bounds", Bounds.describe(popup.bounds())).put("included", Boolean.valueOf(included))); //$NON-NLS-1$ //$NON-NLS-2$
 			if (included) {
 				grown = grown.union(popup.bounds());
 			}

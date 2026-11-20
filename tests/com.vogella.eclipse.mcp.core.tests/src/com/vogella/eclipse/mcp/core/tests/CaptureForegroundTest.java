@@ -14,7 +14,7 @@ import com.vogella.eclipse.mcp.core.IMcpTool;
  * exercised. What is held here is the wording, which is what a model reads
  * before deciding whether to trust an image: a screen read photographs whatever
  * is in front of the target, and no other field in that answer can reveal it,
- * because a window sitting still is settled, converged and the right size. The
+ * because a window sitting still is settled and the right size. The
  * bug this came from was fourteen captures of somebody's terminal, every one of
  * them reported as a success.
  */
@@ -31,7 +31,7 @@ class CaptureForegroundTest {
 		assertTrue(description.contains("foreground"), "got " + description);
 		// the reason the other signals do not help, which is the part that makes
 		// this a bug rather than a limitation
-		assertTrue(description.contains("settled, converged and the right size"), "got " + description);
+		assertTrue(description.contains("settled and the right size"), "got " + description);
 	}
 
 	@Test

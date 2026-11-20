@@ -360,7 +360,7 @@ Observed 2026-09-03 on GTK 3.24 under Xvfb, reported by a session recording a de
 The frames themselves were fine.
 
 `Control.print` on GTK 3 (`org.eclipse.swt.widgets.Control`, the `else` branch of `print(GC)`) size-allocates the live top handle to satisfy `gtk_widget_draw`'s precondition and then draws it into the caller's cairo context; the on-screen copy is not invalidated afterwards, and under a window system with no compositor it shows whatever was left.
-`Screencast.paint` and the `Paintable` prints in `ScreenshotTools` queue `Control.redraw(0, 0, w, h, true)` after every print on GTK, which was verified to keep the root capture identical before, during and after a recording.
+The `Paintable` prints in `ScreenshotTools` queue `Control.redraw(0, 0, w, h, true)` after every print on GTK, which was verified to keep the root capture identical before, during and after a recording.
 Nothing filed upstream yet.
 
 ## A hot bundle refresh leaves the registry cache stale, and the next start restores editors that throw

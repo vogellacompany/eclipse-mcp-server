@@ -54,15 +54,4 @@ class SettleToolTest {
 		assertTrue(description.contains("counts as BUSY rather than idle"), "got " + description);
 		assertTrue(description.contains("never one that succeeds too early"), "got " + description);
 	}
-
-	@Test
-	void theScreenshotSettleSaysTheSameThing() {
-		// the flag is the convenient path and would otherwise carry none of the
-		// caveats the dedicated tool spells out
-		String schema = TestFixture.tool("eclipse_screenshot").getInputSchema();
-
-		assertTrue(schema.contains("\"settle\""), "got " + schema);
-		assertTrue(schema.contains("HEURISTIC"), "the settle flag must carry the caveat too, got " + schema);
-		assertTrue(schema.contains("suppressCaret"), "got " + schema);
-	}
 }

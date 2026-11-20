@@ -59,7 +59,7 @@ public final class McpServerService {
 			+ "Most tools only read; a tool that changes something says so in capitals in its own description and defaults to a dry run where one makes sense. " //$NON-NLS-1$
 			+ "To test the UI or an SWT change: eclipse_list_ui_targets names shells and parts, eclipse_get_widget_tree gives each widget's path, bounds and with includeMetrics what it computes for itself; " //$NON-NLS-1$
 			+ "drive it with eclipse_press_widget, eclipse_set_widget_text, eclipse_click, eclipse_press_key and eclipse_type_text; wait on a condition with eclipse_wait_for rather than a pause; " //$NON-NLS-1$
-			+ "capture with eclipse_screenshot, settle and settlePixels for stable pixels. eclipse_run_script runs many steps with expect assertions in one call. " //$NON-NLS-1$
+			+ "capture with eclipse_screenshot. " //$NON-NLS-1$
 			+ "eclipse_mark_log then eclipse_get_log_entries shows what an action logged, UI freezes included. " //$NON-NLS-1$
 			+ "To run changed platform code, eclipse_substitute_bundle swaps in a workspace bundle at the next eclipse_restart, and eclipse_hot_code_replace redefines classes in place. " //$NON-NLS-1$
 			+ "Builds, test runs and provisioning return a handle to poll. With several clients connected, pass ids explicitly instead of relying on a most-recent default; a session ends with an HTTP DELETE or after 60 seconds without a request."; //$NON-NLS-1$

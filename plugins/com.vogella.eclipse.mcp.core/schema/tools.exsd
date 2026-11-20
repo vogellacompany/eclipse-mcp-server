@@ -53,6 +53,13 @@
                </appInfo>
             </annotation>
          </attribute>
+         <attribute name="priority" type="string">
+            <annotation>
+               <documentation>
+                  Decides between two tools contributed under the same name: the higher number wins, so an add-on can offer a richer version of a tool that replaces the one shipped here while it is installed. Defaults to 0; two tools of one name and the same priority are a duplicate, and the second is ignored.
+               </documentation>
+            </annotation>
+         </attribute>
       </complexType>
    </element>
 

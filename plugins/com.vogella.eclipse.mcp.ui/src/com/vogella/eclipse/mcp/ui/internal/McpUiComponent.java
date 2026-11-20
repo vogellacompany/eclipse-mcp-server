@@ -48,7 +48,5 @@ public final class McpUiComponent {
 		// the same reasoning for an ad-hoc stylesheet: it can leave the IDE unreadable
 		CssStyling.dropIfApplied();
 		MutterRemoteDesktop.stop();
-		// a recorder left hooked into every paint pass would outlive the plug-in by up to maxSeconds
-		PaintRecording.getInstance().stopAll("deactivated"); //$NON-NLS-1$
 	}
 }

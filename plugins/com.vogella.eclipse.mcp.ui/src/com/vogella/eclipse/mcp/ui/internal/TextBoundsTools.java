@@ -44,7 +44,7 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
  * Where a piece of text is on screen, and which annotations sit on it.
  * <p>
  * Both answer in the coordinates the capture tools use, so a text range can be
- * handed to {@code eclipse_screenshot} as a highlight without any guessing.
+ * located on an {@code eclipse_screenshot} without any guessing.
  */
 public final class TextBoundsTools {
 
@@ -144,10 +144,10 @@ public final class TextBoundsTools {
 		Control stack = ScreenshotTools.Capture.stackOf(target.part());
 		return result.put("visible", Boolean.valueOf(onScreen)) //$NON-NLS-1$
 				.put("scrolledOut", Boolean.valueOf(!onScreen)) //$NON-NLS-1$
-				.put("inPart", Overlays.describe(WidgetTools.mapToCapture(display, text, target.part(), inText))) //$NON-NLS-1$
-				.put("inPartStack", Overlays.describe(WidgetTools.mapToCapture(display, text, stack, inText))) //$NON-NLS-1$
-				.put("inShell", Overlays.describe(WidgetTools.mapToCapture(display, text, text.getShell(), inText))) //$NON-NLS-1$
-				.put("inTextWidget", Overlays.describe(inText)) //$NON-NLS-1$
+				.put("inPart", Bounds.describe(WidgetTools.mapToCapture(display, text, target.part(), inText))) //$NON-NLS-1$
+				.put("inPartStack", Bounds.describe(WidgetTools.mapToCapture(display, text, stack, inText))) //$NON-NLS-1$
+				.put("inShell", Bounds.describe(WidgetTools.mapToCapture(display, text, text.getShell(), inText))) //$NON-NLS-1$
+				.put("inTextWidget", Bounds.describe(inText)) //$NON-NLS-1$
 				.put("lineHeight", Integer.valueOf(text.getLineHeight(widgetStart))) //$NON-NLS-1$
 				.put("baseline", Integer.valueOf(text.getBaseline(widgetStart))) //$NON-NLS-1$
 				.put("widgetOffset", Integer.valueOf(widgetStart)); //$NON-NLS-1$
@@ -157,11 +157,11 @@ public final class TextBoundsTools {
 		Display display = target.text().getDisplay();
 		Rectangle own = target.text().getBounds();
 		return new JsonObject()
-				.put("inPart", Overlays.describe(WidgetTools.mapToCapture(display, target.text().getParent(), //$NON-NLS-1$
+				.put("inPart", Bounds.describe(WidgetTools.mapToCapture(display, target.text().getParent(), //$NON-NLS-1$
 						target.part(), own)))
-				.put("inPartStack", Overlays.describe(WidgetTools.mapToCapture(display, target.text().getParent(), //$NON-NLS-1$
+				.put("inPartStack", Bounds.describe(WidgetTools.mapToCapture(display, target.text().getParent(), //$NON-NLS-1$
 						ScreenshotTools.Capture.stackOf(target.part()), own)))
-				.put("inShell", Overlays.describe(WidgetTools.mapToCapture(display, target.text().getParent(), //$NON-NLS-1$
+				.put("inShell", Bounds.describe(WidgetTools.mapToCapture(display, target.text().getParent(), //$NON-NLS-1$
 						target.text().getShell(), own)));
 	}
 
@@ -175,7 +175,7 @@ public final class TextBoundsTools {
 
 		@Override
 		public String getDescription() {
-			return "Reports where a range of text in an editor is on screen: its rectangle in points relative to the editor part (inPart), to the part stack, to the shell and to the text widget, plus the line height, the baseline and the placement of the text widget itself. Changes nothing. Give line (1-based) with an optional column and length, or a document offset with a length; the answer can be passed straight to eclipse_screenshot as a highlight's bounds. Folded regions are handled: a range that folding hides is reported as not visible rather than at a wrong place, and a range scrolled out of view is reported as scrolledOut with the rectangle it would occupy. Defaults to the active editor."; //$NON-NLS-1$
+			return "Reports where a range of text in an editor is on screen: its rectangle in points relative to the editor part (inPart), to the part stack, to the shell and to the text widget, plus the line height, the baseline and the placement of the text widget itself. Changes nothing. Give line (1-based) with an optional column and length, or a document offset with a length; the bounds are in the coordinates of an eclipse_screenshot of that part. Folded regions are handled: a range that folding hides is reported as not visible rather than at a wrong place, and a range scrolled out of view is reported as scrolledOut with the rectangle it would occupy. Defaults to the active editor."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -343,7 +343,7 @@ public final class TextBoundsTools {
 				JsonObject result = new JsonObject().put("offset", Integer.valueOf(start)) //$NON-NLS-1$
 						.put("editor", target.editor().getTitle()) //$NON-NLS-1$
 						.put("clickedAt", new JsonObject().put("x", Integer.valueOf(x)).put("y", Integer.valueOf(y)) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-								.put("in", "textWidget").put("inShell", Overlays.describe(inShell))) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+								.put("in", "textWidget").put("inShell", Bounds.describe(inShell))) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 						.put("selectionOffset", Integer.valueOf(selected.x)) //$NON-NLS-1$
 						.put("selectionLength", Integer.valueOf(selected.y)); //$NON-NLS-1$
 				try {
@@ -385,7 +385,7 @@ public final class TextBoundsTools {
 
 		@Override
 		public String getDescription() {
-			return "Lists the annotations of a text editor, which is what the squiggles, the ruler icons, the overview ruler marks and the folding markers are drawn from: each with its type (org.eclipse.jdt.ui.error, org.eclipse.ui.workbench.texteditor.spelling, org.eclipse.projection and so on), its text, its offset, length and lines, whether a projection annotation is collapsed, and with includeBounds its rectangle on screen in the same coordinates eclipse_get_text_bounds reports, ready to be handed to eclipse_screenshot as a highlight. Changes nothing. Filter with typePattern, a regular expression matched anywhere in the type, and with fromLine and toLine. Defaults to the active editor."; //$NON-NLS-1$
+			return "Lists the annotations of a text editor, which is what the squiggles, the ruler icons, the overview ruler marks and the folding markers are drawn from: each with its type (org.eclipse.jdt.ui.error, org.eclipse.ui.workbench.texteditor.spelling, org.eclipse.projection and so on), its text, its offset, length and lines, whether a projection annotation is collapsed, and with includeBounds its rectangle on screen in the same coordinates eclipse_get_text_bounds reports. Changes nothing. Filter with typePattern, a regular expression matched anywhere in the type, and with fromLine and toLine. Defaults to the active editor."; //$NON-NLS-1$
 		}
 
 		@Override

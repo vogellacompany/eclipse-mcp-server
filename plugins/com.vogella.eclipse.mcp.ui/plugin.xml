@@ -30,8 +30,6 @@
       <tool class="com.vogella.eclipse.mcp.ui.internal.ShowTraceTool"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ScreenshotTools$ListTargets"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.ScreenshotTools$Capture"/>
-      <tool class="com.vogella.eclipse.mcp.ui.internal.ScreencastTools$Start"/>
-      <tool class="com.vogella.eclipse.mcp.ui.internal.ScreencastTools$Stop"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.TextBoundsTools$TextBounds"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.TextBoundsTools$DoubleClickText"/>
       <tool class="com.vogella.eclipse.mcp.ui.internal.TextBoundsTools$ListAnnotations"/>

@@ -90,8 +90,8 @@ public final class DisplayInfoTool implements IMcpTool {
 		for (int i = 0; i < all.length; i++) {
 			Monitor candidate = all[i];
 			array.add(new JsonObject().put("index", Integer.valueOf(i)) //$NON-NLS-1$
-					.put("bounds", Overlays.describe(candidate.getBounds())) //$NON-NLS-1$
-					.put("clientArea", Overlays.describe(candidate.getClientArea())) //$NON-NLS-1$
+					.put("bounds", Bounds.describe(candidate.getBounds())) //$NON-NLS-1$
+					.put("clientArea", Bounds.describe(candidate.getClientArea())) //$NON-NLS-1$
 					.put("zoom", Integer.valueOf(candidate.getZoom())) //$NON-NLS-1$
 					.put("primary", Boolean.valueOf(candidate.equals(primary)))); //$NON-NLS-1$
 		}

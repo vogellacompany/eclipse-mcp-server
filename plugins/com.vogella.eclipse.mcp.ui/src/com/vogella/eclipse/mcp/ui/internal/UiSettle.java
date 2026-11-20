@@ -61,7 +61,7 @@ final class UiSettle {
 			// a fence posted from the UI thread runs on the waiting thread and proves nothing
 			return new JsonObject().put("settled", Boolean.FALSE) //$NON-NLS-1$
 					.put("reason", //$NON-NLS-1$
-							"This call is already on the UI thread, which is what eclipse_run_script with atomic does. Nothing can drain the display queue from inside it, because the runnables waiting there are behind this one. Settle outside the atomic batch, before it starts.");
+							"This call is already on the UI thread, as when a batch of tools runs in one UI turn. Nothing can drain the display queue from inside it, because the runnables waiting there are behind this one. Settle before the batch starts.");
 		}
 		Display display = Workbenches.display();
 		long requested = timeoutMillis;

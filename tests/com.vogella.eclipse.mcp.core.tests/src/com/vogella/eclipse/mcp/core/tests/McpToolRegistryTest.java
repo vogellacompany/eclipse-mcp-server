@@ -7,11 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolRegistry;
+import com.vogella.eclipse.mcp.server.internal.ToolReferences;
 
 class McpToolRegistryTest {
 
@@ -38,5 +40,16 @@ class McpToolRegistryTest {
 	void toolNamesAreUnique() {
 		List<String> names = McpToolRegistry.getInstance().getTools().stream().map(IMcpTool::getName).toList();
 		assertEquals(names.size(), names.stream().distinct().count(), "Duplicate tool names in " + names);
+	}
+
+	@Test
+	void everyToolADescriptionNamesIsInstalled() {
+		// this runtime has every bundle of the feature, so a name found here but not
+		// registered would make the server tell every client that bundles are missing
+		Collection<IMcpTool> tools = McpToolRegistry.getInstance().getTools();
+		List<String> texts = tools.stream().flatMap(tool -> List.of(tool.getDescription(), tool.getInputSchema()).stream())
+				.toList();
+		Set<String> missing = ToolReferences.missing(tools.stream().map(IMcpTool::getName).toList(), texts);
+		assertTrue(missing.isEmpty(), "Tools named in descriptions but not installed: " + missing);
 	}
 }

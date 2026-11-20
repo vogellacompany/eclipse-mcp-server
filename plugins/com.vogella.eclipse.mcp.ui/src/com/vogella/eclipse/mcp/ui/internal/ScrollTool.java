@@ -110,7 +110,7 @@ public final class ScrollTool implements IMcpTool {
 			Rectangle onScreen = display.map(owner, null, own);
 			Point point = new Point(onScreen.x + dx, onScreen.y + dy);
 			JsonObject result = new JsonObject().put("target", target.getClass().getSimpleName()) //$NON-NLS-1$
-					.put("boundsInDisplay", Overlays.describe(onScreen)); //$NON-NLS-1$
+					.put("boundsInDisplay", Bounds.describe(onScreen)); //$NON-NLS-1$
 			WidgetTools.Click.Warp warp = WidgetTools.Click.warp(display, point, result, "nothing was scrolled", //$NON-NLS-1$
 					"scrolling"); //$NON-NLS-1$
 			if (warp.failure() != null) {
@@ -173,7 +173,7 @@ public final class ScrollTool implements IMcpTool {
 			return McpToolResult.of(result.toString());
 		}
 		if (UiThread.onUiThread()) {
-			// waiting here would block the very dispatch that scrolls, as in an atomic eclipse_run_script
+			// waiting here would block the very dispatch that scrolls, as in a batch of tools run in one UI turn
 			return McpToolResult.of(result.put("afterNote", //$NON-NLS-1$
 					"Called on the UI thread, so the scroll is dispatched after this call returns and 'after' is not read. Read it with a following call.") //$NON-NLS-1$
 					.toString());

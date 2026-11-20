@@ -631,9 +631,6 @@ class McpServerServiceTest {
 	 */
 	private static Map<String, Object> arguments(String toolName) {
 		return switch (toolName) {
-		// one harmless step, so the smoke test exercises the sequencing rather than
-		// whatever a step might do
-		case "eclipse_run_script" -> Map.of("steps", List.of(Map.of("tool", "eclipse_list_projects")));
 		case "eclipse_get_type_hierarchy", "eclipse_get_source", "eclipse_get_outline" ->
 			Map.of("typeName", "java.lang.Object");
 		// scoped to the fixture: a binary type is searched by name, so asking for
