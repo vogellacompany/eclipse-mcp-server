@@ -90,16 +90,11 @@ public final class FetchPullRequestTool implements IMcpTool {
 			if (number < 1) {
 				return McpToolResult.error("Give the pull request 'number', a positive integer."); //$NON-NLS-1$
 			}
-			Repository repository;
-			try {
-				repository = EGit.lookup(args.getString("project"), args.getString("directory")); //$NON-NLS-1$ //$NON-NLS-2$
-			} catch (IOException e) {
-				throw new McpToolException("Could not open the repository", e); //$NON-NLS-1$
+			RepositoryLookup.Result found = RepositoryLookup.find(args.getString("project"), args.getString("directory")); //$NON-NLS-1$ //$NON-NLS-2$
+			if (found.failed()) {
+				return found.error();
 			}
-			if (repository == null) {
-				return McpToolResult.error(
-						"No git repository found. Give 'project' for a project in the workspace, or 'directory' for a working tree on disk."); //$NON-NLS-1$
-			}
+			Repository repository = found.repository();
 			String remoteName = args.getString("remote", Constants.DEFAULT_REMOTE_NAME); //$NON-NLS-1$
 			URIish uri;
 			try {
