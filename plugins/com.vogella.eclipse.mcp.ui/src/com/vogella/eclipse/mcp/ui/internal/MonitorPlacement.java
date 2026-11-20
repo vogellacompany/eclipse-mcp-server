@@ -168,13 +168,13 @@ public final class MonitorPlacement {
 		Boolean arrived = arrivedOrUnknown();
 		JsonObject result = new JsonObject().put("changed", Boolean.TRUE) //$NON-NLS-1$
 				.put("title", shell.getText()) //$NON-NLS-1$
-				.put("previousBounds", Overlays.describe(before)) //$NON-NLS-1$
+				.put("previousBounds", Bounds.describe(before)) //$NON-NLS-1$
 				.put("previousMaximized", Boolean.valueOf(wasMaximized)) //$NON-NLS-1$
 				.put("requestedMonitor", Integer.valueOf(index)) //$NON-NLS-1$
 				.put("requestedMonitorZoom", Integer.valueOf(target.getZoom())) //$NON-NLS-1$
 				.put("placement", placement) //$NON-NLS-1$
 				.put("onRequestedMonitor", arrived) //$NON-NLS-1$
-				.put("bounds", Overlays.describe(shell.getBounds())) //$NON-NLS-1$
+				.put("bounds", Bounds.describe(shell.getBounds())) //$NON-NLS-1$
 				.put("maximized", Boolean.valueOf(shell.getMaximized())); //$NON-NLS-1$
 		Integer scale = scaleFactor();
 		if (scale != null) {

@@ -54,7 +54,8 @@ A workaround for an Eclipse bug is recorded in `docs/platform-bugs.md` with what
 
 1. Implement `com.vogella.eclipse.mcp.core.IMcpTool`.
 2. Contribute it through the `com.vogella.eclipse.mcp.core.tools` extension point in the `plugin.xml` of the bundle whose dependencies it needs.
-3. Add a test. `McpToolRegistryTest` already checks that every registered tool has a name, a description and an input schema that parses as JSON.
+3. To replace a tool another bundle contributes under the same name, for example with a richer version of it, give the contribution a higher `priority`; the highest wins while both are installed.
+4. Add a test. `McpToolRegistryTest` already checks that every registered tool has a name, a description and an input schema that parses as JSON.
 
 ## Architecture rules
 
@@ -81,7 +82,7 @@ No tool opens a dialog.
 
 **Threading.**
 Tool calls arrive on Jetty worker threads; never call `Display.syncExec` from one.
-Queue UI work through `UiThread.exec`, which runs inline when already on the UI thread; `eclipse_run_script` with `atomic` runs a batch inside one Display runnable and would deadlock otherwise.
+Queue UI work through `UiThread.exec`, which runs inline when already on the UI thread; a caller that runs a batch of tools inside one Display runnable would deadlock otherwise.
 A UI request waits `CallBudget.uiWaitSeconds`: the longer of the tool's own wait and the `uiWaitSeconds` preference, capped by what is left of the call, which `McpToolAdapter` records through `CallBudget.enter` so a tool with several UI hops still answers in time.
 It is then withdrawn (`completeFrom` skips cancelled futures), and `Outcome.errorResult` answers a JSON error carrying `withdrawn` so a client can retry.
 `UiThread.timed`, which `eclipse_run_workbench_command` uses to keep running and log the outcome, keeps its caller's timeout.
@@ -111,12 +112,11 @@ A tool that needs editors, views, perspectives or commands refuses with `Workben
 
 **Optional dependencies live in one class each.**
 `CssStyling` (e4 CSS engine), `GitContent` (jgit, in the ide bundle) and `FlightRecording` (`jdk.jfr`) are imported optionally and callers catch `LinkageError`; never let one of their types into a signature a tool touches.
-`PaintRecording` reaches an optional SWT paint recorder and its renderer bundle by name only; nothing here compiles against them or ships them, and without either `auto` records frames.
 `CocoaKeys`, `DisplayScaling`, `NativeAppKit`, `NativeComboList`, `NativeDialogs`, `NativeForeground`, `NativeScreen`, `NativeStacking` and `NativeWindowState` reach SWT internals (`DPIUtil`, `cocoa.NSApplication`, `gtk.GTK`, `win32.OS`) by name, so the bundle stays cross platform.
 
 **Answers.**
 Every list-returning tool honours `maxResults` and reports `total` and `truncated`.
-A picture is attached with `McpToolResult.withImage`, never as base64 inside the JSON; `eclipse_run_script` passes its steps' images on.
+A picture is attached with `McpToolResult.withImage`, never as base64 inside the JSON.
 Anything derived from files refreshes first through `WorkspaceSync.refresh`, since clients edit through their own shell; stale markers are worse than none.
 `eclipse_find_references`, `eclipse_get_call_hierarchy`, `eclipse_find_implementations` and `eclipse_list_declarations` pay that refresh on every call, which in a workspace of hundreds of projects is most of the call, so they take `refresh` (default true, reported as `refreshed` and `refreshMillis`) to let a client that already refreshed skip it; the default stays on.
 Read what the answer needs off a widget before the action that may dispose it, and report disposal as a fact (`shellClosed`); a completed operation must never come back as a failed call.
@@ -223,8 +223,7 @@ Do not undo these without understanding why they are there.
 - `eclipse_import_project` uses the `x-internal` `SmartImportJob` deliberately, which is why it lives in the ide bundle rather than basic. It always sets the directories to import (avoiding a modal question), uses `getImportProposals` as the dry run, and restores the auto-build state the job can leave off.
 - `Reconcilers` reads the reconciler by field name the way JDT's `EditorTestHelper.joinReconciler` does (including the upstream typo `fIninitalProcessDone`); an unreadable one counts as busy, never idle. Lookups are cached per class, a probe stops after `BUDGET_MILLIS`, `UiSettle` sleeps at least as long as the last probe, and the wait is capped by `CallBudget.maxWaitSeconds()` and reports `clamped`.
 - `eclipse_wait_for` probes with `getPart(false)`, since a wait must not create the part it waits for, and `find` skips virtual rows that are not populated, since reading one fires `SetData`. A timeout is a normal answer with each condition's last observation; a UI-busy probe marks only the widget conditions. It refuses on the UI thread, where it would block what it waits for.
-- `eclipse_run_script` steps bypass the protocol's schema validation, so a step reports arguments its tool does not declare under `ignoredArguments` rather than failing.
-- `eclipse_wait_until_settled` is a heuristic whose description names what it cannot see, and a test asserts that wording. `converged false` means the screen never stopped; `converged true` with a differing image means it stopped at a different layout.
+- `eclipse_wait_until_settled` is a heuristic whose description names what it cannot see, and a test asserts that wording.
 - `eclipse_set_sash` sends the Sash the two Selection events of a person's drag instead of calling `setWeights`, one with `detail` `SWT.DRAG` and the release where that one stopped, so SashForm's minimum size and other sash listeners apply as for a person. A single release that SashForm clamps only writes the weights, and a `layout()` instead would move the other controls.
 - `suppressCaret` defaults to on and the answer reports `caretsSuppressed`.
 - Root capture can return uniform pixels without error (GTK4, compositing), so the uniform check triggers the `Control.print` fallback. Do not add an environment check to `unsupportedReason`; the environment cannot tell the cases apart.
@@ -247,7 +246,7 @@ Do not undo these without understanding why they are there.
 - `XTestInput` keeps one X connection for the life of the process and opens it on the UI thread. `XOpenDisplay` holds Xlib's process-wide lock while it waits for the server, and GDK takes that lock while it holds a server grab, so a connection opened on another thread can hang the IDE and the tool call together.
 - On native Wayland, `MutterRemoteDesktop` drives `eclipse_click` and `eclipse_drag` through mutter's `org.gnome.Mutter.RemoteDesktop` session: relative moves corrected by `getCursorLocation`, which Wayland reports only over this IDE's windows and never during a drag, so the moves run off the UI thread (the IDE sees them only once its event loop dispatched them) and a drag reads the pointer only after the release.
 - `eclipse_drag` moves the pointer through XTest, wiggles it on each point, and resolves the first leg before the press: SWT's X11 drag detection holds the UI thread for up to 500 ms after the press, so a UI call there delays the first move past it, and GTK starts its drag partway along the line, so a drop target only reacts to motion after that.
-- Screencasts default to the target's own width; both capture tools report a non-integer scale, and `crispWidth` snaps to a whole divisor.
+- `eclipse_screenshot` reports a non-integer scale, and `crispWidth` snaps to a whole divisor.
 
 ### Profiling
 

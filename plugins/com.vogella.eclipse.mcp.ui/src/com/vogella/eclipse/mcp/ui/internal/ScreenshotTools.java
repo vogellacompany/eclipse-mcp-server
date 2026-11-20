@@ -75,7 +75,7 @@ public final class ScreenshotTools {
 		return null;
 	}
 
-	private static <T> McpToolResult onUi(Supplier<T> work, Function<T, String> render) {
+	static <T> McpToolResult onUi(Supplier<T> work, Function<T, String> render) {
 		if (!Workbenches.running()) {
 			return McpToolResult.error("There is no running workbench."); //$NON-NLS-1$
 		}
@@ -156,7 +156,7 @@ public final class ScreenshotTools {
 						.put("firstControl", Shells.firstControlName(shell)) //$NON-NLS-1$
 						.put("modal", Shells.isModal(shell)) //$NON-NLS-1$
 						.put("visible", shell.isVisible()) //$NON-NLS-1$
-						.put("bounds", Overlays.describe(bounds))); //$NON-NLS-1$
+						.put("bounds", Bounds.describe(bounds))); //$NON-NLS-1$
 			}
 			JsonArray parts = new JsonArray();
 			var e4Candidates = Workbenches.e4Candidates();
@@ -244,7 +244,7 @@ public final class ScreenshotTools {
 		}
 
 		/** The largest maxWidth, which leaves a native capture at its size. */
-		private static final int NO_DOWNSCALE = 16000;
+		static final int NO_DOWNSCALE = 16000;
 
 		@Override
 		public String getName() {
@@ -253,7 +253,7 @@ public final class ScreenshotTools {
 
 		@Override
 		public String getDescription() {
-			return "Captures the IDE as a PNG and writes it to a file, returning the path. Targets are a workbench part by id, a shell by title, one widget by path, a region of the screen, or the whole display; passing part, shellTitle, path or region selects the target on its own. A region or a widget is written at native resolution unless maxWidth is given. On Windows includePopups adds the native popups that have no shell and open at the target, such as a DateTime calendar or a Combo list, and a read of the screen reports under otherWindows any window of another program on top of the area: samplesTested points of a grid are tested, and windows lists each window found with its title, className and how many samples it holds. A region or display capture with includePopups answers includePopupsNote instead, since the screen read holds the popups already; a popup grown capture read from a stale or occluded screen says so in popupsNote; a region that comes back as one colour says in uniformNote that this can also be a read that returned nothing; a display capture over monitors of different zooms says so in mixedZoomNote. Omitting both shellTitle and part captures the active workbench window's shell, which is also what a target of shell without a title does; the display target must be asked for explicitly. The answer reports which method worked: rootCapture reads the real screen pixels, and rootReader says whether through GDK's pixbuf read or the copyArea fallback, also when that read came back blank and widgetPrint took over, with pixbufFailure saying why the pixbuf read was not used, widgetPrint paints the widget hierarchy instead, which is the fallback on a compositing window manager where reading the X11 root yields nothing, and also what is used inside an atomic eclipse_run_script, where no paint has happened yet and the screen would show what was there before. ROOT CAPTURE READS WHATEVER IS IN FRONT: on a desktop this IDE shares with a person, a window over the shell is photographed instead of the shell, and it is not a failure any other field can show, since a window sitting still is settled, converged and the right size. So a part or shell capture falls back to widgetPrint when this IDE is not the foreground application, and every answer carries 'foreground'; a display capture cannot fall back and says so in foregroundNote. Assert on 'foreground' rather than on eclipse_set_ide_visibility having been called, because that asks the window system for focus and the window system can refuse. A capture taken inside such a batch reports sameTurnCapture. A shell capture is sized to the shell's client area and composes every visible child of the shell into one image, so the trim bars are in it; the window decorations, meaning the title bar and the frame, are drawn by the window manager and are present only when rootCapture succeeded. requestedArea names the bounds of what was asked for, and when the capture covers less than that, requestedAreaNote says what was excluded and why. For method widgetPrint the areas between parts that no print paints are replaced with the widget background colour before the image is written, and the answer counts them in unpaintedPixels, so a whole shell capture does not arrive outlined in filler colour. coverage says in words how much of the requested area the print actually covered, and says outright when a capture holds too much filler to be evidence about the UI, rather than leaving that judgement to be computed from the fraction. On a HiDPI or scaled display both methods capture the pixels the screen really holds rather than the points a widget is measured in, so a 200% display yields an image twice the widget's size in each direction; zoom is that ratio, read off the pixels that came back, deviceZoom is what the display paints at, and belowDeviceZoom says so when the two differ, which is the one thing a softer-than-expected picture cannot tell you by itself. Use it for UI work such as layout, theming and dialog rendering; for anything textual the other tools answer better and shorter. A part that is not visible is refused rather than captured blank, unless activate is set. capturedArea is the pixels returned, areaInPoints is the widget's own size, and zoom is the percentage between them. Set includeToolbar to capture a part together with its surrounding stack, its tabs, view toolbar, view menu and min and max buttons included. Set method to print to always paint the widgets and never read the screen, or to window to have the window system capture the shell's own window instead (method osWindow in the answer), which is what was composited regardless of how the SWT implementation prints."; //$NON-NLS-1$
+			return "Captures the IDE as a PNG and writes it to a file, returning the path. Targets are a workbench part by id, a shell by title, one widget by path, a region of the screen, or the whole display; passing part, shellTitle, path or region selects the target on its own. A region or a widget is written at native resolution unless maxWidth is given. On Windows includePopups adds the native popups that have no shell and open at the target, such as a DateTime calendar or a Combo list, and a read of the screen reports under otherWindows any window of another program on top of the area: samplesTested points of a grid are tested, and windows lists each window found with its title, className and how many samples it holds. A region or display capture with includePopups answers includePopupsNote instead, since the screen read holds the popups already; a popup grown capture read from a stale or occluded screen says so in popupsNote; a region that comes back as one colour says in uniformNote that this can also be a read that returned nothing; a display capture over monitors of different zooms says so in mixedZoomNote. Omitting both shellTitle and part captures the active workbench window's shell, which is also what a target of shell without a title does; the display target must be asked for explicitly. The answer reports which method worked: rootCapture reads the real screen pixels, and rootReader says whether through GDK's pixbuf read or the copyArea fallback, also when that read came back blank and widgetPrint took over, with pixbufFailure saying why the pixbuf read was not used, widgetPrint paints the widget hierarchy instead, which is the fallback on a compositing window manager where reading the X11 root yields nothing, and also what is used inside a batch of tools run in one UI turn, where no paint has happened yet and the screen would show what was there before. ROOT CAPTURE READS WHATEVER IS IN FRONT: on a desktop this IDE shares with a person, a window over the shell is photographed instead of the shell, and it is not a failure any other field can show, since a window sitting still is settled and the right size. So a part or shell capture falls back to widgetPrint when this IDE is not the foreground application, and every answer carries 'foreground'; a display capture cannot fall back and says so in foregroundNote. Assert on 'foreground' rather than on eclipse_set_ide_visibility having been called, because that asks the window system for focus and the window system can refuse. A capture taken inside such a batch reports sameTurnCapture. A shell capture is sized to the shell's client area and composes every visible child of the shell into one image, so the trim bars are in it; the window decorations, meaning the title bar and the frame, are drawn by the window manager and are present only when rootCapture succeeded. requestedArea names the bounds of what was asked for, and when the capture covers less than that, requestedAreaNote says what was excluded and why. For method widgetPrint the areas between parts that no print paints are replaced with the widget background colour before the image is written, and the answer counts them in unpaintedPixels, so a whole shell capture does not arrive outlined in filler colour. coverage says in words how much of the requested area the print actually covered, and says outright when a capture holds too much filler to be evidence about the UI, rather than leaving that judgement to be computed from the fraction. On a HiDPI or scaled display both methods capture the pixels the screen really holds rather than the points a widget is measured in, so a 200% display yields an image twice the widget's size in each direction; zoom is that ratio, read off the pixels that came back, deviceZoom is what the display paints at, and belowDeviceZoom says so when the two differ, which is the one thing a softer-than-expected picture cannot tell you by itself. Use it for UI work such as layout, theming and dialog rendering; for anything textual the other tools answer better and shorter. A part that is not visible is refused rather than captured blank, unless activate is set. capturedArea is the pixels returned, areaInPoints is the widget's own size, and zoom is the percentage between them. Set includeToolbar to capture a part together with its surrounding stack, its tabs, view toolbar, view menu and min and max buttons included. Set method to print to always paint the widgets and never read the screen, or to window to have the window system capture the shell's own window instead (method osWindow in the answer), which is what was composited regardless of how the SWT implementation prints."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -274,11 +274,6 @@ public final class ScreenshotTools {
 					    "outputPath": {"type":"string","description":"Absolute file to write. Defaults to a temporary file."},
 					    "inline":     {"type":"boolean","default":false,"description":"Also return the PNG as image content, so you see the picture itself without reading the file. Keep maxWidth moderate, since a client caps how large an image it accepts."},
 					    "includeBase64": {"type":"boolean","default":false,"description":"Also put the PNG into the JSON answer as a base64 string, for a client that processes the bytes itself. To look at the image, use inline instead: a base64 string is text to the model, not a picture."},
-				    "highlights": {"type":"array","description":"Rectangles to draw onto the image after the capture, each {path?, bounds?, color?, label?, style?, padding?, lineWidth?, labelPosition?}: path is a widget path from eclipse_get_widget_tree relative to the capture target, bounds is 'x,y wxh' in points relative to the capture target, color is #rrggbb (default #ff0066, which reads on light and dark themes), label is drawn in a filled box beside the rectangle, style is outline (default) or fill (translucent). padding adds air around the rectangle IN POINTS, one number for every side or 'top,right,bottom,left', applied after the rectangle is resolved and before it is scaled, which is the only way to frame a widget loosely when the rectangle came from a path. lineWidth is the outline in pixels, 3 by default. labelPosition is above (default), below, left, right or inside, for keeping a label off a neighbouring element. The answer reports the padded rectangle under pointsInTarget and the pixels actually drawn under pixels.","items":{"type":"object","properties":{"path":{"type":"string"},"bounds":{"type":"string"},"color":{"type":"string"},"label":{"type":"string"},"style":{"type":"string","enum":["outline","fill"]},"padding":{"type":["integer","string"]},"lineWidth":{"type":"integer","minimum":1,"maximum":40},"labelPosition":{"type":"string","enum":["above","below","left","right","inside"]}},"additionalProperties":false}},
-				    "settle": {"type":"boolean","default":false,"description":"Wait for the UI to look idle before capturing, the same heuristic eclipse_wait_until_settled runs, and report it under 'settle'. IT IS A HEURISTIC: it drains the display queue and waits for the job manager, and it cannot see work on a plain background thread, so JDT's semantic highlighting can still land after the capture. Assert what you need rather than trusting it."},
-				    "settleTimeoutSeconds": {"type":"integer","default":10,"minimum":1,"maximum":120,"description":"Budget for 'settle'. Running out still captures, and the report says it did not settle."},
-				    "settlePixels": {"type":"boolean","default":false,"description":"Capture repeatedly until two consecutive captures are pixel identical as captured, so a difference that the maxWidth downscale would hide still counts as a change, and report it under 'pixelSettle'. THIS IS THE ONLY CHECK THAT CATCHES A REPAINT IN FLIGHT: 'settle' asks the display queue, the job manager and the reconcilers, and a paint already under way is none of those, so a whole-shell capture can come back with a few thousand scattered pixels wrong while settle honestly reports settled true. Comparing two captures does not need to know why. It costs one extra capture at least, and answers converged false rather than hanging when the screen genuinely never stops changing, which is what an animation or a progress bar does. suppressCaret is on by default for the same reason and is what stops a blinking caret making this never converge. READ THE TWO OUTCOMES AS A DIAGNOSIS, because they point at different causes: converged false means the screen never stopped, so look for something still animating; converged TRUE while the image still differs from an earlier one means the screen stopped at a DIFFERENT LAYOUT, not mid-paint, so look at placement rather than painting. A whole-window comparison that differs by a few thousand scattered pixels with converged true is the second case and is usually one part laid out at a different offset, which drags everything below it and looks like noise spread over the window; no amount of waiting fixes it, because the waiting already succeeded."},
-				    "settlePixelAttempts": {"type":"integer","default":4,"minimum":2,"maximum":10,"description":"How many captures 'settlePixels' may take before giving up and answering with the last one."},
 				    "suppressCaret": {"type":"boolean","default":true,"description":"Take the text caret out of every StyledText under the target for the duration of the capture, and put it back afterwards. SWT draws and blinks the caret itself, so gtk-cursor-blink=false does not reach it, and two captures of a focused editor otherwise differ by the caret alone, which is enough to make a pixel comparison never agree. Reported under caretsSuppressed. ON by default: the two failures are not symmetric. Leaving it off makes two captures differ by a caret and look like a real change, which is silent and misleading; leaving it on costs a caret in a capture taken to look at one, and the answer says caretsSuppressed so that explains itself. Pass false when the caret is the subject."},
 				    "includeToolbar": {"type":"boolean","default":false,"description":"For a part, capture the whole part stack instead: the tabs and any sibling view sharing the stack. The stack's view toolbar, view menu and min and max buttons are painted too."},
 				    "method": {"type":"string","enum":["auto","print","window"],"default":"auto","description":"auto reads the screen and falls back to painting the widgets. print always paints the widget hierarchy (method widgetPrint) and never reads the screen, so notifications, system prompts and other windows in front cannot get into the image, at the cost of the window decorations and the gaps widgetPrint has; a display target cannot be painted and is read from the screen with printUnavailable saying so. window asks the window system for the shell's own window instead: screencapture -l on macOS (needs the Screen Recording permission), PrintWindow with PW_RENDERFULLCONTENT on Windows, the toplevel GdkWindow on GTK. That is what was composited, independent of how the SWT implementation prints its controls, and on macOS and Windows unaffected by windows in front. A part is cropped out of its shell's window. The answer says method osWindow and windowReader when it worked, and windowCaptureFailure with the reason when it fell back to auto."}
@@ -325,83 +320,26 @@ public final class ScreenshotTools {
 			boolean includeBase64 = args.getBoolean("includeBase64", false); //$NON-NLS-1$
 			boolean inline = args.getBoolean("inline", false); //$NON-NLS-1$
 
-			Object highlights = arguments.get("highlights"); //$NON-NLS-1$
-			// asked here, not inside capture where it is always true: on the UI thread (eclipse_run_script atomic) no paint has run since the batch's widgets were created
+			// asked here, not inside capture where it is always true: on the UI thread (a batch of tools run in one UI turn) no paint has run since the batch's widgets were created
 			boolean sameTurn = UiThread.onUiThread();
-			// before the UI hop, because the fence it posts has to be waited for from
-			// off the UI thread; inside an atomic batch it refuses and says why
-			JsonObject settled = args.getBoolean("settle", false) //$NON-NLS-1$
-					? UiSettle.settle(3, args.getInt("settleTimeoutSeconds", 10, 1, 120) * 1000L, 120, monitor) //$NON-NLS-1$
-					: null;
 			boolean suppressCaret = args.getBoolean("suppressCaret", true); //$NON-NLS-1$
-			boolean settlePixels = args.getBoolean("settlePixels", false) && !sameTurn; //$NON-NLS-1$
-			int attempts = args.getInt("settlePixelAttempts", 4, 2, 10); //$NON-NLS-1$
 			boolean osWindow = "window".equals(args.getString("method")); //$NON-NLS-1$ //$NON-NLS-2$
 			boolean printOnly = "print".equals(args.getString("method")); //$NON-NLS-1$ //$NON-NLS-2$
 			if (includePopups && printOnly) {
 				return McpToolResult.error("includePopups reads the popups from the screen, so it cannot be combined with method print."); //$NON-NLS-1$
 			}
-			boolean prefetch = osWindow && !sameTurn && WindowCapture.COCOA;
-			AtomicReference<WindowCapture.Read> prefetched = new AtomicReference<>();
-			Supplier<Encoding> once = () -> capture(target, part, shellTitle, activate, maxWidth, outputPath,
-					includeBase64, args.getBoolean("includeToolbar", false), highlights, sameTurn, suppressCaret, //$NON-NLS-1$
-					osWindow, printOnly, prefetched.get(), region, path, popupsAsked);
-			if (!settlePixels) {
-				if (prefetch) {
-					prefetched.set(screencapture(target, part, shellTitle));
-				}
-				AtomicReference<byte[]> png = new AtomicReference<>();
-				McpToolResult result = onUi(once, encoding -> {
-					JsonObject answer = encoding.finish();
-					png.set(encoding.png().get());
-					return (settled == null ? answer : answer.put("settle", settled)).toString(); //$NON-NLS-1$
-				});
-				return withPng(result, inline, png.get());
-			}
-			Encoding last = null;
-			ImageData previous = null;
-			int taken = 0;
-			boolean converged = false;
-			for (int i = 0; i < attempts && !converged; i++) {
-				// one UI hop per capture on purpose, so whatever is painting can get on with it in between
-				int wait = CallBudget.uiWaitSeconds(UI_TIMEOUT_SECONDS);
-				if (prefetch) {
-					prefetched.set(screencapture(target, part, shellTitle));
-				}
-				Encoding encoding = onUiValue(once, wait);
-				if (encoding == null) {
-					return McpToolResult.error(Thread.currentThread().isInterrupted() ? "The request was interrupted." //$NON-NLS-1$
-							: UiThread.withdrawn(wait));
-				}
-				last = encoding;
-				taken++;
-				// compared before encoding, so only the capture that is returned pays for the PNG
-				ImageData pixels = encoding.pixels();
-				if (pixels == null) {
-					// a capture that failed is answered as that failure, not as a screen still changing
-					JsonObject failed = encoding.finish();
-					return McpToolResult.of((settled == null ? failed : failed.put("settle", settled)).toString()); //$NON-NLS-1$
-				}
-				if (previous != null && samePixels(pixels, previous)) {
-					converged = true;
-				}
-				previous = pixels;
-				if (!converged && i + 1 < attempts) {
-					pause();
-				}
-			}
-			JsonObject answer = last.finish();
-			byte[] lastPng = last.png().get();
-			JsonObject pixelSettle = new JsonObject().put("converged", Boolean.valueOf(converged)) //$NON-NLS-1$
-					.put("captures", Integer.valueOf(taken)); //$NON-NLS-1$
-			if (!converged) {
-				pixelSettle.put("note", //$NON-NLS-1$
-						"No two consecutive captures were identical within %d attempts, so the image returned is the last one and something on screen is still changing. An animation, a progress bar or a caret does this; suppressCaret is on by default, so a caret is the least likely of the three." //$NON-NLS-1$
-								.formatted(Integer.valueOf(attempts)));
-			}
-			answer.put("pixelSettle", pixelSettle); //$NON-NLS-1$
-			return withPng(McpToolResult.of((settled == null ? answer : answer.put("settle", settled)).toString()), //$NON-NLS-1$
-					inline, lastPng);
+			WindowCapture.Read prefetched = osWindow && !sameTurn && WindowCapture.COCOA
+					? screencapture(target, part, shellTitle)
+					: null;
+			AtomicReference<byte[]> png = new AtomicReference<>();
+			McpToolResult result = onUi(() -> capture(target, part, shellTitle, activate, maxWidth, outputPath,
+					includeBase64, args.getBoolean("includeToolbar", false), Marks.NONE_REQUESTED, sameTurn, //$NON-NLS-1$
+					suppressCaret, osWindow, printOnly, prefetched, region, path, popupsAsked), encoding -> {
+						JsonObject answer = encoding.finish();
+						png.set(encoding.png().get());
+						return answer.toString();
+					});
+			return withPng(result, inline, png.get());
 		}
 
 		/**
@@ -409,7 +347,7 @@ public final class ScreenshotTools {
 		 * subprocess does not hold the UI; null when the shell cannot be resolved,
 		 * and capture then reads the window itself.
 		 */
-		private static WindowCapture.Read screencapture(String target, String partId, String shellTitle) {
+		static WindowCapture.Read screencapture(String target, String partId, String shellTitle) {
 			long[] number = { 0 };
 			Rectangle[] bounds = { null };
 			UiThread.run(UI_TIMEOUT_SECONDS, () -> {
@@ -429,37 +367,12 @@ public final class ScreenshotTools {
 			return bounds[0] == null ? null : WindowCapture.screencapture(number[0], bounds[0]);
 		}
 
-		private static McpToolResult withPng(McpToolResult result, boolean inline, byte[] png) {
+		static McpToolResult withPng(McpToolResult result, boolean inline, byte[] png) {
 			return inline && png != null && !result.isError() ? result.withImage(png, "image/png") : result; //$NON-NLS-1$
 		}
 
-		/** Leaves the UI alone between two captures of a pixel settle. */
-		private static void pause() {
-			try {
-				Thread.sleep(120);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
-		}
-
-		/** Whether two captures hold the same pixels, which is what makes their PNG files identical. */
-		public static boolean samePixels(ImageData a, ImageData b) {
-			return a.width == b.width && a.height == b.height && a.depth == b.depth
-					&& a.bytesPerLine == b.bytesPerLine && a.alpha == b.alpha && a.transparentPixel == b.transparentPixel
-					&& samePalette(a.palette, b.palette) && Arrays.equals(a.data, b.data)
-					&& Arrays.equals(a.alphaData, b.alphaData) && Arrays.equals(a.maskData, b.maskData);
-		}
-
-		private static boolean samePalette(org.eclipse.swt.graphics.PaletteData a, org.eclipse.swt.graphics.PaletteData b) {
-			if (a == null || b == null) {
-				return a == b;
-			}
-			return a.isDirect == b.isDirect && a.redMask == b.redMask && a.greenMask == b.greenMask
-					&& a.blueMask == b.blueMask && Arrays.equals(a.colors, b.colors);
-		}
-
 		/** One capture on the UI thread, as the object rather than as a result. */
-		private static Encoding onUiValue(Supplier<Encoding> work, int waitSeconds) {
+		static Encoding onUiValue(Supplier<Encoding> work, int waitSeconds) {
 			CompletableFuture<Encoding> pending = new CompletableFuture<>();
 			UiThread.exec(() -> {
 				if (pending.isDone()) {
@@ -486,8 +399,8 @@ public final class ScreenshotTools {
 			}
 		}
 
-		private static Encoding capture(String target, String partId, String shellTitle, boolean activate,
-				int maxWidth, String outputPath, boolean includeBase64, boolean includeToolbar, Object highlights,
+		static Encoding capture(String target, String partId, String shellTitle, boolean activate,
+				int maxWidth, String outputPath, boolean includeBase64, boolean includeToolbar, Marks.Request marks,
 				boolean sameTurn, boolean suppressCaret, boolean osWindow, boolean printOnly,
 				WindowCapture.Read prefetched, Rectangle region, String widgetPath, boolean popupsAsked) {
 			Display display = Workbenches.display();
@@ -515,7 +428,7 @@ public final class ScreenshotTools {
 				area = NativeScreen.clip(NativeScreen.allPoints(display), region);
 				if (area == null) {
 					return Encoding.done(failure("The region lies outside the display, which holds %s." //$NON-NLS-1$
-							.formatted(Overlays.describe(NativeScreen.allPoints(display)))));
+							.formatted(Bounds.describe(NativeScreen.allPoints(display)))));
 				}
 			} else if ("widget".equals(target)) { //$NON-NLS-1$
 				Control root = WidgetTools.rootOf(partId, shellTitle, false);
@@ -578,7 +491,7 @@ public final class ScreenshotTools {
 								.formatted(Integer.valueOf(area.width), Integer.valueOf(area.height))));
 			}
 
-			List<Overlays.Highlight> overlays = Overlays.resolve(display, printable, highlights);
+			Marks overlays = marks.resolve(display, printable);
 			JsonArray nativePopups = null;
 			boolean screenTarget = region != null || "display".equals(target); //$NON-NLS-1$
 			boolean grewOverPopups = false;
@@ -588,7 +501,7 @@ public final class ScreenshotTools {
 				Rectangle grown = growth.area();
 				grewOverPopups = !grown.equals(area);
 				if (grewOverPopups) {
-					overlays = Overlays.translate(overlays, area.x - grown.x, area.y - grown.y,
+					overlays = overlays.moved(area.x - grown.x, area.y - grown.y,
 							new Rectangle(0, 0, grown.width, grown.height));
 					area = grown;
 					// a popup is on the screen only, so painting the widgets would leave it out
@@ -672,9 +585,9 @@ public final class ScreenshotTools {
 					clientArea = shell.getClientArea();
 					pieces = paintablesOf(shell);
 					exclusion = DECORATIONS_EXCLUDED;
-					// highlights are placed in the shell's bounds, the composition starts at its client area
+					// marks are placed in the shell's bounds, the composition starts at its client area
 					Point inset = WidgetTools.clientInset(shell);
-					overlays = Overlays.translate(overlays, -inset.x, -inset.y,
+					overlays = overlays.moved(-inset.x, -inset.y,
 							new Rectangle(0, 0, clientArea.width, clientArea.height));
 				}
 				if (useWidgetPrint && printable != null) {
@@ -741,7 +654,7 @@ public final class ScreenshotTools {
 						.put("zoom", Integer.valueOf(captured)) //$NON-NLS-1$
 						.put("deviceZoom", Integer.valueOf(zoom)) //$NON-NLS-1$
 						.put("foreground", Boolean.valueOf(foreground)) //$NON-NLS-1$
-						.put("requestedArea", Overlays.describe(requested)); //$NON-NLS-1$
+						.put("requestedArea", Bounds.describe(requested)); //$NON-NLS-1$
 				if (uniformRegion) {
 					written.put("uniformNote", "The region came back as one colour. That is what a flat area looks like, and also what a screen read that returned nothing looks like, which a compositing window manager can do; capture a part, a shell or a widget around it to tell the two apart."); //$NON-NLS-1$ //$NON-NLS-2$
 				}
@@ -795,14 +708,14 @@ public final class ScreenshotTools {
 				}
 				if (!foreground && !"osWindow".equals(method) && !printOnly) { //$NON-NLS-1$
 					written.put("foregroundNote", "rootCapture".equals(method) //$NON-NLS-1$ //$NON-NLS-2$
-							? "THIS IDE IS NOT THE FOREGROUND APPLICATION AND AN AREA OF THE SCREEN CANNOT BE PAINTED WIDGET BY WIDGET, so this image is of the screen as it is, including any window in front of the IDE. Nothing else in this answer can tell you that: a window sitting still is settled, converged and the right size. Capture a shell or a part instead, which is painted directly and cannot be occluded, or bring the IDE forward first and check 'foreground' here rather than trusting eclipse_set_ide_visibility, which asks the window system for focus and can be refused." //$NON-NLS-1$
+							? "THIS IDE IS NOT THE FOREGROUND APPLICATION AND AN AREA OF THE SCREEN CANNOT BE PAINTED WIDGET BY WIDGET, so this image is of the screen as it is, including any window in front of the IDE. Nothing else in this answer can tell you that: a window sitting still is settled and the right size. Capture a shell or a part instead, which is painted directly and cannot be occluded, or bring the IDE forward first and check 'foreground' here rather than trusting eclipse_set_ide_visibility, which asks the window system for focus and can be refused." //$NON-NLS-1$
 							: "This IDE is not the foreground application, so reading the screen would have photographed whatever is in front of it. The widget was painted directly instead, so the image is of the right thing; expect the GTK gaps of widgetPrint rather than the fidelity of a screen read."); //$NON-NLS-1$
 				}
 				if (sameTurn) {
 					written.put("sameTurnCapture", Boolean.TRUE); //$NON-NLS-1$
 					written.put("sameTurnNote", screenUnreliable //$NON-NLS-1$
-							? "This capture ran inside one turn of the UI thread, which is what eclipse_run_script with atomic does. No paint has been dispatched since this batch started, so the screen does not show what the widgets hold and reading it would have photographed whatever was underneath. The widget was painted directly instead, so the image is of the right thing; expect the GTK gaps of widgetPrint rather than the fidelity of a screen read."
-							: "This capture ran inside one turn of the UI thread, which is what eclipse_run_script with atomic does, and the target is an area of the screen, which cannot be painted widget by widget. No paint has been dispatched since this batch started, so ANYTHING THIS BATCH CHANGED IS PROBABLY NOT IN THE IMAGE. Capture a part, a shell or a widget instead, or take the screenshot outside the atomic batch."); //$NON-NLS-1$
+							? "This capture ran inside one turn of the UI thread, as when a batch of tools runs in one UI turn. No paint has been dispatched since this batch started, so the screen does not show what the widgets hold and reading it would have photographed whatever was underneath. The widget was painted directly instead, so the image is of the right thing; expect the GTK gaps of widgetPrint rather than the fidelity of a screen read."
+							: "This capture ran inside one turn of the UI thread, as when a batch of tools runs in one UI turn, and the target is an area of the screen, which cannot be painted widget by widget. No paint has been dispatched since this batch started, so ANYTHING THIS BATCH CHANGED IS PROBABLY NOT IN THE IMAGE. Capture a part, a shell or a widget instead, or take the screenshot after the batch."); //$NON-NLS-1$
 				}
 				if (windowEdge != null) {
 					exclusion = exclusion == null ? windowEdge.strip() : exclusion + windowEdge;
@@ -911,7 +824,7 @@ public final class ScreenshotTools {
 				if (window == null) {
 					return new WindowCut(area, null, null);
 				}
-				String bounds = Overlays.describe(window);
+				String bounds = Bounds.describe(window);
 				Rectangle inside = insideWindow(area, window);
 				return inside.equals(area) ? new WindowCut(area, bounds, null)
 						: new WindowCut(inside, bounds, WINDOW_EDGE.formatted(bounds));
@@ -965,7 +878,7 @@ public final class ScreenshotTools {
 			}
 			if (sameTurn) {
 				reasons.add("inside one UI turn the screen has not been painted yet"); //$NON-NLS-1$
-				remedies.add("capture outside an atomic eclipse_run_script batch"); //$NON-NLS-1$
+				remedies.add("capture outside a batch run in one UI turn"); //$NON-NLS-1$
 			}
 			if (background) {
 				reasons.add("this IDE is not the foreground application, so a screen read would show whatever window is in front of it"); //$NON-NLS-1$
@@ -1123,7 +1036,7 @@ public final class ScreenshotTools {
 		 * {@link Encoding#finish()}, which the caller runs off it.
 		 */
 		private static Encoding write(Display display, Image image, ImageData data, Rectangle area, int maxWidth, String outputPath,
-				boolean includeBase64, List<Overlays.Highlight> overlays, int zoom) {
+				boolean includeBase64, Marks overlays, int zoom) {
 			int snapped = crispWidth(data.width, maxWidth);
 			int width = Math.min(data.width, snapped);
 			int height = data.width > snapped ? Math.max(1, data.height * snapped / data.width) : data.height;
@@ -1134,7 +1047,7 @@ public final class ScreenshotTools {
 				pixels = width == data.width ? data : data.scaledTo(width, height);
 				// points to pixels: the zoom the widget painted at, then the downscale
 				double scale = zoom / 100.0 * width / data.width;
-				highlighted = Overlays.draw(display, pixels, overlays, scale);
+				highlighted = overlays.draw(display, pixels, scale);
 			}
 			JsonObject result = new JsonObject().put("captured", true) //$NON-NLS-1$
 					.put("path", null) //$NON-NLS-1$

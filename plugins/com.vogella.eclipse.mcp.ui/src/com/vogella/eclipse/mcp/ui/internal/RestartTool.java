@@ -120,7 +120,7 @@ public final class RestartTool implements IMcpTool {
 		}
 		if (!vmArguments.isEmpty() && UiThread.onUiThread()) {
 			return McpToolResult.error(
-					"flightRecording and vmArgs are tried on a throwaway JVM first, which must not block the UI thread, so they cannot be a step of an atomic eclipse_run_script. Call eclipse_restart on its own."); //$NON-NLS-1$
+					"flightRecording and vmArgs are tried on a throwaway JVM first, which must not block the UI thread, so they cannot be a step of a batch run in one UI turn. Call eclipse_restart on its own."); //$NON-NLS-1$
 		}
 		if (workspace != null || !vmArguments.isEmpty()) {
 			// the steps below create directories and wait for a JVM, the latter off the UI thread

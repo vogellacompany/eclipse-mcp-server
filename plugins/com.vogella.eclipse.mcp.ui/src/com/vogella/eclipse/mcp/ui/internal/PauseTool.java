@@ -24,7 +24,7 @@ public final class PauseTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Waits for the given number of milliseconds and returns. Changes nothing. This is the pause a screencast needs so a person can read a step before the next one, and it is the honest form of what eclipse_wait_until_settled with quietRounds was being used for. The wait is capped at the call timeout less a margin, and the answer says so under clamped when the cap applied, so a longer hold is several calls. Refused inside an atomic eclipse_run_script, where it would freeze the UI thread for the whole time and nothing would repaint."; //$NON-NLS-1$
+		return "Waits for the given number of milliseconds and returns. Changes nothing. This is the pause a demonstration needs so a person can read a step before the next one, and it is the honest form of what eclipse_wait_until_settled with quietRounds was being used for. The wait is capped at the call timeout less a margin, and the answer says so under clamped when the cap applied, so a longer hold is several calls. Refused inside a batch of tools run in one UI turn, where it would freeze the UI thread for the whole time and nothing would repaint."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -48,7 +48,7 @@ public final class PauseTool implements IMcpTool {
 		}
 		if (Display.getCurrent() != null) {
 			return McpToolResult.error(
-					"eclipse_pause is running on the UI thread, inside an atomic eclipse_run_script; a pause there would only freeze the IDE and nothing would repaint. Run the script without atomic, or pause between scripts."); //$NON-NLS-1$
+					"eclipse_pause is running on the UI thread, inside a batch of tools run in one UI turn; a pause there would only freeze the IDE and nothing would repaint. Pause between batches instead."); //$NON-NLS-1$
 		}
 		int cap = CallBudget.maxWaitSeconds() * 1000;
 		int millis = Math.min(requested, cap);

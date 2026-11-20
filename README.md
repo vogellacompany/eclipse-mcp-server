@@ -114,26 +114,6 @@ While more than one is connected, `eclipse_get_build_status`, `eclipse_get_test_
 The server offers tools only: `initialize`, `ping`, `tools/list` and `tools/call`.
 Every tool returns pretty-printed JSON, and every list-returning tool honours `maxResults` and reports `total` and `truncated`.
 
-## Scripting the IDE from outside
-
-`eclipse_run_script` runs a sequence of tools with assertions in one call, and two scripts in `releng` make that runnable from a build:
-
-```bash
-# against the IDE you are working in
-releng/mcp-script.py releng/scripts/content-assist.json
-
-# against a throwaway IDE, on a workspace and a port of its own
-releng/mcp-test-ide.sh --ide /path/to/eclipse --junit results.xml releng/scripts/smoke.json
-```
-
-`mcp-script.py` prints each step, exits non-zero on a failed expectation and can write JUnit XML.
-`mcp-test-ide.sh` starts the IDE on a fresh workspace and configuration area, sharing the installation's plug-ins but not any bundle substituted into it, runs the scripts and shuts the IDE down again.
-`--bundle <jar>` runs a patched bundle in that private configuration only.
-`--serve` keeps the IDE up for interactive use until the script is terminated.
-If the IDE exits on its own during `--serve`, the script exits with the IDE's status and, when that is not 0, keeps the workspace and prints the last lines of its logs.
-`--vm` names the java executable for an installation without a JRE.
-On macOS, `--ide` takes the `.app` bundle or the directory holding it.
-
 ## Testing Eclipse and SWT changes
 
 The UI tools address widgets by their place in the SWT hierarchy rather than by screen coordinates, so a check survives a resize, a theme and another machine:
@@ -141,7 +121,7 @@ The UI tools address widgets by their place in the SWT hierarchy rather than by 
 1. `eclipse_list_ui_targets` names the shells and parts; `eclipse_get_widget_tree` lists the widgets under one with a path for each, bounds in three coordinate systems, CSS id and class, and with `includeMetrics` what the control computes for itself: preferred size, trim, font and item height.
 2. `eclipse_press_widget`, `eclipse_set_widget_text`, `eclipse_select_tab`, `eclipse_expand_row`, `eclipse_click`, `eclipse_drag`, `eclipse_scroll`, `eclipse_press_key` and `eclipse_type_text` act on a path; key and click fall back to SWT events where the window system refuses synthetic input.
 3. `eclipse_wait_for` waits for a shell, widget, selection, editor or job condition, and `eclipse_wait_until_settled` for the display queue, the jobs and the reconcilers.
-4. `eclipse_screenshot` captures a part, a shell, a widget, a screen region or the display; `settle` and `settlePixels` make a capture repeatable, and `method: print` paints the widgets instead of reading the screen.
+4. `eclipse_screenshot` captures a part, a shell, a widget, a screen region or the display; `method: print` paints the widgets instead of reading the screen.
 5. `eclipse_mark_log` and then `eclipse_get_log_entries` show what an action logged, UI freezes included.
 
 To run modified SWT or platform code, import the bundle's project into the IDE's workspace, build it, run `eclipse_substitute_bundle` with `action: substitute` and then `eclipse_restart`; `action: restore` and another restart put the installed bundle back.
@@ -243,10 +223,9 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_list_perspectives`, ✎ `eclipse_switch_perspective`, `eclipse_reset_perspective` | Perspectives |
 | ✎ `eclipse_manage_window`, `eclipse_set_shell_bounds`, `eclipse_set_ide_visibility`, `eclipse_set_model_visibility` | Windows, their bounds, and what of the IDE is visible |
 | `eclipse_list_themes`, `eclipse_list_theme_definitions`, ✎ `eclipse_set_theme`, `eclipse_register_theme`, `eclipse_apply_css` | Themes and live CSS |
-| `eclipse_get_display_info`, `eclipse_screenshot`, `eclipse_start_screencast`, `eclipse_stop_screencast` | Display scaling, PNG captures, and GIF or MP4 recordings |
+| `eclipse_get_display_info`, `eclipse_screenshot` | Display scaling and PNG captures |
 | `eclipse_wait_until_settled` | Wait until the UI has stopped changing |
 | `eclipse_wait_for` | Wait until a shell, widget, selection, editor or job condition holds |
-| ✎ `eclipse_run_script` | Run several tools in sequence with expectations, optionally in one UI turn |
 
 **Installation**
 
@@ -269,6 +248,7 @@ Tools are contributed through the `com.vogella.eclipse.mcp.core.tools` extension
 
 `com.example.MyTool` implements `com.vogella.eclipse.mcp.core.IMcpTool`.
 It is called on a worker thread, must not open a dialog, must say in its description if it changes anything, and must finish within the call timeout or hand back a handle to poll.
+A bundle can replace a tool of the same name with a richer version by contributing it with a higher `priority`, as in `<tool class="com.example.BetterScreenshot" priority="1"/>`; the highest priority wins while both bundles are installed.
 See `AGENTS.md` for the full set of rules.
 
 ## Describing a product

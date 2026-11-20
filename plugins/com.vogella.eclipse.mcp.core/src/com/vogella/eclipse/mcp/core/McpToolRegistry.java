@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.core;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,8 @@ public final class McpToolRegistry {
 	public static final String EXTENSION_POINT_ID = "com.vogella.eclipse.mcp.core.tools"; //$NON-NLS-1$
 
 	private static final String ATTRIBUTE_CLASS = "class"; //$NON-NLS-1$
+
+	private static final String ATTRIBUTE_PRIORITY = "priority"; //$NON-NLS-1$
 
 	private static final McpToolRegistry INSTANCE = new McpToolRegistry();
 
@@ -53,6 +56,7 @@ public final class McpToolRegistry {
 			return tools;
 		}
 		Map<String, IMcpTool> discovered = new TreeMap<>();
+		Map<String, Integer> priorities = new HashMap<>();
 		IExtensionRegistry registry = Platform.getExtensionRegistry();
 		if (registry == null) {
 			ILog.get().warn("No extension registry available, no MCP tools contributed"); //$NON-NLS-1$
@@ -72,8 +76,19 @@ public final class McpToolRegistry {
 					ILog.get().error("Tool contributed by %s has no name".formatted(contributor)); //$NON-NLS-1$
 					continue;
 				}
-				IMcpTool previous = discovered.putIfAbsent(name, tool);
-				if (previous != null) {
+				int priority = priorityOf(element);
+				Integer previous = priorities.get(name);
+				if (previous == null || priority > previous.intValue()) {
+					IMcpTool replaced = discovered.put(name, tool);
+					priorities.put(name, Integer.valueOf(priority));
+					if (replaced != null) {
+						ILog.get().info("MCP tool '%s' of %s replaces %s, which has a lower priority".formatted(name, //$NON-NLS-1$
+								tool.getClass().getName(), replaced.getClass().getName()));
+					}
+				} else if (priority < previous.intValue()) {
+					ILog.get().info("MCP tool '%s' of %s is replaced by %s, which has a higher priority".formatted(name, //$NON-NLS-1$
+							tool.getClass().getName(), discovered.get(name).getClass().getName()));
+				} else if (priority == previous.intValue()) {
 					ILog.get().error("Duplicate MCP tool name '%s' contributed by %s, ignoring it".formatted(name, //$NON-NLS-1$
 							contributor));
 				}
@@ -83,5 +98,20 @@ public final class McpToolRegistry {
 		}
 		tools = discovered;
 		return tools;
+	}
+
+	/** The priority a contribution declares, 0 when it declares none or one that is not a number. */
+	private static int priorityOf(IConfigurationElement element) {
+		String value = element.getAttribute(ATTRIBUTE_PRIORITY);
+		if (value == null || value.isBlank()) {
+			return 0;
+		}
+		try {
+			return Integer.parseInt(value.trim());
+		} catch (NumberFormatException e) {
+			ILog.get().warn("Tool contributed by %s has a priority that is not a number: %s" //$NON-NLS-1$
+					.formatted(element.getContributor().getName(), value));
+			return 0;
+		}
 	}
 }

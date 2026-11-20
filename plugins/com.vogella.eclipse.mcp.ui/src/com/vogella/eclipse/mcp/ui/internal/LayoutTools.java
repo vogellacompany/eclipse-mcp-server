@@ -163,10 +163,10 @@ public final class LayoutTools {
 			Rectangle after = shell.getBounds();
 			JsonObject result = new JsonObject().put("changed", Boolean.TRUE) //$NON-NLS-1$
 					.put("title", shell.getText()) //$NON-NLS-1$
-					.put("previousBounds", Overlays.describe(before)) //$NON-NLS-1$
+					.put("previousBounds", Bounds.describe(before)) //$NON-NLS-1$
 					.put("previousMaximized", Boolean.valueOf(wasMaximized)) //$NON-NLS-1$
 					.put("previousMinimized", Boolean.valueOf(wasMinimized)) //$NON-NLS-1$
-					.put("bounds", Overlays.describe(after)) //$NON-NLS-1$
+					.put("bounds", Bounds.describe(after)) //$NON-NLS-1$
 					.put("maximized", Boolean.valueOf(shell.getMaximized())) //$NON-NLS-1$
 					.put("note", //$NON-NLS-1$
 							"Pass previousBounds, previousMaximized and previousMinimized back to put the window as it was."); //$NON-NLS-1$
@@ -177,7 +177,7 @@ public final class LayoutTools {
 			if (shell.isDisposed()) {
 				return applied.put("shellClosed", Boolean.TRUE); //$NON-NLS-1$
 			}
-			return withMinimized(applied.put("bounds", Overlays.describe(shell.getBounds())) //$NON-NLS-1$
+			return withMinimized(applied.put("bounds", Bounds.describe(shell.getBounds())) //$NON-NLS-1$
 					.put("maximized", Boolean.valueOf(shell.getMaximized())), shell, requested); //$NON-NLS-1$
 		}
 

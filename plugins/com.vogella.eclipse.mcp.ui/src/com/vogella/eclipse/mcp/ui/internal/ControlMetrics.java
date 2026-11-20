@@ -28,8 +28,8 @@ public final class ControlMetrics {
 				.put("borderWidth", Integer.valueOf(control.getBorderWidth())) //$NON-NLS-1$
 				.put("nativeHandle", hasNativeHandle(control)); //$NON-NLS-1$
 		if (control instanceof Scrollable scrollable) {
-			json.put("clientArea", Overlays.describe(scrollable.getClientArea())) //$NON-NLS-1$
-					.put("trim", Overlays.describe(scrollable.computeTrim(0, 0, 0, 0))); //$NON-NLS-1$
+			json.put("clientArea", Bounds.describe(scrollable.getClientArea())) //$NON-NLS-1$
+					.put("trim", Bounds.describe(scrollable.computeTrim(0, 0, 0, 0))); //$NON-NLS-1$
 		}
 		Font font = control.getFont();
 		if (font != null && !font.isDisposed()) {

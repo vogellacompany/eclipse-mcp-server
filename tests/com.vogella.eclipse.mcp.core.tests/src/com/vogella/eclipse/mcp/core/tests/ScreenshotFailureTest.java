@@ -31,7 +31,7 @@ class ScreenshotFailureTest {
 	void anAskedForPrintIsNamedInsideOneUiTurn() {
 		String failure = ScreenshotTools.Capture.uniformPrintFailure(true, true, false, null, null);
 		assertTrue(failure.contains("method print was asked for and inside one UI turn"), failure);
-		assertTrue(failure.contains("drop method print and capture outside an atomic eclipse_run_script batch"),
+		assertTrue(failure.contains("drop method print and capture outside a batch run in one UI turn"),
 				failure);
 	}
 
@@ -62,7 +62,7 @@ class ScreenshotFailureTest {
 	void oneUiTurnAloneIsTheOnlyReasonAndRemedy() {
 		String failure = ScreenshotTools.Capture.uniformPrintFailure(false, true, false, null, null);
 		assertTrue(failure.contains("not read because inside one UI turn the screen has not been painted yet."), failure);
-		assertTrue(failure.contains("To have the screen read, capture outside an atomic eclipse_run_script batch."),
+		assertTrue(failure.contains("To have the screen read, capture outside a batch run in one UI turn."),
 				failure);
 	}
 
@@ -72,7 +72,7 @@ class ScreenshotFailureTest {
 		assertTrue(failure.contains(
 				"inside one UI turn the screen has not been painted yet and this IDE is not the foreground application"),
 				failure);
-		assertTrue(failure.contains("capture outside an atomic eclipse_run_script batch and bring the IDE to the front"),
+		assertTrue(failure.contains("capture outside a batch run in one UI turn and bring the IDE to the front"),
 				failure);
 	}
 

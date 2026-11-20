@@ -69,8 +69,8 @@ public final class FocusTool implements IMcpTool {
 				.put("toolTip", blankToNull(focus.getToolTipText())) //$NON-NLS-1$
 				.put("path", WidgetTools.pathOf(shell, focus)) //$NON-NLS-1$
 				.put("shellTitle", shell.getText()) //$NON-NLS-1$
-				.put("bounds", Overlays.describe(focus.getBounds())) //$NON-NLS-1$
-				.put("boundsInDisplay", Overlays.describe( //$NON-NLS-1$
+				.put("bounds", Bounds.describe(focus.getBounds())) //$NON-NLS-1$
+				.put("boundsInDisplay", Bounds.describe( //$NON-NLS-1$
 						focus.getDisplay().map(focus.getParent(), null, focus.getBounds())))
 				.put("nativeHandle", ControlMetrics.hasNativeHandle(focus)); //$NON-NLS-1$
 		return json;
@@ -80,7 +80,7 @@ public final class FocusTool implements IMcpTool {
 		List<Shell> shells = Shells.ordered(display);
 		return new JsonObject().put("title", shell.getText()) //$NON-NLS-1$
 				.put("index", Integer.valueOf(shells.indexOf(shell))) //$NON-NLS-1$
-				.put("bounds", Overlays.describe(shell.getBounds())) //$NON-NLS-1$
+				.put("bounds", Bounds.describe(shell.getBounds())) //$NON-NLS-1$
 				.put("modal", Boolean.valueOf((shell.getStyle() //$NON-NLS-1$
 						& (SWT.APPLICATION_MODAL | SWT.PRIMARY_MODAL | SWT.SYSTEM_MODAL)) != 0));
 	}

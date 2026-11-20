@@ -198,7 +198,7 @@ public final class WindowTools implements IMcpTool {
 			Shell shell = window.getShell();
 			array.add(new JsonObject().put("title", shell == null ? null : shell.getText()) //$NON-NLS-1$
 					.put("active", Boolean.valueOf(window.equals(active))) //$NON-NLS-1$
-					.put("bounds", shell == null ? null : Overlays.describe(shell.getBounds()))); //$NON-NLS-1$
+					.put("bounds", shell == null ? null : Bounds.describe(shell.getBounds()))); //$NON-NLS-1$
 		}
 		return array;
 	}
