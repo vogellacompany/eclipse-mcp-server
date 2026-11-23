@@ -97,13 +97,36 @@ final class WebPage {
 	 * call, and answers the page's address and title, whether it settled and the dialogs it raised, which every acting
 	 * tool reports; with {@code urlBefore}, also whether the address changed.
 	 */
+	/** The wait {@code timeoutSeconds} asks for, capped like the settle wait by what is left of the call. */
+	static long waitMillis(ToolArguments args, int defaultSeconds) {
+		int requested = args.getInt("timeoutSeconds", defaultSeconds, 0, 120); //$NON-NLS-1$
+		return TimeUnit.SECONDS.toMillis(Math.max(0, Math.min(requested, (int) (CallBudget.leftMillis() / 1000) - ANSWER_SECONDS)));
+	}
+
 	static JsonObject settleAndDescribe(WebBrowser browser, ToolArguments args, int defaultSeconds, String urlBefore)
 			throws IOException {
 		int requested = args.getInt("timeoutSeconds", defaultSeconds, 0, 120); //$NON-NLS-1$
 		// leaves a couple of seconds of the call for reading the page afterwards, or the answer is what times out
 		int bounded = Math.max(0, Math.min(requested, (int) (CallBudget.leftMillis() / 1000) - ANSWER_SECONDS));
-		boolean settled = browser.settle(TimeUnit.SECONDS.toMillis(bounded), QUIET_MILLIS);
 		JsonObject answer = new JsonObject();
+		long budget = TimeUnit.SECONDS.toMillis(bounded);
+		long started = System.nanoTime();
+		boolean settled = browser.settle(budget, QUIET_MILLIS);
+		long left = budget - TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+		boolean animating = false;
+		if (settled && left > 0) {
+			try {
+				// a panel that fades in after a click is captured half transparent otherwise
+				animating = Boolean.FALSE
+						.equals(browser.evaluate(PageScripts.FINISH_ANIMATIONS.formatted(Long.valueOf(left))));
+			} catch (IOException e) {
+				// a page that navigated away meanwhile has no animations of its own left to wait for
+			}
+			if (animating) {
+				settled = false;
+				answer.put("animating", Boolean.TRUE); //$NON-NLS-1$
+			}
+		}
 		String url;
 		try {
 			url = browser.location(answer);
@@ -120,6 +143,10 @@ final class WebPage {
 			answer.put("pendingRequests", Integer.valueOf(browser.pendingRequests())); //$NON-NLS-1$
 			answer.put("settleNote", //$NON-NLS-1$
 					"The page was still loading or had requests in flight when the wait ended. A page that polls never settles; take a snapshot to see where it is."); //$NON-NLS-1$
+			if (animating) {
+				answer.put("settleNote", //$NON-NLS-1$
+						"The page loaded, but an animation or transition was still running when the wait ended, so a screenshot may catch it halfway."); //$NON-NLS-1$
+			}
 			if (requested == 0) {
 				answer.put("settleNote", //$NON-NLS-1$
 						"No wait was asked for, so whether the action started a load is not known yet; take a snapshot to see where the page is."); //$NON-NLS-1$

@@ -232,6 +232,48 @@ final class PageScripts {
 			      matches});
 			}""";
 
+	/**
+	 * Hides the fixed and sticky elements outside the located element, such as a site header, which would otherwise be
+	 * painted over an element capture that reaches under them; answers how many it hid.
+	 */
+	static final String HIDE_OVERLAYS = """
+			(() => {
+			  const el = window.__mcpTarget, hidden = [];
+			  for (const other of document.body.querySelectorAll('*')) {
+			    if (other.contains(el) || el.contains(other)) continue;
+			    const position = getComputedStyle(other).position;
+			    if ((position === 'fixed' || position === 'sticky') && getComputedStyle(other).visibility !== 'hidden') {
+			      hidden.push([other, other.style.getPropertyValue('visibility'), other.style.getPropertyPriority('visibility')]);
+			      other.style.setProperty('visibility', 'hidden', 'important');
+			    }
+			  }
+			  window.__mcpHidden = hidden;
+			  return hidden.length;
+			})()""";
+
+	/**
+	 * Waits until the running CSS animations and transitions that end by themselves have ended, such as a panel fading
+	 * in after a click, or %d milliseconds passed; answers whether they ended. Infinite ones, such as a spinner, are
+	 * not waited for.
+	 */
+	static final String FINISH_ANIMATIONS = """
+			(() => {
+			  const finite = document.getAnimations().filter(a => a.playState === 'running'
+			      && Number.isFinite(a.effect?.getComputedTiming().endTime));
+			  if (!finite.length) return true;
+			  return Promise.race([Promise.all(finite.map(a => a.finished.catch(() => null))).then(() => true),
+			      new Promise(done => setTimeout(() => done(false), %d))]);
+			})()""";
+
+	/** Puts back what {@link #HIDE_OVERLAYS} hid. */
+	static final String RESTORE_OVERLAYS = """
+			(() => {
+			  for (const [el, value, priority] of window.__mcpHidden || []) {
+			    if (value) el.style.setProperty('visibility', value, priority); else el.style.removeProperty('visibility');
+			  }
+			  window.__mcpHidden = null;
+			})()""";
+
 	/** Focuses the located element and, when asked, selects what it holds so the typed text replaces it. */
 	static final String FOCUS_TARGET = """
 			((clear) => {
