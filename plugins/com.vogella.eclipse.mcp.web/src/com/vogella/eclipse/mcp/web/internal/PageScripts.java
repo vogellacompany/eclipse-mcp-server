@@ -252,8 +252,13 @@ final class PageScripts {
 			  const el = window.__mcpTarget;
 			  const wanted = text.trim();
 			  if (!wanted) return JSON.stringify({error: 'Pass the label or value of the option to pick; a select cannot be emptied by typing.'});
-			  const option = Array.from(el.options).find(o => o.label.trim() === wanted || o.value === wanted)
-			      || Array.from(el.options).find(o => o.label.trim().toLowerCase().includes(wanted.toLowerCase()));
+			  let option = Array.from(el.options).find(o => o.label.trim() === wanted || o.value === wanted);
+			  if (!option) {
+			    const partial = Array.from(el.options).filter(o => o.label.trim().toLowerCase().includes(wanted.toLowerCase()));
+			    if (partial.length > 1) return JSON.stringify({error: JSON.stringify(wanted) + ' is part of several options, ' +
+			        JSON.stringify(partial.map(o => o.label.trim())) + '; pass the whole label or the value of one.'});
+			    option = partial[0];
+			  }
 			  if (!option) return JSON.stringify({error: 'No option ' + JSON.stringify(wanted) + '; the options are ' +
 			      JSON.stringify(Array.from(el.options).map(o => o.label.trim()))});
 			  el.focus();

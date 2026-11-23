@@ -160,6 +160,8 @@ class WebToolsTest {
 		Map<String, Object> chosen = TestFixture.callAndParse("eclipse_web_type",
 				Map.of("selector", "#color", "text", "Green"));
 		assertEquals("g", chosen.get("value"));
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#color", "text", "e")),
+				"several options");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#frozen", "text", "Only")),
 				"disabled");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#fenced", "text", "x")),
