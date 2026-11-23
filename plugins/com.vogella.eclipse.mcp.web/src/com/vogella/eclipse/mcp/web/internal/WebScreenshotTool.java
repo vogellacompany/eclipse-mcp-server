@@ -47,7 +47,7 @@ public final class WebScreenshotTool implements IMcpTool {
 				  "type": "object",
 				  "properties": {
 				%s,
-				    "fullPage": {"type":"boolean","default":false,"description":"Capture the whole page rather than the viewport, up to 16384 pixels high."}
+				    "fullPage": {"type":"boolean","default":false,"description":"Capture the whole page rather than the viewport, up to 8192 pixels wide, 16384 high and 16.7 megapixels in all (about 13100 high at 1280 wide); cutAtHeight or cutAtWidth says where a larger page was cut."}
 				  },
 				  "additionalProperties": false
 				}""".formatted(WebPage.TARGET_PROPERTIES.indent(4).stripTrailing()); //$NON-NLS-1$
@@ -91,7 +91,12 @@ public final class WebScreenshotTool implements IMcpTool {
 				}
 			} else if (args.getBoolean("fullPage", false)) { //$NON-NLS-1$
 				Map<String, Object> metrics = browser.send("Page.getLayoutMetrics", null); //$NON-NLS-1$
-				Map<?, ?> content = metrics.get("cssContentSize") instanceof Map<?, ?> map ? map : Map.of(); //$NON-NLS-1$
+				// contentSize is the older name of the same value
+				Map<?, ?> content = metrics.get("cssContentSize") instanceof Map<?, ?> map ? map //$NON-NLS-1$
+						: metrics.get("contentSize") instanceof Map<?, ?> old ? old : Map.of(); //$NON-NLS-1$
+				if (content.isEmpty()) {
+					return McpToolResult.error("The browser did not report the size of the page, so a full-page capture is not possible; capture the viewport instead."); //$NON-NLS-1$
+				}
 				double width = WebPage.number(content.get("width")); //$NON-NLS-1$
 				double height = WebPage.number(content.get("height")); //$NON-NLS-1$
 				double wide = Math.min(width, MAX_WIDTH);

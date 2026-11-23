@@ -87,7 +87,10 @@ final class CdpConnection implements AutoCloseable {
 		} catch (TimeoutException e) {
 			throw new IOException(method + " got no answer within " + timeoutMillis + " ms", e); //$NON-NLS-1$ //$NON-NLS-2$
 		} catch (ExecutionException e) {
-			throw new IOException(e.getCause() == null ? e.getMessage() : e.getCause().getMessage(), e);
+			Throwable cause = e.getCause() == null ? e : e.getCause();
+			// some socket failures carry no message, and an error answer needs a text
+			throw new IOException(cause.getMessage() != null ? cause.getMessage()
+					: method + " failed: " + cause.getClass().getSimpleName(), e); //$NON-NLS-1$
 		} finally {
 			pending.remove(Integer.valueOf(id));
 		}

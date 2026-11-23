@@ -174,7 +174,8 @@ final class WebBrowser {
 			WebBrowser browser = new WebBrowser(process, executable, profile, endpoint,
 					String.valueOf(target.get("id")), headless, connection); //$NON-NLS-1$
 			browser.attach();
-			browser.shutdownHook = new Thread(browser::killProcess, "mcp-web-browser-shutdown"); //$NON-NLS-1$
+			// a fixed wait: at JVM exit the preferences the call budget reads may already be gone
+			browser.shutdownHook = new Thread(() -> browser.killProcess(3_000), "mcp-web-browser-shutdown"); //$NON-NLS-1$
 			Runtime.getRuntime().addShutdownHook(browser.shutdownHook);
 			return browser;
 		} catch (IOException | RuntimeException e) {
@@ -228,7 +229,11 @@ final class WebBrowser {
 				List<String> lines = Files.readAllLines(portFile, StandardCharsets.UTF_8);
 				// the browser writes the port and then its own path; with the path there, the port is complete
 				if (lines.size() >= 2 && !lines.get(0).isBlank() && !lines.get(1).isBlank()) {
-					return Integer.parseInt(lines.get(0).trim());
+					try {
+						return Integer.parseInt(lines.get(0).trim());
+					} catch (NumberFormatException e) {
+						// not a port yet; read again
+					}
 				}
 			}
 			sleep(50);
@@ -596,7 +601,8 @@ final class WebBrowser {
 			}
 			return;
 		}
-		killProcess();
+		// each wait within what is left of the call, so closing a hung browser never costs the call its answer
+		killProcess(Math.max(100, Math.min(3_000, CallBudget.leftMillis() / 2)));
 		if (shutdownHook != null) {
 			try {
 				Runtime.getRuntime().removeShutdownHook(shutdownHook);
@@ -606,13 +612,11 @@ final class WebBrowser {
 		}
 	}
 
-	private void killProcess() {
+	private void killProcess(long wait) {
 		if (process == null) {
 			return;
 		}
 		process.destroy();
-		// each wait within what is left of the call, so closing a hung browser never costs the call its answer
-		long wait = Math.max(100, Math.min(3_000, CallBudget.leftMillis() / 2));
 		try {
 			if (!process.waitFor(wait, java.util.concurrent.TimeUnit.MILLISECONDS)) {
 				process.destroyForcibly();

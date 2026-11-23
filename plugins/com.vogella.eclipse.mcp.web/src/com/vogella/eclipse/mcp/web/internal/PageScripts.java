@@ -202,12 +202,21 @@ final class PageScripts {
 			      (e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\\s+/).join('.') : '') : null;
 			  // an ancestor there covers it too: the target is not hit there (pointer-events: none, clipped), so the
 			  // ancestor's handlers would run instead; only the target, its content and its labels take the click
-			  const covered = top && top !== el && !el.contains(top) &&
+			  let covered = top && top !== el && !el.contains(top) &&
 			      !(el.labels && Array.from(el.labels).some(l => l.contains(top)));
+			  let cover = top;
+			  if (!covered && root !== document) {
+			    // the shadow root hit-tests only its own tree; an overlay of the document above it shows in the
+			    // document's hit test as something other than the host the target lives in
+			    let host = el;
+			    while (host.getRootNode() !== document && host.getRootNode().host) host = host.getRootNode().host;
+			    const outer = document.elementFromPoint(x, y);
+			    if (outer && outer !== host && !host.contains(outer)) { covered = true; cover = outer; }
+			  }
 			  window.__mcpTarget = el;
 			  return JSON.stringify({x, y, width: box.width, height: box.height, scrollX: window.scrollX,
 			      scrollY: window.scrollY, tag: el.tagName.toLowerCase(),
-			      disabled: !!el.disabled || (el.matches && el.matches(':disabled')), coveredBy: covered ? describe(top) : null,
+			      disabled: !!el.disabled || (el.matches && el.matches(':disabled')), coveredBy: covered ? describe(cover) : null,
 			      inert: !!(el.closest && el.closest('[inert]')),
 			      // also a label for one, the usual styled upload button, since a click on it opens the chooser too
 			      fileInput: (el.tagName === 'INPUT' && el.type === 'file') || (() => {
