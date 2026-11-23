@@ -66,13 +66,14 @@ public final class GetCommandOutputTool implements IMcpTool {
 		}
 		int requested = args.getInt("timeoutSeconds", 25, 1, 3600); //$NON-NLS-1$
 		boolean wait = args.getBoolean("wait", false); //$NON-NLS-1$
+		int bounded = CallBudget.boundedWaitSeconds(requested);
 		if (wait) {
-			execution.await(CallBudget.boundedWaitSeconds(requested) * 1000L);
+			execution.await(bounded * 1000L);
 		}
 		int tail = args.getInt("tailLines", DEFAULT_TAIL, 1, 2000); //$NON-NLS-1$
 		JsonObject json = RunCommandTool.CommandOutput.describe(execution, tail);
 		if (wait && execution.isRunning()) {
-			String clamped = CallBudget.clampNote(requested, "this tool again with the same commandId"); //$NON-NLS-1$
+			String clamped = CallBudget.clampNote(requested, bounded, "this tool again with the same commandId"); //$NON-NLS-1$
 			if (clamped != null) {
 				json.put("note", clamped); //$NON-NLS-1$
 			}

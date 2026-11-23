@@ -70,7 +70,9 @@ public final class PauseTool implements IMcpTool {
 		JsonObject result = new JsonObject().put("requestedMillis", requested).put("pausedMillis", paused) //$NON-NLS-1$ //$NON-NLS-2$
 				.put("clamped", millis < requested); //$NON-NLS-1$
 		if (millis < requested) {
-			result.put("note", CallBudget.clampNote(requested / 1000 + 1, "eclipse_pause again for the remaining time")); //$NON-NLS-1$ //$NON-NLS-2$
+			result.put("note", "Paused %d of the %d ms asked for, because one call may wait at most %d seconds before the server's %d second tool call timeout aborts it. Call eclipse_pause again for the rest." //$NON-NLS-1$
+					.formatted(Integer.valueOf(millis), Integer.valueOf(requested), Integer.valueOf(CallBudget.maxWaitSeconds()),
+							Integer.valueOf(CallBudget.callTimeoutSeconds())));
 		}
 		return McpToolResult.of(result.toString());
 	}

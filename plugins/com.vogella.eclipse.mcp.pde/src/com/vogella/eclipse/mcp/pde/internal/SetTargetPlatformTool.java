@@ -89,12 +89,14 @@ public final class SetTargetPlatformTool implements IMcpTool {
 			TargetLoad load = TargetLoad.start(named, definition, resolveOnly, previous(service));
 			String waitNote = null;
 			if (wait) {
+				int bounded = CallBudget.boundedWaitSeconds(timeoutSeconds);
+				boolean finished = false;
 				try {
-					load.await(CallBudget.boundedWaitSeconds(timeoutSeconds));
+					finished = load.await(bounded);
 				} catch (InterruptedException e) {
 					Thread.currentThread().interrupt();
 				}
-				waitNote = CallBudget.clampNote(timeoutSeconds, "eclipse_get_target_platform"); //$NON-NLS-1$
+				waitNote = finished ? null : CallBudget.clampNote(timeoutSeconds, bounded, "eclipse_get_target_platform"); //$NON-NLS-1$
 			}
 			JsonObject answer = load.toJson(includeLocations, maxProblems, maxResults);
 			if (waitNote != null) {

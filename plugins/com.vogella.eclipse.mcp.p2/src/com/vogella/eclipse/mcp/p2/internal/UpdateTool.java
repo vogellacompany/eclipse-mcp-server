@@ -171,12 +171,14 @@ public final class UpdateTool implements IMcpTool {
 		String waitNote = null;
 		if (args.getBoolean("wait", false)) { //$NON-NLS-1$
 			int requested = args.getInt("timeoutSeconds", 25, 1, 3600); //$NON-NLS-1$
+			int bounded = CallBudget.boundedWaitSeconds(requested);
+			boolean finished = false;
 			try {
-				handle.await(CallBudget.boundedWaitSeconds(requested));
+				finished = handle.await(bounded);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
-			waitNote = CallBudget.clampNote(requested, "eclipse_get_provisioning_status"); //$NON-NLS-1$
+			waitNote = finished ? null : CallBudget.clampNote(requested, bounded, "eclipse_get_provisioning_status"); //$NON-NLS-1$
 		}
 		JsonObject answer = handle.toJson();
 		if (waitNote != null) {

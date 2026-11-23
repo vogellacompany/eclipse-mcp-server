@@ -56,19 +56,35 @@ class CallBudgetTest {
 	void aWaitThatFitsNeedsNoNote() {
 		timeout(10);
 
-		assertNull(CallBudget.clampNote(7, "eclipse_build"));
-		assertNull(CallBudget.clampNote(2, "eclipse_build"));
+		assertNull(CallBudget.clampNote(7, CallBudget.boundedWaitSeconds(7), "eclipse_build"));
+		assertNull(CallBudget.clampNote(2, CallBudget.boundedWaitSeconds(2), "eclipse_build"));
 	}
 
 	@Test
 	void aClampedWaitSaysWhatHappenedAndWhichHandleToPoll() {
 		timeout(10);
 
-		String note = CallBudget.clampNote(60, "eclipse_get_build_status");
+		String note = CallBudget.clampNote(60, CallBudget.boundedWaitSeconds(60), "eclipse_get_build_status");
 
 		assertTrue(note.contains("Waited 7 of the 60 seconds"), note);
 		assertTrue(note.contains("10 second"), note);
 		assertTrue(note.contains("eclipse_get_build_status"), note);
+	}
+
+	@Test
+	void aNoteAfterTheWaitNamesTheWaitThatWasGranted() {
+		CallBudget.enter(10);
+		try {
+			int bounded = CallBudget.boundedWaitSeconds(60);
+			// the wait used up most of the call: what is left has shrunk, the wait that happened has not
+			CallBudget.enter(4);
+			String note = CallBudget.clampNote(60, bounded, "eclipse_get_build_status");
+
+			assertTrue(note.contains("Waited %d of the 60 seconds".formatted(Integer.valueOf(bounded))), note);
+			assertNull(CallBudget.clampNote(25, 25, "eclipse_get_build_status"));
+		} finally {
+			CallBudget.leave();
+		}
 	}
 
 	@Test

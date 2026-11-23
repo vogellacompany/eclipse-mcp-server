@@ -80,12 +80,13 @@ public final class BuildTool implements IMcpTool {
 						args.getBoolean("buildAfterClean", false))); //$NON-NLS-1$
 		String clamped = null;
 		if (wait) {
+			int bounded = CallBudget.boundedWaitSeconds(timeoutSeconds);
 			try {
-				build.await(CallBudget.boundedWaitSeconds(timeoutSeconds), TimeUnit.SECONDS);
+				build.await(bounded, TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
-			clamped = CallBudget.clampNote(timeoutSeconds, "eclipse_get_build_status with this buildId"); //$NON-NLS-1$
+			clamped = CallBudget.clampNote(timeoutSeconds, bounded, "eclipse_get_build_status with this buildId"); //$NON-NLS-1$
 		}
 		var json = GetBuildStatusTool.toJson(build, args.getBoolean("includeBuiltProjects", false)); //$NON-NLS-1$
 		if (clamped != null && "running".equals(build.state())) { //$NON-NLS-1$
