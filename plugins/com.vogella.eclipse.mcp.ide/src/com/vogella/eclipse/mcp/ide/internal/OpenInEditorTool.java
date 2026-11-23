@@ -74,11 +74,15 @@ public final class OpenInEditorTool implements IMcpTool {
 		if (file == null || !file.exists()) {
 			// a workspace path and an absolute path on disk look the same, so the
 			// workspace answers first and the disk only for what it does not have
-			IFile inWorkspace = workspaceFileAt(path);
+			java.nio.file.Path disk = diskPathAt(path);
+			IFile inWorkspace = disk == null ? null : workspaceFileAt(disk);
 			if (inWorkspace != null) {
 				file = inWorkspace;
-			} else if (java.nio.file.Files.isRegularFile(java.nio.file.Path.of(path))) {
+			} else if (disk != null && java.nio.file.Files.isRegularFile(disk)) {
 				external = EFS.getLocalFileSystem().getStore(IPath.fromOSString(path));
+			} else if (disk == null) {
+				return McpToolResult.error(
+						"No file at the workspace path '%s', and it is not a valid file system path either.".formatted(path)); //$NON-NLS-1$
 			} else {
 				return McpToolResult.error(
 						"No file at the workspace path '%s', and no file at that path on disk either.".formatted(path)); //$NON-NLS-1$
@@ -93,14 +97,17 @@ public final class OpenInEditorTool implements IMcpTool {
 				() -> store == null ? open(workspaceFile, line, activate) : openExternal(store, line, activate));
 	}
 
-	/** The workspace file at an absolute disk path, when a project contains it. */
-	private static IFile workspaceFileAt(String path) {
-		java.nio.file.Path disk;
+	/** The path parsed for the disk, or null when the text is not a syntactically valid path. */
+	private static java.nio.file.Path diskPathAt(String path) {
 		try {
-			disk = java.nio.file.Path.of(path);
+			return java.nio.file.Path.of(path);
 		} catch (RuntimeException e) {
 			return null;
 		}
+	}
+
+	/** The workspace file at an absolute disk path, when a project contains it. */
+	private static IFile workspaceFileAt(java.nio.file.Path disk) {
 		if (!disk.isAbsolute()) {
 			return null;
 		}

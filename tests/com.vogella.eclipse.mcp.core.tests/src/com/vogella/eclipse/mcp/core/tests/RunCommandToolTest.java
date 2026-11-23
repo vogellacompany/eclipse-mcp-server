@@ -95,6 +95,15 @@ class RunCommandToolTest {
 	}
 
 	@Test
+	void refusesADirectoryThatIsNotAPath() throws Exception {
+		McpToolResult result = TestFixture.call("eclipse_run_command",
+				Map.of("command", "echo hello", "directory", "/tmp/a\0b"));
+
+		assertTrue(result.isError(), "got " + result.text());
+		assertTrue(result.text().contains("not a valid file system path"), "got " + result.text());
+	}
+
+	@Test
 	void refusesWithNoDirectoryAtAll() throws Exception {
 		// the directory stays required: it is what keeps a command from inheriting
 		// whatever the IDE's own working directory happens to be

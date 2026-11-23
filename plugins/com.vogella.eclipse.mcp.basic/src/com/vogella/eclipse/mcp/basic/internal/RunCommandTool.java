@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.basic.internal;
 
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -62,7 +63,12 @@ public final class RunCommandTool implements IMcpTool {
 		if (command.isEmpty()) {
 			return McpToolResult.error("Give 'command' as a line, or 'args' as a list."); //$NON-NLS-1$
 		}
-		Path directory = Path.of(directoryName.strip());
+		Path directory;
+		try {
+			directory = Path.of(directoryName.strip());
+		} catch (InvalidPathException e) {
+			return McpToolResult.error("'%s' is not a valid file system path: %s".formatted(directoryName, e.getReason())); //$NON-NLS-1$
+		}
 		if (!directory.isAbsolute()) {
 			return McpToolResult.error("'%s' is not absolute. Give the full path.".formatted(directoryName)); //$NON-NLS-1$
 		}
