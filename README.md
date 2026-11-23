@@ -189,8 +189,8 @@ Tools marked ✎ change something; the rest are read-only.
 | Tool | Purpose |
 |---|---|
 | `eclipse_list_breakpoints`, ✎ `eclipse_set_breakpoint` | Read and edit breakpoints |
-| `eclipse_list_launch_configurations`, ✎ `eclipse_debug_launch` | List and start launches |
-| `eclipse_debug_status`, `eclipse_debug_get_frames` | Sessions, threads, frames and variables |
+| `eclipse_list_launch_configurations`, ✎ `eclipse_save_launch_configuration`, ✎ `eclipse_debug_launch` | List, save (dry run by default) and start launches |
+| `eclipse_debug_status`, `eclipse_debug_get_frames`, `eclipse_get_launch_output` | Sessions, threads, frames and variables, and the console output and exit code of a launch |
 | ✎ `eclipse_debug_evaluate`, `eclipse_debug_control` | Evaluate expressions, step, resume and terminate |
 
 **Git**

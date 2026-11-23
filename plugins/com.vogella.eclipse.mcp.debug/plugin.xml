@@ -8,6 +8,8 @@
       <tool class="com.vogella.eclipse.mcp.debug.internal.DebugLaunchTool"/>
       <tool class="com.vogella.eclipse.mcp.debug.internal.ListLaunchConfigurationsTool"/>
       <tool class="com.vogella.eclipse.mcp.debug.internal.DebugStatusTool"/>
+      <tool class="com.vogella.eclipse.mcp.debug.internal.GetLaunchOutputTool"/>
+      <tool class="com.vogella.eclipse.mcp.debug.internal.SaveLaunchConfigurationTool"/>
       <tool class="com.vogella.eclipse.mcp.debug.internal.GetFramesTool"/>
       <tool class="com.vogella.eclipse.mcp.debug.internal.EvaluateTool"/>
       <tool class="com.vogella.eclipse.mcp.debug.internal.ControlTool"/>
