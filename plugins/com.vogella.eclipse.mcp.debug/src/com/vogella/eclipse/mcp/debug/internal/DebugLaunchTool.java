@@ -262,6 +262,7 @@ public final class DebugLaunchTool implements IMcpTool {
 		long left = CallBudget.maxWaitSeconds() - (System.nanoTime() - startedNanos) / 1_000_000_000L;
 		long deadline = System.nanoTime() + Math.max(0, Math.min(seconds, left)) * 1_000_000_000L;
 		JsonObject result = new JsonObject();
+		boolean suspendSeen = false;
 		while (true) {
 			if (pattern != null && pattern.matcher(GetLaunchOutputTool.contents(session.launch())).find()) {
 				return result.put("ready", Boolean.TRUE).put("by", "output"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
@@ -274,8 +275,14 @@ public final class DebugLaunchTool implements IMcpTool {
 						"The program ended before it was ready; exit code and the last output are in processes and processOutputTail, and eclipse_get_launch_output has the rest."); //$NON-NLS-1$
 			}
 			if (session.suspended()) {
-				return result.put("ready", Boolean.FALSE).put("suspended", Boolean.TRUE).put("note", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-						"The program suspended before it was ready."); //$NON-NLS-1$
+				// a program calling System.exit shows its threads suspended for a moment while the VM dies
+				if (suspendSeen) {
+					return result.put("ready", Boolean.FALSE).put("suspended", Boolean.TRUE).put("note", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+							"The program suspended before it was ready."); //$NON-NLS-1$
+				}
+				suspendSeen = true;
+			} else {
+				suspendSeen = false;
 			}
 			if (System.nanoTime() >= deadline) {
 				return result.put("ready", Boolean.FALSE).put("timedOut", Boolean.TRUE).put("note", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
