@@ -57,6 +57,8 @@ final class WebBrowser {
 	private final Object state = new Object();
 	private final Set<String> inflight = new HashSet<>();
 	private final List<JsonObject> dialogs = new ArrayList<>();
+	/** Dialogs answered beyond {@link #MAX_DIALOGS} since the last report, guarded by {@code state}. */
+	private int droppedDialogs;
 	private String mainFrameId;
 	private boolean loading;
 	private Integer documentStatus;
@@ -270,7 +272,8 @@ final class WebBrowser {
 
 	/** At most {@code millis}, and never longer than what is left of the tool call, so a slow start answers in time. */
 	private static long launchBudgetMillis(long millis) {
-		return Math.max(1_000, Math.min(millis, CallBudget.leftMillis()));
+		// no floor: once the call has nothing left, a launch step fails at once and the start is undone
+		return Math.max(1, Math.min(millis, CallBudget.leftMillis()));
 	}
 
 	private static String http(String url, String method) throws IOException {
@@ -367,7 +370,9 @@ final class WebBrowser {
 	private void answerDialog(Map<String, Object> params) {
 		String type = String.valueOf(params.get("type")); //$NON-NLS-1$
 		boolean accept = !"confirm".equals(type) && !"prompt".equals(type) || acceptConfirm; //$NON-NLS-1$ //$NON-NLS-2$
-		if (dialogs.size() < MAX_DIALOGS) {
+		if (dialogs.size() >= MAX_DIALOGS) {
+			droppedDialogs++;
+		} else {
 			// a page in a dialog loop is still answered every time, but only the first ones are kept for the report
 			dialogs.add(new JsonObject().put("type", type).put("message", params.get("message")) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 					.put("answered", accept ? "accepted" : "dismissed")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
@@ -396,15 +401,20 @@ final class WebBrowser {
 	/** The dialogs answered since the last call, for the answer of the tool that raised them. */
 	List<JsonObject> takeDialogs() {
 		synchronized (state) {
-			List<JsonObject> taken = List.copyOf(dialogs);
+			List<JsonObject> taken = new ArrayList<>(dialogs);
+			if (droppedDialogs > 0) {
+				taken.add(new JsonObject().put("more", Integer.valueOf(droppedDialogs)).put("note", //$NON-NLS-1$ //$NON-NLS-2$
+						"The page raised this many more dialogs, all answered the same way; it is probably raising them in a loop.")); //$NON-NLS-1$
+			}
 			dialogs.clear();
+			droppedDialogs = 0;
 			return taken;
 		}
 	}
 
 	/** Sends a command, waiting at most what is left of the tool call, so a wedged page still gets an answer in time. */
 	Map<String, Object> send(String method, JsonObject params) throws IOException {
-		return page.send(method, params, Math.max(1_000, Math.min(COMMAND_MILLIS, CallBudget.leftMillis())));
+		return page.send(method, params, Math.max(1, Math.min(COMMAND_MILLIS, CallBudget.leftMillis())));
 	}
 
 	/**

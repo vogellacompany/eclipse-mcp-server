@@ -290,7 +290,7 @@ class WebToolsTest {
 	@Test
 	@SuppressWarnings("unchecked")
 	void opensATabInABrowserThatIsAlreadyRunningAndLeavesItRunning() throws Exception {
-		Path executable = Stream.of(System.getenv("PATH").split(File.pathSeparator))
+		Path executable = Stream.of(String.valueOf(System.getenv("PATH")).split(File.pathSeparator))
 				.flatMap(dir -> Stream.of("google-chrome", "chromium", "chromium-browser").map(name -> Path.of(dir, name)))
 				.filter(Files::isExecutable).findFirst().orElse(null);
 		Assumptions.assumeTrue(executable != null, "No Chrome or Chromium on PATH");
@@ -301,10 +301,11 @@ class WebToolsTest {
 				.redirectOutput(profile.resolve("log").toFile()).start();
 		try {
 			Path portFile = profile.resolve("DevToolsActivePort");
-			for (int i = 0; i < 200 && !(Files.isRegularFile(portFile) && Files.size(portFile) > 0); i++) {
+			// the port and then the browser's path, as WebBrowser.awaitPort waits for
+			for (int i = 0; i < 200 && !(Files.isRegularFile(portFile) && Files.readAllLines(portFile).size() >= 2); i++) {
 				Thread.sleep(50);
 			}
-			Assumptions.assumeTrue(Files.isRegularFile(portFile) && Files.size(portFile) > 0,
+			Assumptions.assumeTrue(Files.isRegularFile(portFile) && Files.readAllLines(portFile).size() >= 2,
 					"The browser did not start here: " + (Files.exists(profile.resolve("log")) ? Files.readString(profile.resolve("log")) : ""));
 			String endpoint = "http://127.0.0.1:" + Files.readAllLines(portFile).get(0).trim();
 			Map<String, Object> opened = TestFixture.callAndParse("eclipse_web_open",

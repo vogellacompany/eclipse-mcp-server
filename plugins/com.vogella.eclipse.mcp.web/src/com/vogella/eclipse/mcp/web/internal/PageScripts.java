@@ -222,6 +222,8 @@ final class PageScripts {
 	static final String FOCUS_TARGET = """
 			((clear) => {
 			  const el = window.__mcpTarget;
+			  // a shadow root has a selection of its own in Chromium, which the document's does not reach into
+			  const selectionOf = e => { const r = e.getRootNode(); return r.getSelection ? r.getSelection() : window.getSelection(); };
 			  if (el.tagName === 'SELECT') {
 			    if (el.disabled || el.matches(':disabled')) return JSON.stringify({error: 'The select is disabled, so a user cannot pick an option in it.'});
 			    return JSON.stringify({select: true});
@@ -239,7 +241,7 @@ final class PageScripts {
 			  if (active !== el && !(el.contains && el.contains(active)))
 			    return JSON.stringify({error: 'The field did not take the focus, so typed text would go elsewhere.'});
 			  if (clear) {
-			    if (el.isContentEditable) { window.getSelection().selectAllChildren(el); }
+			    if (el.isContentEditable) { selectionOf(el).selectAllChildren(el); }
 			    else if (el.selectionStart === null) {
 			      // number, date and similar inputs have no text selection, and select() quietly does nothing for them;
 			      // empty them as a user selecting all and deleting would
@@ -253,7 +255,7 @@ final class PageScripts {
 			    const range = document.createRange();
 			    range.selectNodeContents(el);
 			    range.collapse(false);
-			    const selection = window.getSelection();
+			    const selection = selectionOf(el);
 			    selection.removeAllRanges();
 			    selection.addRange(range);
 			  } else if (el.selectionStart !== null) {
