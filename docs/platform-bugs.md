@@ -133,7 +133,7 @@ which the publish had deleted, so no repository could supply the bundles. The
 message names neither the cache nor the site, and the resolution succeeding
 first makes it read as a broken publish.
 
-Fixed here in `Provisioning.refreshArtifacts` by refreshing both managers. This
+Fixed here in `Provisioning.describe`, which refreshes the artifact manager through `refreshArtifacts` after the metadata one. This
 is the concrete case behind the entry above: skipping the artifact side is only
 a saving for a check that never installs.
 
@@ -346,11 +346,11 @@ Observed 2026-08-31 on 4.42 while replacing `eclipse_import_project` with the pl
 `run(IProgressMonitor)` reads `workspace.isAutoBuilding()`, switches auto-build off, and switches it back on near the end of the same `try` block.
 The `catch (Exception ex)` below that returns an error status without restoring it, and there is no `finally` anywhere in the file.
 So any exception in between, a `CoreException` out of project creation or anything a third party `ProjectConfigurator` throws, returns a failed import and leaves the workspace with auto-build off, silently and for good.
-`ImportProjectTool` restores what it found in its own `finally` rather than trusting the job.
+`ImportProjectTool` restores what it found from a listener on the job's `done` rather than trusting the job.
 
 The same class also calls `PlatformUI.getWorkbench().getWorkingSetManager().addToWorkingSets(res, this.workingSets)` unconditionally in `toExistingOrNewProject`, on every project it creates, without checking whether any working set was asked for.
 Adding to zero working sets is a no-op, but the call still forces `PlatformUI.getWorkbench()`, so the class cannot run without a workbench even when no working set is involved.
-That is why this tool lives in the ui bundle and refuses headlessly instead of being testable in the core test run.
+That is why this tool lives in the ide bundle and refuses headlessly instead of being testable in the core test run.
 
 Not filed upstream yet; a task description for both was handed to a session working in `eclipse.platform.ui`.
 
