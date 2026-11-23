@@ -5,12 +5,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.core.commands.Command;
 import org.eclipse.core.commands.IParameter;
@@ -22,7 +20,6 @@ import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
-import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.commands.ICommandService;
 import org.eclipse.ui.handlers.IHandlerService;
@@ -233,12 +230,10 @@ public final class CommandTools {
 			boolean returnOnDialog = args.getBoolean("returnOnDialog", true) && !dryRun; //$NON-NLS-1$
 			ExecutionRecorder recorder = new ExecutionRecorder();
 			CompletableFuture<String> pending = new CompletableFuture<>();
-			AtomicReference<Set<Shell>> before = new AtomicReference<>();
-			AtomicReference<Set<Long>> nativeBefore = new AtomicReference<>();
+			DialogWatch watch = new DialogWatch();
 			UiThread.exec(() -> {
 				try {
-					nativeBefore.set(NativeDialogs.handles(Workbenches.display()));
-					before.set(Set.of(Workbenches.display().getShells()));
+					watch.mark(Workbenches.display());
 					pending.complete(execute(wanted, parameters, dryRun, selection, recorder).toString());
 				} catch (Throwable e) {
 					// an Error must complete the future too, or the wait reports a dialog that is not there
@@ -249,7 +244,7 @@ public final class CommandTools {
 			long deadline = started + timeoutSeconds * 1000L;
 			try {
 				if (returnOnDialog && !UiThread.onUiThread()) {
-					ModalShell dialog = awaitDialog(pending, before, nativeBefore, deadline);
+					DialogWatch.Seen dialog = watch.await(pending, deadline);
 					if (dialog != null) {
 						pending.whenComplete((text, error) -> logLateCompletion(wanted, dialog.title(), text, error));
 						return McpToolResult.of(dialogOpen(wanted, dialog, System.currentTimeMillis() - started, recorder)
@@ -480,66 +475,7 @@ public final class CommandTools {
 			return required.isEmpty() ? "its required parameters" : String.join(", ", required); //$NON-NLS-1$
 		}
 
-		/** How often the wait looks for a dialog the handler opened. */
-		private static final long DIALOG_PROBE_MILLIS = 100;
-
-		/**
-		 * Waits for the handler until the deadline, and answers the title of a modal
-		 * dialog it opened as soon as one has been seen on two probes in a row, or
-		 * {@code null} when the handler finished or the deadline passed first.
-		 * <p>
-		 * A modal dialog runs a nested event loop, so a probe posted to the Display runs
-		 * while the handler is still inside {@code execute}; a handler that is merely busy
-		 * leaves the probe queued and is waited for as before.
-		 */
-		private static ModalShell awaitDialog(CompletableFuture<String> pending, AtomicReference<Set<Shell>> before,
-				AtomicReference<Set<Long>> nativeBefore, long deadline) throws InterruptedException {
-			CompletableFuture<ModalShell> probe = null;
-			Object candidate = null;
-			while (!pending.isDone()) {
-				long left = deadline - System.currentTimeMillis();
-				if (left <= 0) {
-					return null;
-				}
-				try {
-					pending.get(Math.min(left, DIALOG_PROBE_MILLIS), TimeUnit.MILLISECONDS);
-					return null;
-				} catch (ExecutionException e) {
-					return null;
-				} catch (TimeoutException e) {
-					// still running, look for a dialog
-				}
-				if (probe == null || probe.isDone()) {
-					ModalShell found = probe == null ? null : probe.getNow(null);
-					if (found != null && found.key().equals(candidate)) {
-						return found;
-					}
-					candidate = found == null ? null : found.key();
-					CompletableFuture<ModalShell> next = new CompletableFuture<>();
-					Workbenches.display().asyncExec(() -> next.complete(newDialog(before.get(), nativeBefore.get())));
-					probe = next;
-				}
-			}
-			return null;
-		}
-
-		private record ModalShell(Object key, String title, boolean nativeDialog) {
-		}
-
-		/** A dialog that was not open before the command. */
-		private static ModalShell newDialog(Set<Shell> before, Set<Long> nativeBefore) {
-			if (before == null || nativeBefore == null) {
-				return null;
-			}
-			Shell shell = Shells.newDialog(Workbenches.display(), before);
-			if (shell != null) {
-				return new ModalShell(shell, shell.getText(), false);
-			}
-			return NativeDialogs.listNew(Workbenches.display(), nativeBefore).stream().findFirst()
-					.map(dialog -> new ModalShell(Long.valueOf(dialog.handle()), dialog.title(), true)).orElse(null);
-		}
-
-		private static JsonObject dialogOpen(String wanted, ModalShell dialog, long waitedMillis, ExecutionRecorder recorder) {
+		private static JsonObject dialogOpen(String wanted, DialogWatch.Seen dialog, long waitedMillis, ExecutionRecorder recorder) {
 			String title = dialog.title();
 			return recorder.reportInto(new JsonObject().put("executed", Boolean.TRUE).put("timedOut", Boolean.FALSE) //$NON-NLS-1$ //$NON-NLS-2$
 					.put("id", wanted) //$NON-NLS-1$
