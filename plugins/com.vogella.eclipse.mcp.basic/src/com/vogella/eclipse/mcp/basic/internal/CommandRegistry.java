@@ -38,7 +38,7 @@ public final class CommandRegistry {
 
 	private static Charset outputCharset;
 
-	/** How many finished commands stay queryable. */
+	/** How many commands stay queryable; running ones are always kept, so finished ones go first. */
 	private static final int HISTORY = 20;
 
 	/** Output lines kept per command. A build log is long and the useful part is at the end. */
