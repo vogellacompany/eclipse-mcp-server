@@ -5,6 +5,7 @@ import java.util.Map;
 import org.eclipse.core.runtime.IProgressMonitor;
 
 import com.vogella.eclipse.mcp.core.CallBudget;
+import com.vogella.eclipse.mcp.core.ClientSessions;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
@@ -24,7 +25,7 @@ public final class GetCommandOutputTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Reports a command started through eclipse_run_command: running, done, failed or cancelled, its exit code and the tail of its output. The tail is what a long build needs, because the failing goal is at the end and the rest is noise; raise tailLines when the reason is further up, and droppedLines says how much fell out of the buffer entirely. Pass cancel to stop one that is still running, which ends the process and everything it started. Omitting commandId reports the most recent command, which is wrong when another client started one in between."; //$NON-NLS-1$
+		return "Reports a command started through eclipse_run_command: running, done, failed or cancelled, its exit code and the tail of its output. The tail is what a long build needs, because the failing goal is at the end and the rest is noise; raise tailLines when the reason is further up, and droppedLines says how much fell out of the buffer entirely. Pass cancel to stop one that is still running, which ends the process and everything it started. Omitting commandId reports the most recent command, and is refused while a second client is connected, since that command may be the other client's."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -33,7 +34,7 @@ public final class GetCommandOutputTool implements IMcpTool {
 				{
 				  "type": "object",
 				  "properties": {
-				    "commandId": {"type":"string","description":"Identifier returned by eclipse_run_command. Omit for the most recent."},
+				    "commandId": {"type":"string","description":"Identifier returned by eclipse_run_command. Omit for the most recent, which is refused while a second client is connected."},
 				    "tailLines": {"type":"integer","default":200,"minimum":1,"maximum":2000,"description":"How many of the last output lines to return."},
 				    "cancel":    {"type":"boolean","default":false,"description":"Stop the command if it is still running, together with any process it started."},
 				    "wait":      {"type":"boolean","default":false,"description":"Wait for it to finish first, bounded by timeoutSeconds and by the server's own call timeout."},
@@ -51,6 +52,9 @@ public final class GetCommandOutputTool implements IMcpTool {
 		if (registry.isEmpty()) {
 			return McpToolResult.of(new JsonObject().put("state", "none") //$NON-NLS-1$ //$NON-NLS-2$
 					.put("note", "No command has been run through this server yet.").toString()); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+		if (id == null && !ClientSessions.canAssumeASingleClient()) {
+			return McpToolResult.error(ClientSessions.ambiguousDefault("command", "commandId", registry.knownIds())); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		CommandRegistry.Execution execution = registry.get(id);
 		if (execution == null) {

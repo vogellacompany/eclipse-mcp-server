@@ -124,7 +124,7 @@ Never put a Java element's `toString()` into a message; use `getElementName()`, 
 Build a lookup key in one helper, as `FindReferencesTool.locationOf` does; two spellings silently match nothing.
 
 **"The most recent" is ambiguous with more than one client.**
-The build, test run and provisioning registries are per IDE, so those tools consult `ClientSessions` and refuse the implicit default when a second client is connected.
+The build, test run, provisioning and command registries are per IDE, so those tools consult `ClientSessions` and refuse the implicit default when a second client is connected.
 `ActiveSessions` counts `Mcp-Session-Id` headers and drops a session on its DELETE; with no provider (headless, tests) the count is one.
 
 ## Tests and CI

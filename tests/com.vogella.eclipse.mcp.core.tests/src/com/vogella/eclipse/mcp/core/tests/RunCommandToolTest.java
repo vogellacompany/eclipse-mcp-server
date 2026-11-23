@@ -10,6 +10,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import com.vogella.eclipse.mcp.core.ClientSessions;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 
 /**
@@ -38,6 +39,22 @@ class RunCommandToolTest {
 		Map<String, Object> polled = TestFixture.callAndParse("eclipse_get_command_output",
 				Map.of("commandId", result.get("commandId")));
 		assertEquals("done", polled.get("state"), "got " + polled);
+	}
+
+	@Test
+	void theMostRecentCommandIsRefusedWhileASecondClientIsConnected() throws Exception {
+		Path directory = Files.createTempDirectory("mcp-command-clients");
+		Map<String, Object> started = TestFixture.callAndParse("eclipse_run_command", Map.of("command", "echo mine",
+				"directory", directory.toString(), "wait", Boolean.TRUE, "timeoutSeconds", Integer.valueOf(20)));
+		ClientSessions.setProvider(() -> 2);
+		try {
+			McpToolResult answer = TestFixture.call("eclipse_get_command_output", Map.of());
+
+			assertTrue(answer.isError(), "another client's command could be the most recent: " + answer.text());
+			assertTrue(answer.text().contains(String.valueOf(started.get("commandId"))), "the refusal names the known ids: " + answer.text());
+		} finally {
+			ClientSessions.setProvider(null);
+		}
 	}
 
 	@Test
