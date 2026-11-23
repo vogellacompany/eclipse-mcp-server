@@ -110,6 +110,20 @@ class TokenStoreTest {
 	}
 
 	@Test
+	void createKeepsTheFirstTokenAndLeavesNoTemporaryBehind() throws Exception {
+		// two IDEs starting at once both find no token, and the second must adopt the first one's
+		Path file = directory.resolve("token");
+
+		assertTrue(PrivateFiles.create(file, "first"));
+		assertFalse(PrivateFiles.create(file, "second"));
+
+		assertEquals("first", Files.readString(file).strip());
+		try (var listing = Files.list(directory)) {
+			assertTrue(listing.allMatch(path -> path.equals(file)), "no temporary file should be left behind");
+		}
+	}
+
+	@Test
 	void concurrentWritesAllSucceedAndLeaveNoTemporaryBehind() throws Exception {
 		Path file = directory.resolve("token");
 		int writers = 8;

@@ -63,11 +63,11 @@ public final class TokenStore {
 		Path workspaceToken = workspaceLocation();
 		String inherited = read(workspaceToken);
 		if (inherited != null) {
-			String adopted = store(inherited, path);
+			String adopted = storeIfAbsent(inherited, path);
 			retire(workspaceToken);
 			return adopted;
 		}
-		return regenerate();
+		return storeIfAbsent(UUID.randomUUID().toString(), path);
 	}
 
 	/** Replaces the stored token and returns the new one. */
@@ -97,6 +97,21 @@ public final class TokenStore {
 			ILog.get().warn("Could not read the MCP token from %s, generating a new one".formatted(path), e); //$NON-NLS-1$
 		}
 		return null;
+	}
+
+	/** Stores the token unless another IDE stored one first, and returns the token the file holds. */
+	private static String storeIfAbsent(String token, Path path) {
+		try {
+			if (PrivateFiles.create(path, token)) {
+				return token;
+			}
+		} catch (IOException e) {
+			ILog.get().error(
+					"Could not store the MCP token in %s, it will change again on the next restart".formatted(path), e); //$NON-NLS-1$
+			return token;
+		}
+		String stored = read(path);
+		return stored != null ? stored : store(token, path);
 	}
 
 	private static String store(String token, Path path) {
