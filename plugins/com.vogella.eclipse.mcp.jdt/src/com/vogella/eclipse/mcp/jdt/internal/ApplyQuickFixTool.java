@@ -293,7 +293,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		}
 		try {
 			change.dispose();
-		} catch (RuntimeException e) {
+		} catch (RuntimeException | LinkageError e) {
+			// a change built from JDT internals that failed to link can fail the same way when released
 			ILog.get().warn("Could not dispose a quick fix's change", e); //$NON-NLS-1$
 		}
 	}
