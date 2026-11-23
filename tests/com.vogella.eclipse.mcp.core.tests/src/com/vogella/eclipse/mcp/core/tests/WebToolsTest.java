@@ -263,6 +263,8 @@ class WebToolsTest {
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_snapshot", Map.of()), "eclipse_web_open");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "a")), "eclipse_web_open");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_open", Map.of("url", "javascript:alert(1)")), "absolute");
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_open", Map.of("url", "mailto:someone@example.com")),
+				"absolute");
 		TestFixture.assertRefused(
 				TestFixture.call("eclipse_web_open", Map.of("url", base + "/", "connectUrl", "ftp://localhost:9222")),
 				"DevTools endpoint");

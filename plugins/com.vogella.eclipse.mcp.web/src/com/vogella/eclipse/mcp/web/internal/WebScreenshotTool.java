@@ -19,6 +19,9 @@ public final class WebScreenshotTool implements IMcpTool {
 	/** Chromium refuses captures much taller than this, and a model gains nothing from them. */
 	private static final double MAX_FULL_PAGE_HEIGHT = 16_384;
 
+	/** The widest capture, so a page or element of extreme width cannot fill the IDE's heap with one image. */
+	private static final double MAX_WIDTH = 8_192;
+
 	@Override
 	public String getName() {
 		return "eclipse_web_screenshot"; //$NON-NLS-1$
@@ -64,12 +67,16 @@ public final class WebScreenshotTool implements IMcpTool {
 				double left = target.x() - target.width() / 2 + target.scrollX();
 				double top = target.y() - target.height() / 2 + target.scrollY();
 				double captured = Math.min(target.height(), MAX_FULL_PAGE_HEIGHT);
-				params.put("clip", clip(left, top, target.width(), captured)); //$NON-NLS-1$
+				double wide = Math.min(target.width(), MAX_WIDTH);
+				params.put("clip", clip(left, top, wide, captured)); //$NON-NLS-1$
 				params.put("captureBeyondViewport", Boolean.TRUE); //$NON-NLS-1$
 				answer.put("element", target.tag()); //$NON-NLS-1$
-				size(answer, target.width(), captured);
+				size(answer, wide, captured);
 				if (captured < target.height()) {
 					answer.put("cutAtHeight", Double.valueOf(captured)).put("elementHeight", Double.valueOf(target.height())); //$NON-NLS-1$ //$NON-NLS-2$
+				}
+				if (wide < target.width()) {
+					answer.put("cutAtWidth", Double.valueOf(wide)).put("elementWidth", Double.valueOf(target.width())); //$NON-NLS-1$ //$NON-NLS-2$
 				}
 			} else if (args.getBoolean("fullPage", false)) { //$NON-NLS-1$
 				Map<String, Object> metrics = browser.send("Page.getLayoutMetrics", null); //$NON-NLS-1$
@@ -77,16 +84,25 @@ public final class WebScreenshotTool implements IMcpTool {
 				double width = WebPage.number(content.get("width")); //$NON-NLS-1$
 				double height = WebPage.number(content.get("height")); //$NON-NLS-1$
 				double captured = Math.min(height, MAX_FULL_PAGE_HEIGHT);
-				params.put("clip", clip(0, 0, width, captured)); //$NON-NLS-1$
+				double wide = Math.min(width, MAX_WIDTH);
+				params.put("clip", clip(0, 0, wide, captured)); //$NON-NLS-1$
 				params.put("captureBeyondViewport", Boolean.TRUE); //$NON-NLS-1$
-				size(answer, width, captured);
+				size(answer, wide, captured);
 				if (captured < height) {
 					answer.put("cutAtHeight", Double.valueOf(captured)).put("pageHeight", Double.valueOf(height)); //$NON-NLS-1$ //$NON-NLS-2$
 				}
+				if (wide < width) {
+					answer.put("cutAtWidth", Double.valueOf(wide)).put("pageWidth", Double.valueOf(width)); //$NON-NLS-1$ //$NON-NLS-2$
+				}
 			} else {
-				Object viewport = browser.evaluate("JSON.stringify({width: innerWidth, height: innerHeight})"); //$NON-NLS-1$
+				Object viewport = browser.evaluate(
+						"JSON.stringify({width: innerWidth, height: innerHeight, x: scrollX, y: scrollY})"); //$NON-NLS-1$
 				Map<String, Object> view = WebPage.parse(viewport);
-				size(answer, WebPage.number(view.get("width")), WebPage.number(view.get("height"))); //$NON-NLS-1$ //$NON-NLS-2$
+				double width = WebPage.number(view.get("width")); //$NON-NLS-1$
+				double height = WebPage.number(view.get("height")); //$NON-NLS-1$
+				// a clip at scale 1, so a window on a HiDPI display answers the CSS pixels the answer reports
+				params.put("clip", clip(WebPage.number(view.get("x")), WebPage.number(view.get("y")), width, height)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				size(answer, width, height);
 			}
 			Map<String, Object> shot = browser.send("Page.captureScreenshot", params); //$NON-NLS-1$
 			if (!(shot.get("data") instanceof String data)) { //$NON-NLS-1$

@@ -105,6 +105,10 @@ public final class WebOpenTool implements IMcpTool {
 		if (url == null) {
 			return null;
 		}
+		if (!url.contains("://") && !url.startsWith("about:") && url.matches("[A-Za-z][A-Za-z0-9+.-]*:(?!\\d).*")) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			// another scheme, such as mailto: or javascript:, rather than a host with a port such as localhost:8080
+			return null;
+		}
 		String candidate = url.contains("://") || url.startsWith("about:") ? url : "http://" + url; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		try {
 			URI uri = new URI(candidate);

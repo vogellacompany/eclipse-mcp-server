@@ -41,7 +41,7 @@ public final class WebSnapshotTool implements IMcpTool {
 	}
 
 	/** How many elements the page has, which bounds the refs one snapshot can hand out, shadow roots included. */
-	private static long elementCount(WebBrowser browser) throws IOException {
+	private static long elementCount(WebBrowser browser) {
 		Object count;
 		try {
 			count = browser.evaluate(
