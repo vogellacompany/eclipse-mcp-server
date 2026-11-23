@@ -40,7 +40,7 @@ public final class RevertFilesTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Replaces files with the content HEAD has for them, which is what 'Replace With > HEAD Revision' does. DESTROYS UNCOMMITTED WORK IN THOSE FILES, both unstaged and staged changes, so it runs as a DRY RUN unless dryRun is set to false, and the dry run reports for every path what would actually be lost. WHAT MAKES THIS DIFFERENT FROM 'git checkout HEAD -- file': a workspace file is written through the workspace with KEEP_HISTORY, so the discarded content goes into Eclipse's Local History and can be recovered from 'Compare With > Local History' afterwards, which a git checkout does not offer; the answer says per file whether that safety net applies, because it does NOT for a file outside the workspace, which is written directly. AN UNTRACKED FILE IS REFUSED BY NAME rather than deleted: it has no HEAD content, and deleting it is what a caller asking to revert would least expect. A file that is already identical to HEAD is reported as unchanged rather than rewritten, so nothing is touched and no local history entry is made for a no-op. The affected files are refreshed, so problem markers and everything else derived from them describe the reverted content rather than the old one. Needs EGit installed."; //$NON-NLS-1$
+		return "Replaces files with the content HEAD has for them, which is what 'Replace With > HEAD Revision' does. DESTROYS UNCOMMITTED WORK IN THOSE FILES, both unstaged and staged changes, so it runs as a DRY RUN unless dryRun is set to false, and the dry run reports for every path what would actually be lost. WHAT MAKES THIS DIFFERENT FROM 'git checkout HEAD -- file': a workspace file is written through the workspace with KEEP_HISTORY, so the discarded content goes into Eclipse's Local History and can be recovered from 'Compare With > Local History' afterwards, which a git checkout does not offer; the answer says per file whether that safety net applies, because it does NOT for a file outside the workspace, which is written directly. AN UNTRACKED FILE IS REFUSED BY NAME rather than deleted: it has no HEAD content, and deleting it is what a caller asking to revert would least expect. A file that is identical to HEAD with nothing staged is reported as unchanged and nothing is touched; a staged change is reset in the index to HEAD as well (unstaged in the answer), also when the file on disk already matches HEAD, and an unmerged path takes HEAD's side while the merge itself stays in progress. The affected files are refreshed, so problem markers and everything else derived from them describe the reverted content rather than the old one. Needs EGit installed."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -161,25 +161,32 @@ public final class RevertFilesTool implements IMcpTool {
 			}
 			byte[] current = onDisk.isFile() ? Files.readAllBytes(onDisk.toPath()) : null;
 			boolean identical = current != null && java.util.Arrays.equals(current, head);
+			boolean staged = isStaged(repository, relative);
 			entry.put("existsOnDisk", Boolean.valueOf(onDisk.isFile())) //$NON-NLS-1$
 					.put("headBytes", Integer.valueOf(head.length)) //$NON-NLS-1$
 					.put("currentBytes", current == null ? null : Integer.valueOf(current.length)) //$NON-NLS-1$
-					.put("staged", Boolean.valueOf(isStaged(repository, relative))) //$NON-NLS-1$
+					.put("staged", Boolean.valueOf(staged)) //$NON-NLS-1$
 					.put("inWorkspace", Boolean.valueOf(workspaceFile != null)) //$NON-NLS-1$
-					.put("localHistory", Boolean.valueOf(workspaceFile != null)); //$NON-NLS-1$
+					.put("localHistory", Boolean.valueOf(workspaceFile != null && workspaceFile.exists() && !identical)); //$NON-NLS-1$
 			if (workspaceFile == null) {
 				entry.put("localHistoryNote", //$NON-NLS-1$
 						"This file is not in the workspace, so it is written directly and Eclipse keeps NO local history of what was discarded."); //$NON-NLS-1$
 			}
-			if (identical) {
+			if (identical && !staged) {
 				return entry.put("state", "unchanged") //$NON-NLS-1$ //$NON-NLS-2$
 						.put("reason", "Already identical to HEAD, so nothing was written."); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 			if (dryRun) {
 				return entry.put("state", "wouldRevert"); //$NON-NLS-1$ //$NON-NLS-2$
 			}
-			write(workspaceFile, onDisk, head);
-			return entry.put("state", "reverted"); //$NON-NLS-1$ //$NON-NLS-2$
+			if (!identical) {
+				write(workspaceFile, onDisk, head);
+			}
+			if (staged) {
+				// writing the file leaves the index alone, and the staged content would be committed next
+				unstage(repository, relative, !identical);
+			}
+			return entry.put("state", "reverted").put("unstaged", Boolean.valueOf(staged)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		}
 
 		/**
@@ -221,14 +228,25 @@ public final class RevertFilesTool implements IMcpTool {
 			}
 		}
 
-		private static boolean isStaged(Repository repository, String relative) {
+		/** Resets the index entry to HEAD, as {@code git reset -- path} does. */
+		private static void unstage(Repository repository, String relative, boolean written) throws IOException {
+			try (Git git = new Git(repository)) {
+				git.reset().addPath(relative).call();
+			} catch (org.eclipse.jgit.api.errors.GitAPIException | RuntimeException e) {
+				throw new IOException((written ? "The file was written, but its staged change could not be reset: " //$NON-NLS-1$
+						: "The file already matched HEAD, but its staged change could not be reset: ") + e.getMessage(), e); //$NON-NLS-1$
+			}
+		}
+
+		/** Whether the index differs from HEAD for this path, an unmerged path included. */
+		private static boolean isStaged(Repository repository, String relative) throws IOException {
 			try (Git git = new Git(repository)) {
 				Status status = git.status().addPath(relative).call();
 				return status.getChanged().contains(relative) || status.getAdded().contains(relative)
-						|| status.getRemoved().contains(relative);
-			} catch (Exception e) {
-				// the staged flag is information, not a precondition
-				return false;
+						|| status.getRemoved().contains(relative) || status.getConflicting().contains(relative);
+			} catch (org.eclipse.jgit.api.errors.GitAPIException | RuntimeException e) {
+				// deciding wrongly would leave a staged change to be committed, so nothing is written
+				throw new IOException("Could not read the index, so nothing was written: " + e.getMessage(), e); //$NON-NLS-1$
 			}
 		}
 
