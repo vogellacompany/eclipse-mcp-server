@@ -38,7 +38,7 @@ public final class ListLaunchConfigurationsTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Lists the launch configurations of this IDE with their type, the modes they support and whether they are stored in the workspace or in a project. Changes nothing. eclipse_debug_launch takes a configuration by NAME, and without this the names can only be found by reading .metadata/.plugins/org.eclipse.debug.core/.launches from the file system, which is where this server should not send anybody. It also lists the launch configuration TYPES, which is what says whether this IDE can start an Eclipse Application or a plug-in test at all: a runtime workbench has no main class, so 'project' plus 'mainType' cannot express it and an existing configuration is the only way in. Configurations this server created for its own launches are marked, since they are transient and belong to nobody's saved launches."; //$NON-NLS-1$
+		return "Lists the launch configurations of this IDE with their type, the modes they support and whether they are stored in the workspace or in a project. Changes nothing. eclipse_debug_launch takes a configuration by NAME, and without this the names can only be found by reading .metadata/.plugins/org.eclipse.debug.core/.launches from the file system, which is where this server should not send anybody. It also lists the launch configuration TYPES, which is what says whether this IDE can start an Eclipse Application or a plug-in test at all: a runtime workbench has no main class, so 'project' plus 'mainType' cannot express it and an existing configuration is the only way in. A .launch file whose type is not installed is listed with launchable false and missingType, since the launch manager leaves it out. Configurations this server created for its own launches are marked, since they are transient and belong to nobody's saved launches."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -81,6 +81,15 @@ public final class ListLaunchConfigurationsTool implements IMcpTool {
 				}
 				configurations.add(describe(configuration, type, withAttributes));
 			}
+			for (MissingType missing : MissingType.scan(manager)) {
+				if (!matches(nameFilter, missing.name()) || !matches(typeFilter, missing.typeId())) {
+					continue;
+				}
+				total++;
+				if (configurations.size() < maxResults) {
+					configurations.add(missing.json());
+				}
+			}
 		} catch (CoreException e) {
 			return McpToolResult.error("Could not read the launch configurations: " + e.getMessage()); //$NON-NLS-1$
 		}
@@ -103,6 +112,7 @@ public final class ListLaunchConfigurationsTool implements IMcpTool {
 		JsonObject json = new JsonObject().put("name", configuration.getName()) //$NON-NLS-1$
 				.put("type", type.getIdentifier()) //$NON-NLS-1$
 				.put("typeName", type.getName()) //$NON-NLS-1$
+				.put("launchable", Boolean.TRUE) //$NON-NLS-1$
 				.put("modes", modes(type)) //$NON-NLS-1$
 				.put("storage", configuration.isLocal() ? "workspace metadata" : "project file") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				.put("file", configuration.getFile() == null ? null //$NON-NLS-1$

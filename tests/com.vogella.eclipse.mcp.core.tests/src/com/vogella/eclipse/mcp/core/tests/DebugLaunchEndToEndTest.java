@@ -257,6 +257,175 @@ class DebugLaunchEndToEndTest {
 		waitUntilTerminated(sessionId);
 	}
 
+	}
+
+	private static final String NOISY_SOURCE = """
+			package sample;
+			public class Noisy {
+				public static void main(String[] args) {
+					System.out.println("to-stdout");
+					System.err.println("to-stderr");
+					System.out.println("var=" + System.getenv("MCP_TEST_VAR"));
+					System.exit(3);
+				}
+			}
+			""";
+
+	@Test
+	void launchOutputHasBothStreamsTheExitCodeAndTheEnvironment() throws Exception {
+		ensureDefaultVmInstall();
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		TestFixture.addType(project, "sample", "Noisy", NOISY_SOURCE);
+		TestFixture.build(project.getProject());
+
+		Map<String, Object> launched = TestFixture.callAndParse("eclipse_debug_launch",
+				Map.of("project", PROJECT, "mainType", "sample.Noisy", "waitForSuspendSeconds", Integer.valueOf(0),
+						"environment", Map.of("MCP_TEST_VAR", "forty-two")));
+		String sessionId = (String) launched.get("sessionId");
+		assertNotNull(sessionId, String.valueOf(launched));
+		waitUntilTerminated(sessionId);
+
+		Map<?, ?> process = null;
+		for (int attempt = 0; attempt < 40; attempt++) {
+			Map<String, Object> output = TestFixture.callAndParse("eclipse_get_launch_output",
+					Map.of("sessionId", sessionId, "tailLines", Integer.valueOf(10)));
+			List<?> processes = (List<?>) output.get("processes");
+			if (!processes.isEmpty() && Boolean.TRUE.equals(((Map<?, ?>) processes.get(0)).get("terminated"))) {
+				process = (Map<?, ?>) processes.get(0);
+				break;
+			}
+			Thread.sleep(250);
+		}
+		assertNotNull(process, "the process never reported as terminated");
+		assertEquals(3, ((Number) process.get("exitValue")).intValue(), String.valueOf(process));
+		Map<?, ?> stdout = (Map<?, ?>) process.get("stdout");
+		Map<?, ?> stderr = (Map<?, ?>) process.get("stderr");
+		assertTrue(String.valueOf(stdout.get("text")).contains("to-stdout"), String.valueOf(stdout));
+		assertTrue(String.valueOf(stdout.get("text")).contains("var=forty-two"), String.valueOf(stdout));
+		assertTrue(String.valueOf(stderr.get("text")).contains("to-stderr"), String.valueOf(stderr));
+		assertEquals(Boolean.FALSE, stdout.get("truncated"));
+
+		Map<String, Object> tail = TestFixture.callAndParse("eclipse_get_launch_output",
+				Map.of("sessionId", sessionId, "tailLines", Integer.valueOf(1)));
+		Map<?, ?> tailed = (Map<?, ?>) ((Map<?, ?>) ((List<?>) tail.get("processes")).get(0)).get("stdout");
+		assertEquals(Boolean.TRUE, tailed.get("truncated"), String.valueOf(tailed));
+		assertEquals(1, ((Number) tailed.get("returned")).intValue());
+		assertEquals("var=forty-two", tailed.get("text"));
+	}
+
+	private static final String READY_SOURCE = """
+			package sample;
+			public class Ready {
+				public static void main(String[] args) throws Exception {
+					System.out.println("booting");
+					System.out.println("Started Ready in 0.1 seconds");
+					Thread.sleep(120000);
+				}
+			}
+			""";
+
+	@Test
+	void waitForOutputAnswersReadyForARunModeLaunchAndPatternFilters() throws Exception {
+		ensureDefaultVmInstall();
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		TestFixture.addType(project, "sample", "Ready", READY_SOURCE);
+		TestFixture.build(project.getProject());
+
+		Map<String, Object> launched = TestFixture.callAndParse("eclipse_debug_launch",
+				Map.of("project", PROJECT, "mainType", "sample.Ready", "mode", "run",
+						"waitForOutput", "Started \\w+ in", "readyTimeoutSeconds", Integer.valueOf(20)));
+		assertEquals(Boolean.TRUE, launched.get("ready"), String.valueOf(launched));
+		String sessionId = (String) launched.get("sessionId");
+
+		Map<String, Object> output = TestFixture.callAndParse("eclipse_get_launch_output",
+				Map.of("sessionId", sessionId, "pattern", "^Started"));
+		Map<?, ?> stdout = (Map<?, ?>) ((Map<?, ?>) ((List<?>) output.get("processes")).get(0)).get("stdout");
+		assertEquals(1, ((Number) stdout.get("total")).intValue(), String.valueOf(stdout));
+		assertTrue(String.valueOf(stdout.get("text")).startsWith("Started Ready"), String.valueOf(stdout));
+
+		TestFixture.callAndParse("eclipse_debug_control", Map.of("sessionId", sessionId, "action", "terminate"));
+		waitUntilTerminated(sessionId);
+	}
+
+	}
+
+	@Test
+	void waitForOutputReportsTerminatedWhenTheProgramDiesFirst() throws Exception {
+		ensureDefaultVmInstall();
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		TestFixture.addType(project, "sample", "Noisy", NOISY_SOURCE);
+		TestFixture.build(project.getProject());
+
+		Map<String, Object> launched = TestFixture.callAndParse("eclipse_debug_launch",
+				Map.of("project", PROJECT, "mainType", "sample.Noisy", "waitForOutput", "never printed",
+						"readyTimeoutSeconds", Integer.valueOf(20)));
+		assertEquals(Boolean.FALSE, launched.get("ready"), String.valueOf(launched));
+		assertEquals(Boolean.TRUE, ((Map<?, ?>) launched.get("readiness")).get("terminated"), String.valueOf(launched));
+		assertTrue(String.valueOf(launched.get("processOutputTail")).contains("to-stdout"), String.valueOf(launched));
+		assertNotNull(launched.get("outputNote"));
+	}
+
+	@Test
+	void aLaunchFileOfAnUninstalledTypeIsListedAsNotLaunchable() throws Exception {
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n"
+				+ "<launchConfiguration type=\"com.example.nowhere.launchType\">\n</launchConfiguration>\n";
+		project.getProject().getFile("Ghost.launch").create(
+				new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)), true, null);
+
+		Map<String, Object> listed = TestFixture.callAndParse("eclipse_list_launch_configurations",
+				Map.of("nameFilter", "Ghost"));
+		Map<?, ?> ghost = (Map<?, ?>) ((List<?>) listed.get("configurations")).get(0);
+		assertEquals(Boolean.FALSE, ghost.get("launchable"), String.valueOf(ghost));
+		assertEquals("com.example.nowhere.launchType", ghost.get("missingType"));
+	}
+
+	@Test
+	void aSavedLaunchConfigurationIsListedAndLaunchableByName() throws Exception {
+		ensureDefaultVmInstall();
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		TestFixture.addType(project, "sample", "Noisy", NOISY_SOURCE);
+		TestFixture.build(project.getProject());
+		String name = "mcp-saved-" + System.nanoTime();
+		Map<String, Object> save = new HashMap<>(Map.of("name", name, "project", PROJECT, "mainType", "sample.Noisy",
+				"environment", Map.of("MCP_TEST_VAR", "saved")));
+
+		Map<String, Object> dry = TestFixture.callAndParse("eclipse_save_launch_configuration", save);
+		assertEquals(Boolean.TRUE, dry.get("dryRun"), String.valueOf(dry));
+		assertEquals(0, ((List<?>) TestFixture.callAndParse("eclipse_list_launch_configurations",
+				Map.of("nameFilter", name)).get("configurations")).size());
+
+		save.put("dryRun", Boolean.FALSE);
+		try {
+			Map<String, Object> saved = TestFixture.callAndParse("eclipse_save_launch_configuration", save);
+			assertEquals(Boolean.TRUE, saved.get("saved"), String.valueOf(saved));
+			Map<String, Object> listed = TestFixture.callAndParse("eclipse_list_launch_configurations",
+					Map.of("nameFilter", name, "includeAttributes", Boolean.TRUE));
+			Map<?, ?> entry = (Map<?, ?>) ((List<?>) listed.get("configurations")).get(0);
+			assertEquals(Boolean.TRUE, entry.get("launchable"), String.valueOf(entry));
+
+			Map<String, Object> launched = TestFixture.callAndParse("eclipse_debug_launch",
+					Map.of("configuration", name, "waitForSuspendSeconds", Integer.valueOf(0)));
+			String sessionId = (String) launched.get("sessionId");
+			assertNotNull(sessionId, String.valueOf(launched));
+			waitUntilTerminated(sessionId);
+			String text = "";
+			for (int attempt = 0; attempt < 20 && !text.contains("var=saved"); attempt++) {
+				Map<?, ?> process = (Map<?, ?>) ((List<?>) TestFixture.callAndParse("eclipse_get_launch_output",
+						Map.of("sessionId", sessionId)).get("processes")).get(0);
+				text = String.valueOf(((Map<?, ?>) process.get("stdout")).get("text"));
+				Thread.sleep(250);
+			}
+			assertTrue(text.contains("var=saved"), text);
+		} finally {
+			for (var configuration : DebugPlugin.getDefault().getLaunchManager().getLaunchConfigurations()) {
+				if (configuration.getName().equals(name)) {
+					configuration.delete();
+				}
+			}
+		}
+	}
+
 	/** Whether the debug connection is up, which the launch establishes after it registers the process. */
 	private static boolean hasDebugTarget(String sessionId) throws Exception {
 		for (int attempt = 0; attempt < 40; attempt++) {

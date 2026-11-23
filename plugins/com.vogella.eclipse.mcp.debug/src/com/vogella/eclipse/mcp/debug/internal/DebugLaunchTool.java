@@ -80,6 +80,10 @@ public final class DebugLaunchTool implements IMcpTool {
 				    "mode":                    {"type":"string","enum":["debug","run"],"default":"debug","description":"'run' starts the program without the debugger, so no JDWP agent is attached and nothing can suspend. Use it when measuring startup or profiling, where the agent distorts the numbers and a suspend ruins them; breakpoints and eclipse_debug_get_frames need 'debug'."},
 				    "replaceExisting":         {"type":"boolean","default":true,"description":"Terminate a launch of the same configuration that THIS SERVER started and is still running, and wait for its process to be gone, before starting. Without it the second launch walks into the first one's workspace lock and opens a modal dialog inside the launched process, where no tool here can reach it. Launches a person started are never touched."},
 				    "quiet":                   {"type":"boolean","default":true,"description":"Neutralise, for as long as this launch runs, the settings that stop a program nobody is watching: suspend on uncaught exceptions, suspend on compilation errors, and the modal question about switching perspective on suspend. These are not breakpoints, so eclipse_list_breakpoints reports none of them, and OSGi startup trips the first one routinely. The previous values are restored when the launch ends."},
+				    "environment":             {"type":"object","additionalProperties":{"type":"string"},"description":"Extra environment variables, merged over the IDE's own. With 'configuration' they are merged over that configuration's own variables on a copy that is launched without being saved, so the saved configuration stays as it is."},
+				    "waitForOutput":           {"type":"string","description":"Regular expression; wait until the program's stdout or stderr contains a match, for example 'Started .*Application'. The answer carries ready true, or says the program terminated first (exit code and last output come with it) or that the wait timed out. A timeout is a normal answer and the program keeps running."},
+				    "waitForPort":             {"type":"integer","minimum":1,"maximum":65535,"description":"Wait until localhost accepts a TCP connection on this port. Combines with waitForOutput: either one makes the launch ready."},
+				    "readyTimeoutSeconds":     {"type":"integer","default":20,"minimum":1,"maximum":25,"description":"How long waitForOutput and waitForPort wait at most, capped by what the call timeout leaves. When either is given, waitForSuspendSeconds defaults to 0."},
 				    "flightRecordingSeconds":  {"type":"integer","default":0,"minimum":0,"maximum":3600,"description":"Write the recording after this many seconds WITHOUT ending the program. This is what makes a startup measurable: the file is complete while the application carries on. IT IS ONE WINDOW: the recording ends at that point and nothing is added later, not even at exit, so measure the start with it and use jcmd JFR.dump for a window further in. 0 relies on the exit dump alone, which needs the program to end."},
 				    "flightRecording":         {"type":"string","enum":["off","default","profile"],"default":"off","description":"Record the launched JVM with Java Flight Recorder. 'profile' includes allocation and execution samples at a few percent overhead, 'default' covers GC and threads at about one percent. The file is written when the program EXITS and opens in JDK Mission Control or with 'jfr print'. This is the only way to profile a launched program: recording the IDE works inside the IDE's JVM and cannot see another process."}
 				  },
@@ -90,13 +94,24 @@ public final class DebugLaunchTool implements IMcpTool {
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
-		int waitForSuspend = args.getInt("waitForSuspendSeconds", 20, 0, 25); //$NON-NLS-1$
+		String outputPattern = args.getString("waitForOutput"); //$NON-NLS-1$
+		int readyPort = args.getInt("waitForPort", 0, 0, 65535); //$NON-NLS-1$
+		boolean wantsReady = outputPattern != null || readyPort > 0;
+		java.util.regex.Pattern ready;
+		try {
+			ready = outputPattern == null ? null : java.util.regex.Pattern.compile(outputPattern);
+		} catch (java.util.regex.PatternSyntaxException e) {
+			throw new McpToolException("waitForOutput is not a valid regular expression: %s".formatted(e.getDescription())); //$NON-NLS-1$
+		}
+		// a readiness wait replaces the default suspend wait, which would only delay a running program
+		int waitForSuspend = args.getInt("waitForSuspendSeconds", wantsReady ? 0 : 20, 0, 25); //$NON-NLS-1$
 		ILaunchConfigurationWorkingCopy configuration;
 		try {
 			configuration = configuration(args);
 		} catch (CoreException e) {
 			throw new McpToolException("Could not build the launch configuration: %s".formatted(e.getMessage()), e);
 		}
+		applyEnvironment(configuration, arguments);
 		int recordingSeconds = args.getInt("flightRecordingSeconds", 0, 0, 3600); //$NON-NLS-1$
 		Path recordingFile = record(configuration, args.getString("flightRecording", "off"), //$NON-NLS-1$ //$NON-NLS-2$
 				recordingSeconds);
@@ -164,6 +179,9 @@ public final class DebugLaunchTool implements IMcpTool {
 						.error("The launch failed: %s".formatted(session.failure())); //$NON-NLS-1$
 			}
 			int maxThreads = args.getInt("maxResults", 50, 1, 500); //$NON-NLS-1$
+			JsonObject readiness = wantsReady
+					? awaitReady(session, ready, readyPort, args.getInt("readyTimeoutSeconds", 20, 1, 25), started) //$NON-NLS-1$
+					: null;
 			JsonObject json;
 			if (waitForSuspend > 0 && !session.suspended()) {
 				DebugSessionRegistry.SuspendSignal signal = registry.onNextSuspend(session);
@@ -188,6 +206,9 @@ public final class DebugLaunchTool implements IMcpTool {
 						.put("flightRecordingNote", //$NON-NLS-1$
 								LaunchRecording.note(recordingFile, recordingSeconds));
 			}
+			if (readiness != null) {
+				json.put("ready", readiness.remove("ready")).put("readiness", readiness); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			}
 			json.put("mode", mode); //$NON-NLS-1$
 			if (replaced != null) {
 				json.put("replaced", replaced); //$NON-NLS-1$
@@ -198,6 +219,10 @@ public final class DebugLaunchTool implements IMcpTool {
 								"Suspend on uncaught exceptions, suspend on compilation errors and the perspective switch question are off while this launch runs, and go back to their previous values when it ends. They are not breakpoints, so eclipse_list_breakpoints never showed them.")); //$NON-NLS-1$
 			}
 			DebugSupport.describeProcesses(json, session);
+			if (session.terminated()) {
+				json.put("outputNote", //$NON-NLS-1$
+						"The program has already ended; read its console and exit code with eclipse_get_launch_output for this sessionId."); //$NON-NLS-1$
+			}
 			return McpToolResult.of(json.toString());
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
@@ -226,6 +251,65 @@ public final class DebugLaunchTool implements IMcpTool {
 					"One of them had not actually ended within ten seconds. It may still hold the workspace lock, in which case this launch stops inside its own process with a dialog no tool here can reach."); //$NON-NLS-1$
 		}
 		return json;
+	}
+
+	/**
+	 * Waits until the output matches, the port accepts a connection, the program ends or the budget
+	 * is spent; every outcome is an answer, not an error.
+	 */
+	private static JsonObject awaitReady(DebugSessionRegistry.Session session, java.util.regex.Pattern pattern,
+			int port, int seconds, long startedNanos) throws InterruptedException {
+		long left = CallBudget.maxWaitSeconds() - (System.nanoTime() - startedNanos) / 1_000_000_000L;
+		long deadline = System.nanoTime() + Math.max(0, Math.min(seconds, left)) * 1_000_000_000L;
+		JsonObject result = new JsonObject();
+		while (true) {
+			if (pattern != null && pattern.matcher(GetLaunchOutputTool.contents(session.launch())).find()) {
+				return result.put("ready", Boolean.TRUE).put("by", "output"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			}
+			if (port > 0 && accepts(port)) {
+				return result.put("ready", Boolean.TRUE).put("by", "port"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			}
+			if (session.terminated()) {
+				return result.put("ready", Boolean.FALSE).put("terminated", Boolean.TRUE).put("note", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+						"The program ended before it was ready; exit code and the last output are in processes and processOutputTail, and eclipse_get_launch_output has the rest."); //$NON-NLS-1$
+			}
+			if (session.suspended()) {
+				return result.put("ready", Boolean.FALSE).put("suspended", Boolean.TRUE).put("note", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+						"The program suspended before it was ready."); //$NON-NLS-1$
+			}
+			if (System.nanoTime() >= deadline) {
+				return result.put("ready", Boolean.FALSE).put("timedOut", Boolean.TRUE).put("note", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+						"Not ready within the wait; the program is still running. Poll eclipse_get_launch_output."); //$NON-NLS-1$
+			}
+			Thread.sleep(200);
+		}
+	}
+
+	private static boolean accepts(int port) {
+		try (java.net.Socket socket = new java.net.Socket()) {
+			socket.connect(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port), 200);
+			return true;
+		} catch (java.io.IOException e) {
+			return false;
+		}
+	}
+
+	/** Merges the variables over the configuration's own; the working copy is launched, never saved. */
+	private static void applyEnvironment(ILaunchConfigurationWorkingCopy configuration, Map<String, Object> arguments)
+			throws McpToolException {
+		if (arguments == null || !(arguments.get("environment") instanceof Map<?, ?> extra) || extra.isEmpty()) { //$NON-NLS-1$
+			return;
+		}
+		try {
+			Map<String, String> merged = new java.util.LinkedHashMap<>(
+					configuration.getAttribute(ILaunchManager.ATTR_ENVIRONMENT_VARIABLES, Map.<String, String>of()));
+			extra.forEach((name, value) -> merged.put(String.valueOf(name), String.valueOf(value)));
+			configuration.setAttribute(ILaunchManager.ATTR_ENVIRONMENT_VARIABLES, merged);
+			configuration.setAttribute(ILaunchManager.ATTR_APPEND_ENVIRONMENT_VARIABLES, true);
+		} catch (CoreException e) {
+			throw new McpToolException("Could not read the environment of the launch configuration: %s" //$NON-NLS-1$
+					.formatted(e.getMessage()), e);
+		}
 	}
 
 	/**
