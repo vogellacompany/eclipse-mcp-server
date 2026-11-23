@@ -90,6 +90,10 @@ public final class WebTypeTool implements IMcpTool {
 					} else {
 						UserInput.insertText(browser, text);
 					}
+					// typing raises input; change follows when a person leaves the field, which a later click or
+					// submit may never do for this one, so it is raised here for handlers that validate or save on it
+					browser.evaluate(
+							"(() => { const el = window.__mcpTarget; if (el && el.isConnected && !el.isContentEditable) el.dispatchEvent(new Event('change', {bubbles: true})); })()"); //$NON-NLS-1$
 				}
 				if (args.getBoolean("submit", false)) { //$NON-NLS-1$
 					UserInput.press(browser, "Enter", 13, "\r"); //$NON-NLS-1$ //$NON-NLS-2$

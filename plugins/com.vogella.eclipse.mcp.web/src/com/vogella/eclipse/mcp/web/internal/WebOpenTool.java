@@ -110,7 +110,7 @@ public final class WebOpenTool implements IMcpTool {
 			// another scheme, such as mailto: or javascript:, rather than a host with a port such as localhost:8080
 			return null;
 		}
-		String candidate = url.contains("://") || url.startsWith("about:") ? url : "http://" + url; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		String candidate = url.contains("://") || url.startsWith("about:") || url.startsWith("file:") ? url : "http://" + url; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 		try {
 			URI uri = new URI(candidate);
 			String scheme = uri.getScheme();

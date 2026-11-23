@@ -122,7 +122,8 @@ final class WebBrowser {
 
 	/** Closes the page and, when this IDE started it, the browser. Answers whether anything was open. */
 	static synchronized boolean shutdown() {
-		WebBrowser open = instance;
+		// through current(), which disposes a browser that already died, so that one does not count as closed here
+		WebBrowser open = current();
 		instance = null;
 		if (open == null) {
 			return false;

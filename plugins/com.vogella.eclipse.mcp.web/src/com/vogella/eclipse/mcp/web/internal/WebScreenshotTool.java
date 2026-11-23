@@ -23,7 +23,7 @@ public final class WebScreenshotTool implements IMcpTool {
 	private static final double MAX_WIDTH = 8_192;
 
 	/** The most pixels of one capture, so a page both wide and long cannot fill the IDE's heap with one image. */
-	private static final double MAX_PIXELS = 8_192 * 4_096;
+	private static final double MAX_PIXELS = 8_192 * 2_048;
 
 	/** The tallest capture at that width: the height limit, lowered for a wide capture to stay within the pixels. */
 	private static double maxHeight(double width) {

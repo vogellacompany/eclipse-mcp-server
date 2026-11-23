@@ -48,6 +48,7 @@ class WebToolsTest {
 			  <button type="button" id="ask" onclick="document.getElementById('out').textContent = confirm('Sure?') ? 'yes' : 'no';">Ask</button>
 			</form>
 			<fieldset disabled><input id="fenced" aria-label="Fenced"></fieldset>
+			<input id="watched" aria-label="Watched" onchange="document.getElementById('out').textContent = 'Changed ' + this.value">
 			<p id="out">nothing yet</p>
 			<div hidden><button>Invisible</button></div>
 			<details><summary>More</summary><button>Folded</button></details>
@@ -105,7 +106,11 @@ class WebToolsTest {
 	}
 
 	private static Map<String, Object> open(String path) throws Exception {
-		McpToolResult result = TestFixture.call("eclipse_web_open", Map.of("url", base + path));
+		return openUrl(base + path);
+	}
+
+	private static Map<String, Object> openUrl(String url) throws Exception {
+		McpToolResult result = TestFixture.call("eclipse_web_open", Map.of("url", url));
 		// a machine without a browser, or one whose browser cannot start there, cannot run these tests
 		Assumptions.assumeFalse(result.isError() && (result.text().contains("No Chrome, Chromium or Edge")
 				|| result.text().contains("before it was ready") || result.text().contains("did not open its DevTools port")),
@@ -161,6 +166,8 @@ class WebToolsTest {
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type",
 				Map.of("selector", "#age", "text", "1", "clear", Boolean.FALSE)), "cannot be appended");
 		assertEquals("", TestFixture.callAndParse("eclipse_web_type", Map.of("selector", "#age", "text", "")).get("value"));
+		TestFixture.callAndParse("eclipse_web_type", Map.of("selector", "#watched", "text", "now"));
+		assertTrue(snapshot().contains("Changed now"), "typing raises change");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#locked", "text", "x")), "read-only");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#off", "text", "x")), "disabled");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#off")), "disabled");
@@ -285,6 +292,18 @@ class WebToolsTest {
 				TestFixture.call("eclipse_web_open", Map.of("url", base + "/", "connectUrl", "ftp://localhost:9222")),
 				"DevTools endpoint");
 		assertEquals(Boolean.FALSE, TestFixture.callAndParse("eclipse_web_close", Map.of()).get("closed"));
+	}
+
+	@Test
+	void opensALocalFileWrittenWithOneSlash() throws Exception {
+		Path local = Files.createTempFile("mcp-web-local-", ".html");
+		try {
+			Files.writeString(local, "<html><head><title>Local page</title></head><body>here</body></html>");
+			// file:/path, the spelling java.net.URI prints, as well as file:///path
+			assertEquals("Local page", openUrl("file:" + local.toAbsolutePath()).get("title"));
+		} finally {
+			Files.deleteIfExists(local);
+		}
 	}
 
 	@Test
