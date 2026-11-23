@@ -37,6 +37,9 @@ final class WebBrowser {
 
 	private static WebBrowser instance;
 
+	/** Starts Chromium without its sandbox, for containers where it cannot set one up even for a normal user. */
+	static final String NO_SANDBOX_PROPERTY = "com.vogella.eclipse.mcp.web.noSandbox"; //$NON-NLS-1$
+
 	/** Survives a navigation and a restart of the browser, because a ref a client still holds must never name another element. */
 	private static long nextRef = 1;
 
@@ -133,7 +136,7 @@ final class WebBrowser {
 		}
 		if (isLinux()) {
 			command.add("--disable-dev-shm-usage"); //$NON-NLS-1$
-			if ("root".equals(System.getProperty("user.name"))) { //$NON-NLS-1$ //$NON-NLS-2$
+			if ("root".equals(System.getProperty("user.name")) || Boolean.getBoolean(NO_SANDBOX_PROPERTY)) { //$NON-NLS-1$
 				// Chromium refuses to start its sandbox as root, which is how containers and CI agents often run
 				command.add("--no-sandbox"); //$NON-NLS-1$
 			}

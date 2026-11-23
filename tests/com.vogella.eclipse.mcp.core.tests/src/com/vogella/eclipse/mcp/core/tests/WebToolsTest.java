@@ -51,6 +51,16 @@ class WebToolsTest {
 			<button type="button" onclick="this.remove()">Remove me</button>
 			<a href="/second">Next page</a>
 			<div id="overlay-host"></div>
+			<shadow-greeter></shadow-greeter>
+			<script>
+			customElements.define('shadow-greeter', class extends HTMLElement {
+			  connectedCallback() {
+			    const root = this.attachShadow({mode: 'open'});
+			    root.innerHTML = '<button>Shadow greet</button>';
+			    root.querySelector('button').onclick = () => document.getElementById('out').textContent = 'From the shadow';
+			  }
+			});
+			</script>
 			</body></html>""";
 
 	private static final String SECOND = """
@@ -136,6 +146,9 @@ class WebToolsTest {
 				Map.of("selector", "#color", "text", "Green"));
 		assertEquals("g", chosen.get("value"));
 		assertTrue(snapshot().contains("Color g"), snapshot());
+
+		TestFixture.callAndParse("eclipse_web_click", Map.of("ref", ref(snapshot(), "button \"Shadow greet\"")));
+		assertTrue(snapshot().contains("From the shadow"), snapshot());
 
 		Map<String, Object> followed = TestFixture.callAndParse("eclipse_web_click",
 				Map.of("ref", ref(snapshot(), "link \"Next page\"")));

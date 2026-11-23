@@ -134,7 +134,7 @@ final class PageScripts {
 			      const role = roleOf(child);
 			      if (role === 'presentation' || role === 'none' || role === null) {
 			        const inline = getComputedStyle(child).display.startsWith('inline');
-			        if (inline && !child.children.length) { text += ' ' + child.textContent; continue; }
+			        if (inline && !child.children.length && !child.shadowRoot) { text += ' ' + child.textContent; continue; }
 			        flush();
 			        walk(child, depth);
 			        continue;
@@ -187,7 +187,9 @@ final class PageScripts {
 			  el.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'});
 			  const box = el.getBoundingClientRect();
 			  const x = box.left + box.width / 2, y = box.top + box.height / 2;
-			  const top = document.elementFromPoint(x, y);
+			  // inside a shadow root the document only reports the host, which would read as covering its own content
+			  const root = el.getRootNode();
+			  const top = (root.elementFromPoint ? root : document).elementFromPoint(x, y);
 			  const describe = e => e ? e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') +
 			      (e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\\s+/).join('.') : '') : null;
 			  const covered = top && top !== el && !el.contains(top) && !top.contains(el) &&

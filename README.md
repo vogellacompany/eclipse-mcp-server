@@ -238,6 +238,7 @@ Tools marked ✎ change something; the rest are read-only.
 The web tools talk to the browser over the Chrome DevTools Protocol with the JDK's own HTTP client, so they add no library and download nothing.
 They look for Chrome, Chromium or Edge in the usual install locations, on `PATH` and in a Playwright browser cache; `-Dcom.vogella.eclipse.mcp.web.browser=<executable>` or the `browserPath` argument names another.
 A browser the IDE starts gets a fresh temporary profile, deleted when it closes or the IDE exits.
+In a container where Chromium cannot set up its sandbox, `-Dcom.vogella.eclipse.mcp.web.noSandbox=true` starts it without; as root that happens anyway.
 
 **Installation**
 
