@@ -49,6 +49,7 @@ class WebToolsTest {
 			<p id="out">nothing yet</p>
 			<div hidden><button>Invisible</button></div>
 			<button type="button" onclick="this.remove()">Remove me</button>
+			<input id="age" type="number" value="41"> <input id="locked" value="fixed" readonly> <input id="off" disabled>
 			<a href="/second">Next page</a>
 			<div id="overlay-host"></div>
 			<shadow-greeter></shadow-greeter>
@@ -141,6 +142,10 @@ class WebToolsTest {
 
 		TestFixture.callAndParse("eclipse_web_type", Map.of("selector", "#name", "text", "Eclipse", "submit", Boolean.TRUE));
 		assertTrue(snapshot().contains("Submitted Eclipse"), snapshot());
+
+		assertEquals("42", TestFixture.callAndParse("eclipse_web_type", Map.of("selector", "#age", "text", "42")).get("value"));
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#locked", "text", "x")), "read-only");
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#off", "text", "x")), "disabled");
 
 		Map<String, Object> chosen = TestFixture.callAndParse("eclipse_web_type",
 				Map.of("selector", "#color", "text", "Green"));

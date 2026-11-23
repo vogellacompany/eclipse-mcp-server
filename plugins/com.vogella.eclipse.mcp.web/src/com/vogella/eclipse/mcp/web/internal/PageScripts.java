@@ -213,9 +213,20 @@ final class PageScripts {
 			    return JSON.stringify({error: 'The element is an input of type ' + el.type + ', which does not take typed text; use eclipse_web_click for it.'});
 			  const editable = el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA';
 			  if (!editable) return JSON.stringify({error: 'The element is a ' + el.tagName.toLowerCase() + ', which does not take text.'});
+			  if (el.disabled) return JSON.stringify({error: 'The field is disabled, so a user cannot type into it.'});
+			  if (el.readOnly) return JSON.stringify({error: 'The field is read-only, so a user cannot type into it.'});
+			  if (document.activeElement !== el && !(el.contains && el.contains(document.activeElement)))
+			    return JSON.stringify({error: 'The field did not take the focus, so typed text would go elsewhere.'});
 			  if (clear) {
 			    if (el.isContentEditable) { window.getSelection().selectAllChildren(el); }
-			    else { el.select(); }
+			    else {
+			      try { el.select(); }
+			      catch (e) {
+			        // number, date and similar inputs have no text selection; empty them as a user selecting all would
+			        el.value = '';
+			        el.dispatchEvent(new Event('input', {bubbles: true}));
+			      }
+			    }
 			  } else if (!el.isContentEditable && typeof el.setSelectionRange === 'function') {
 			    try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* types without selection */ }
 			  }

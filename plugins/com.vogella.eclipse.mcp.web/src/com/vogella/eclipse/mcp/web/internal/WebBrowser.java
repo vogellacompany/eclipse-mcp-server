@@ -105,10 +105,13 @@ final class WebBrowser {
 			if (sameKind) {
 				return open;
 			}
-			open.dispose();
-			instance = null;
 		}
-		instance = connectUrl == null ? launch(browserPath, headless) : connect(connectUrl);
+		// the new page first, so a request that fails leaves the page that worked open
+		WebBrowser started = connectUrl == null ? launch(browserPath, headless) : connect(connectUrl);
+		if (open != null) {
+			open.dispose();
+		}
+		instance = started;
 		return instance;
 	}
 
@@ -163,10 +166,20 @@ final class WebBrowser {
 
 	private static WebBrowser connect(String endpoint) throws IOException {
 		Map<String, Object> target = pageTarget(endpoint, true);
-		WebBrowser browser = new WebBrowser(null, null, null, endpoint, String.valueOf(target.get("id")), false, //$NON-NLS-1$
-				CdpConnection.open(URI.create(String.valueOf(target.get("webSocketDebuggerUrl"))), launchBudgetMillis(10_000))); //$NON-NLS-1$
-		browser.attach();
-		return browser;
+		try {
+			WebBrowser browser = new WebBrowser(null, null, null, endpoint, String.valueOf(target.get("id")), false, //$NON-NLS-1$
+					CdpConnection.open(URI.create(String.valueOf(target.get("webSocketDebuggerUrl"))), //$NON-NLS-1$
+							launchBudgetMillis(10_000)));
+			browser.attach();
+			return browser;
+		} catch (IOException | RuntimeException e) {
+			try {
+				http(endpoint + "/json/close/" + target.get("id"), "GET"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			} catch (IOException closing) {
+				e.addSuppressed(closing);
+			}
+			throw e;
+		}
 	}
 
 	/** Chromium writes the port it picked into the profile, which is the only race-free way to learn it. */
