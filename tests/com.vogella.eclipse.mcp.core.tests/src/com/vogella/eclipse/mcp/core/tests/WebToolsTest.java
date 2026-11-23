@@ -183,7 +183,7 @@ class WebToolsTest {
 		String covered = ref(snapshot(), "button \"Under\"");
 		assertFalse(List.of(greet, ask, remove).contains(covered), "a new document must not reuse refs: " + covered);
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("ref", greet)), "take a new snapshot");
-		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#covered", "text", "")),
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#covered", "text", "", "force", Boolean.TRUE)),
 				"does not take text");
 	}
 
@@ -194,6 +194,8 @@ class WebToolsTest {
 		open("/second");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("ref", greet)), "take a new snapshot");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#covered")), "covered by div#modal");
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#covered", "text", "x")),
+				"covered by div#modal");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#missing")), "No element matches");
 	}
 
@@ -254,6 +256,9 @@ class WebToolsTest {
 			assertEquals("Greeter", opened.get("title"));
 			assertEquals("connected", ((Map<String, Object>) opened.get("browser")).get("mode"));
 			assertTrue(snapshot().contains("button \"Greet\""));
+			Map<String, Object> again = TestFixture.callAndParse("eclipse_web_open", Map.of("url", base + "/second"));
+			assertEquals("connected", ((Map<String, Object>) again.get("browser")).get("mode"),
+					"a later open without connectUrl keeps the connected tab");
 			assertEquals(Boolean.TRUE, TestFixture.callAndParse("eclipse_web_close", Map.of()).get("closed"));
 			assertTrue(browser.isAlive(), "closing the tab must leave the user's browser running");
 		} finally {

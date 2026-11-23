@@ -21,6 +21,7 @@ final class PageScripts {
 			(rootSelector, maxNodes, firstRef) => {
 			  const refs = window.__mcpRefs || (window.__mcpRefs = new Map());
 			  window.__mcpNext = Math.max(window.__mcpNext || 0, firstRef - 1);
+			  for (const [ref, el] of refs) if (!el.isConnected) refs.delete(ref);
 			  const ids = window.__mcpIds || (window.__mcpIds = new WeakMap());
 			  const lines = [];
 			  let total = 0;

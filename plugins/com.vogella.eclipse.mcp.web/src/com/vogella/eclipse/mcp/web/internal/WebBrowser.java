@@ -82,15 +82,23 @@ final class WebBrowser {
 	 * The open page, or a new one: in a browser this IDE starts, or, with {@code connectUrl}, in a new tab of a browser
 	 * already listening there. A different request than the open page was made with closes it first.
 	 */
-	static synchronized WebBrowser start(String browserPath, boolean headless, String connect) throws IOException {
+	static synchronized WebBrowser start(String browserPath, Boolean requestedHeadless, String connect)
+			throws IOException {
+		boolean headless = requestedHeadless == null || requestedHeadless.booleanValue();
 		String connectUrl = connect != null && connect.endsWith("/") ? connect.substring(0, connect.length() - 1) //$NON-NLS-1$
 				: connect;
 		WebBrowser open = current();
 		if (open != null) {
-			boolean sameKind = connectUrl == null
-					? open.process != null && open.headless == headless
-							&& (browserPath == null || BrowserLocator.locate(browserPath).equals(open.executable))
-					: connectUrl.equals(open.endpoint);
+			boolean sameKind;
+			if (connectUrl != null) {
+				sameKind = connectUrl.equals(open.endpoint);
+			} else if (open.process == null) {
+				// a tab in the user's browser stays until a call asks for a browser of this IDE's own
+				sameKind = browserPath == null && requestedHeadless == null;
+			} else {
+				sameKind = (requestedHeadless == null || open.headless == headless)
+						&& (browserPath == null || BrowserLocator.locate(browserPath).equals(open.executable));
+			}
 			if (sameKind) {
 				return open;
 			}
@@ -138,7 +146,7 @@ final class WebBrowser {
 			Map<String, Object> target = pageTarget(endpoint, false);
 			WebBrowser browser = new WebBrowser(process, executable, profile, endpoint,
 					String.valueOf(target.get("id")), headless, //$NON-NLS-1$
-					CdpConnection.open(URI.create(String.valueOf(target.get("webSocketDebuggerUrl"))))); //$NON-NLS-1$
+					CdpConnection.open(URI.create(String.valueOf(target.get("webSocketDebuggerUrl"))), launchBudgetMillis(10_000))); //$NON-NLS-1$
 			browser.attach();
 			browser.shutdownHook = new Thread(browser::killProcess, "mcp-web-browser-shutdown"); //$NON-NLS-1$
 			Runtime.getRuntime().addShutdownHook(browser.shutdownHook);
@@ -153,7 +161,7 @@ final class WebBrowser {
 	private static WebBrowser connect(String endpoint) throws IOException {
 		Map<String, Object> target = pageTarget(endpoint, true);
 		WebBrowser browser = new WebBrowser(null, null, null, endpoint, String.valueOf(target.get("id")), false, //$NON-NLS-1$
-				CdpConnection.open(URI.create(String.valueOf(target.get("webSocketDebuggerUrl"))))); //$NON-NLS-1$
+				CdpConnection.open(URI.create(String.valueOf(target.get("webSocketDebuggerUrl"))), launchBudgetMillis(10_000))); //$NON-NLS-1$
 		browser.attach();
 		return browser;
 	}
@@ -213,7 +221,7 @@ final class WebBrowser {
 	}
 
 	private static String http(String url, String method) throws IOException {
-		HttpRequest request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10))
+		HttpRequest request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofMillis(launchBudgetMillis(10_000)))
 				.method(method, HttpRequest.BodyPublishers.noBody()).build();
 		try {
 			HttpResponse<String> response = CdpConnection.HTTP.send(request, HttpResponse.BodyHandlers.ofString());

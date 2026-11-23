@@ -73,7 +73,7 @@ final class WebPage {
 		}
 		if (!force && found.get("coveredBy") instanceof String covered) { //$NON-NLS-1$
 			return failed("The " + tag + " is covered by " + covered //$NON-NLS-1$ //$NON-NLS-2$
-					+ ", which would receive the click instead, often a dialog, banner or overlay. Deal with that first; force sends the click to that point anyway, where the covering element gets it."); //$NON-NLS-1$
+					+ ", which would receive a click instead and keeps a user from reaching it, often a dialog, banner or overlay. Deal with that first, or pass force: a click then goes to that point, where the covering element gets it, and typing goes into the field anyway."); //$NON-NLS-1$
 		}
 		return new Target(number(found.get("x")), number(found.get("y")), width, height, number(found.get("scrollX")), //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				number(found.get("scrollY")), tag, (int) number(found.get("matches")), null); //$NON-NLS-1$ //$NON-NLS-2$

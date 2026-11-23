@@ -34,6 +34,7 @@ public final class WebTypeTool implements IMcpTool {
 				  "properties": {
 				%s,
 				    "text":           {"type":"string","description":"What to type, or the label or value of the option to pick. Empty with clear true empties the field."},
+				    "force":          {"type":"boolean","default":false,"description":"Type into the field even when another element, such as a modal, covers it, which a user could not."},
 				    "clear":          {"type":"boolean","default":true,"description":"Replace the field's content. false appends to it."},
 				    "submit":         {"type":"boolean","default":false,"description":"Press Enter after typing."},
 				    "acceptDialogs":  {"type":"boolean","default":false,"description":"Accept a confirm or prompt the submit raises instead of dismissing it."},
@@ -61,7 +62,7 @@ public final class WebTypeTool implements IMcpTool {
 		}
 		boolean clear = args.getBoolean("clear", true); //$NON-NLS-1$
 		try {
-			WebPage.Target target = WebPage.locate(browser, args, true);
+			WebPage.Target target = WebPage.locate(browser, args, args.getBoolean("force", false)); //$NON-NLS-1$
 			if (target.error() != null) {
 				return McpToolResult.error(target.error());
 			}

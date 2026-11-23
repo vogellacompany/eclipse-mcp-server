@@ -24,7 +24,7 @@ public final class WebOpenTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Loads a URL in the web page this IDE drives and waits until it settled: loaded, and no request in flight for half a second. The first call STARTS A BROWSER: a Chrome, Chromium or Edge already installed on this machine (none is downloaded), headless unless headless is false, with a fresh temporary profile that is deleted when it closes, so no cookies or logins of the user's own browser are used. Later calls reuse that page; changing headless or browserPath restarts it. Pass connectUrl, e.g. http://localhost:9222, to open a new tab in a browser the user started with --remote-debugging-port instead, which then does use that browser's profile and is left running on close. Then use eclipse_web_snapshot to see the page, eclipse_web_click and eclipse_web_type to act on it, eclipse_web_screenshot to look at it and eclipse_web_close to end it. A 'Leave site?' prompt of the page being left is accepted. Answers the final url (after redirects), title, the HTTP status of the document and whether it settled. Works for any web app, for example one launched from this workspace at http://localhost:8080."; //$NON-NLS-1$
+		return "Loads a URL in the web page this IDE drives and waits until it settled: loaded, and no request in flight for half a second. The first call STARTS A BROWSER: a Chrome, Chromium or Edge already installed on this machine (none is downloaded), headless unless headless is false, with a fresh temporary profile that is deleted when it closes, so no cookies or logins of the user's own browser are used. Later calls reuse that page, including a tab opened through connectUrl; passing a different headless or browserPath closes it and starts this IDE's own browser. Pass connectUrl, e.g. http://localhost:9222, to open a new tab in a browser the user started with --remote-debugging-port instead, which then does use that browser's profile and is left running on close. Then use eclipse_web_snapshot to see the page, eclipse_web_click and eclipse_web_type to act on it, eclipse_web_screenshot to look at it and eclipse_web_close to end it. A 'Leave site?' prompt of the page being left is accepted. Answers the final url (after redirects), title, the HTTP status of the document and whether it settled. Works for any web app, for example one launched from this workspace at http://localhost:8080."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -55,7 +55,7 @@ public final class WebOpenTool implements IMcpTool {
 		if (url == null) {
 			return McpToolResult.error("url must be an absolute http, https, file or about address, e.g. http://localhost:8080/."); //$NON-NLS-1$
 		}
-		boolean headless = args.getBoolean("headless", true); //$NON-NLS-1$
+		Boolean headless = args.has("headless") ? Boolean.valueOf(args.getBoolean("headless", true)) : null; //$NON-NLS-1$ //$NON-NLS-2$
 		try {
 			String connect = args.getString("connectUrl"); //$NON-NLS-1$
 			String connectUrl = connect == null ? null : endpoint(connect);

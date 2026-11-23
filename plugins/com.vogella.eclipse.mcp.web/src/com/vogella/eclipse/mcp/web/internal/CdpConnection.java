@@ -36,10 +36,10 @@ final class CdpConnection implements AutoCloseable {
 	private final CopyOnWriteArrayList<BiConsumer<String, Map<String, Object>>> listeners = new CopyOnWriteArrayList<>();
 	private final CompletableFuture<Void> closed = new CompletableFuture<>();
 
-	private CdpConnection(URI webSocketUrl) throws IOException {
+	private CdpConnection(URI webSocketUrl, long timeoutMillis) throws IOException {
 		try {
 			socket = HTTP.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(5))
-					.buildAsync(webSocketUrl, new Listener()).get(10, TimeUnit.SECONDS);
+					.buildAsync(webSocketUrl, new Listener()).get(timeoutMillis, TimeUnit.MILLISECONDS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new IOException("Interrupted while connecting to " + webSocketUrl, e); //$NON-NLS-1$
@@ -48,8 +48,8 @@ final class CdpConnection implements AutoCloseable {
 		}
 	}
 
-	static CdpConnection open(URI webSocketUrl) throws IOException {
-		return new CdpConnection(webSocketUrl);
+	static CdpConnection open(URI webSocketUrl, long timeoutMillis) throws IOException {
+		return new CdpConnection(webSocketUrl, timeoutMillis);
 	}
 
 	void addListener(BiConsumer<String, Map<String, Object>> listener) {
