@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.web.internal;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -57,6 +58,7 @@ final class WebBrowser {
 	private final Object state = new Object();
 	private final Set<String> inflight = new HashSet<>();
 	private final List<JsonObject> dialogs = new ArrayList<>();
+	private final List<JsonObject> downloads = new ArrayList<>();
 	/** Dialogs answered beyond {@link #MAX_DIALOGS} since the last report, guarded by {@code state}. */
 	private int droppedDialogs;
 	private String mainFrameId;
@@ -354,6 +356,14 @@ final class WebBrowser {
 		case "Network.loadingFinished", "Network.loadingFailed" -> //$NON-NLS-1$ //$NON-NLS-2$
 			inflight.remove(String.valueOf(params.get("requestId"))); //$NON-NLS-1$
 		case "Page.javascriptDialogOpening" -> answerDialog(params); //$NON-NLS-1$
+		case "Page.downloadWillBegin" -> { //$NON-NLS-1$
+			if (downloads.size() < MAX_DIALOGS) {
+				downloads.add(new JsonObject().put("url", params.get("url")) //$NON-NLS-1$ //$NON-NLS-2$
+						.put("file", params.get("suggestedFilename")) //$NON-NLS-1$ //$NON-NLS-2$
+						.put("saved", process != null ? "no, downloads are denied in this IDE's own browser" //$NON-NLS-1$ //$NON-NLS-2$
+								: "by the user's browser, where it saves downloads")); //$NON-NLS-1$
+			}
+		}
 		default -> {
 			// not needed to decide whether the page settled
 		}
@@ -400,6 +410,15 @@ final class WebBrowser {
 	}
 
 	/** The dialogs answered since the last call, for the answer of the tool that raised them. */
+	/** The downloads the page started since the last call, which a click answers with. */
+	List<JsonObject> takeDownloads() {
+		synchronized (state) {
+			List<JsonObject> taken = List.copyOf(downloads);
+			downloads.clear();
+			return taken;
+		}
+	}
+
 	List<JsonObject> takeDialogs() {
 		synchronized (state) {
 			List<JsonObject> taken = new ArrayList<>(dialogs);
@@ -617,8 +636,8 @@ final class WebBrowser {
 					// a file the browser still holds; the temporary directory is cleaned up by the OS
 				}
 			});
-		} catch (IOException e) {
-			// as above
+		} catch (IOException | UncheckedIOException e) {
+			// as above; a directory the browser removes while this walks it is reported as unchecked
 		}
 	}
 

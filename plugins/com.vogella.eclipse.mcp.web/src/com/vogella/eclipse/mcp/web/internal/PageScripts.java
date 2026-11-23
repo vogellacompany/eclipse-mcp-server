@@ -209,7 +209,12 @@ final class PageScripts {
 			      scrollY: window.scrollY, tag: el.tagName.toLowerCase(),
 			      disabled: !!el.disabled || (el.matches && el.matches(':disabled')), coveredBy: covered ? describe(top) : null,
 			      inert: !!(el.closest && el.closest('[inert]')),
-			      fileInput: el.tagName === 'INPUT' && el.type === 'file',
+			      // also a label for one, the usual styled upload button, since a click on it opens the chooser too
+			      fileInput: (el.tagName === 'INPUT' && el.type === 'file') || (() => {
+			        const label = el.tagName === 'LABEL' ? el : el.closest && el.closest('label');
+			        const control = label && label.control;
+			        return !!(control && control.tagName === 'INPUT' && control.type === 'file');
+			      })(),
 			      newTab: (() => {
 			        const link = el.closest && el.closest('a[href]');
 			        const target = link ? (link.getAttribute('target') || '').toLowerCase() : '';

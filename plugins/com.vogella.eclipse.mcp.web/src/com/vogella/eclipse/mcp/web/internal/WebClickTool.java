@@ -63,7 +63,7 @@ public final class WebClickTool implements IMcpTool {
 			}
 			if (target.fileInput()) {
 				return McpToolResult.error(
-						"The element is a file input. A click opens the system's file chooser, which these tools cannot see or answer, so it is refused; choosing files for an upload is not supported."); //$NON-NLS-1$
+						"The element is a file input or a label for one. A click opens the system's file chooser, which these tools cannot see or answer, so it is refused; choosing files for an upload is not supported."); //$NON-NLS-1$
 			}
 			if (target.newTab() != null && !args.getBoolean("force", false)) { //$NON-NLS-1$
 				return McpToolResult.error("The link opens " + target.newTab() //$NON-NLS-1$

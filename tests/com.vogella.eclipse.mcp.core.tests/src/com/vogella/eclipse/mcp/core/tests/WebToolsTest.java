@@ -53,6 +53,7 @@ class WebToolsTest {
 			<div hidden><button>Invisible</button></div>
 			<details><summary>More</summary><button>Folded</button></details>
 			<input type="file" id="upload" aria-label="Upload">
+			<label for="upload" id="uploadLabel">Choose file</label>
 			<div><button id="ghost" style="pointer-events: none">Ghost</button></div>
 			<a id="away" href="/second" target="_blank">Elsewhere</a>
 			<div inert><button id="behind">Behind</button></div>
@@ -146,6 +147,7 @@ class WebToolsTest {
 		assertFalse(snapshot.contains("Folded"), snapshot);
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#behind")), "inert");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#upload")), "file chooser");
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#uploadLabel")), "file chooser");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#ghost")), "covered by div");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#away")), "new tab");
 
@@ -194,7 +196,7 @@ class WebToolsTest {
 		Map<String, Object> unwaited = TestFixture.callAndParse("eclipse_web_click",
 				Map.of("selector", "#greet", "timeoutSeconds", Integer.valueOf(0)));
 		assertEquals(Boolean.FALSE, unwaited.get("settled"));
-		assertTrue(String.valueOf(unwaited.get("settleNote")).startsWith("No time was left"), unwaited.toString());
+		assertTrue(String.valueOf(unwaited.get("settleNote")).startsWith("No wait was asked for"), unwaited.toString());
 
 		Map<String, Object> followed = TestFixture.callAndParse("eclipse_web_click",
 				Map.of("ref", ref(snapshot(), "link \"Next page\"")));

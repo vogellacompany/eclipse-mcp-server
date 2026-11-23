@@ -120,7 +120,10 @@ final class WebPage {
 			answer.put("pendingRequests", Integer.valueOf(browser.pendingRequests())); //$NON-NLS-1$
 			answer.put("settleNote", //$NON-NLS-1$
 					"The page was still loading or had requests in flight when the wait ended. A page that polls never settles; take a snapshot to see where it is."); //$NON-NLS-1$
-			if (bounded == 0) {
+			if (requested == 0) {
+				answer.put("settleNote", //$NON-NLS-1$
+						"No wait was asked for, so whether the action started a load is not known yet; take a snapshot to see where the page is."); //$NON-NLS-1$
+			} else if (bounded == 0) {
 				answer.put("settleNote", //$NON-NLS-1$
 						"No time was left to wait for the page to settle, so whether the action started a load is not known yet; take a snapshot to see where the page is."); //$NON-NLS-1$
 			}
@@ -140,6 +143,12 @@ final class WebPage {
 			JsonArray list = new JsonArray();
 			dialogs.forEach(list::add);
 			answer.put("dialogs", list); //$NON-NLS-1$
+		}
+		List<JsonObject> downloads = browser.takeDownloads();
+		if (!downloads.isEmpty()) {
+			JsonArray list = new JsonArray();
+			downloads.forEach(list::add);
+			answer.put("downloads", list); //$NON-NLS-1$
 		}
 	}
 
