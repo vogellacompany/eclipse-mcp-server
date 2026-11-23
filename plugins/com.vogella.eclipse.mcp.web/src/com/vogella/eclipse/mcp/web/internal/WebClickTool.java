@@ -57,6 +57,10 @@ public final class WebClickTool implements IMcpTool {
 			if (target.error() != null) {
 				return McpToolResult.error(target.error());
 			}
+			if (target.disabled()) {
+				return McpToolResult.error("The " + target.tag() //$NON-NLS-1$
+						+ " is disabled, so the browser would not deliver a click to it; the page usually enables it once a form is complete."); //$NON-NLS-1$
+			}
 			String before = String.valueOf(browser.evaluate("location.href")); //$NON-NLS-1$
 			browser.acceptConfirmations(args.getBoolean("acceptDialogs", false)); //$NON-NLS-1$
 			try {

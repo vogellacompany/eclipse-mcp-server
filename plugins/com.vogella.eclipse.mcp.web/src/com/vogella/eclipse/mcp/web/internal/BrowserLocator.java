@@ -99,6 +99,16 @@ final class BrowserLocator {
 		return result;
 	}
 
+	/** The number in a Playwright directory such as {@code chromium-1243}, compared as a number so 1243 beats 999. */
+	private static long buildNumber(Path build) {
+		String name = build.getFileName().toString();
+		try {
+			return Long.parseLong(name.substring(name.lastIndexOf('-') + 1));
+		} catch (NumberFormatException e) {
+			return -1;
+		}
+	}
+
 	/** Chromium builds a Playwright install already downloaded, newest first, so a machine set up for Playwright works too. */
 	private static List<Path> playwrightBrowsers(String os) {
 		List<Path> roots = new ArrayList<>();
@@ -128,7 +138,7 @@ final class BrowserLocator {
 			} catch (IOException e) {
 				continue;
 			}
-			builds.sort(Comparator.comparing(Path::toString).reversed());
+			builds.sort(Comparator.comparingLong(BrowserLocator::buildNumber).reversed());
 			for (Path build : builds) {
 				if (os.contains("mac")) { //$NON-NLS-1$
 					result.add(build.resolve("chrome-mac/Chromium.app/Contents/MacOS/Chromium")); //$NON-NLS-1$

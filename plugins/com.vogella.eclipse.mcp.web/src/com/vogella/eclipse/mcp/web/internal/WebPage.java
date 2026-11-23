@@ -39,7 +39,7 @@ final class WebPage {
 
 	/** The location of an element, or the error to answer with. */
 	record Target(double x, double y, double width, double height, double scrollX, double scrollY, String tag,
-			int matches, String error) {
+			int matches, boolean disabled, String error) {
 	}
 
 	/** Parses the JSON a page script answered with. */
@@ -76,11 +76,12 @@ final class WebPage {
 					+ ", which would receive a click instead and keeps a user from reaching it, often a dialog, banner or overlay. Deal with that first, or pass force: a click then goes to that point, where the covering element gets it, and typing goes into the field anyway."); //$NON-NLS-1$
 		}
 		return new Target(number(found.get("x")), number(found.get("y")), width, height, number(found.get("scrollX")), //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-				number(found.get("scrollY")), tag, (int) number(found.get("matches")), null); //$NON-NLS-1$ //$NON-NLS-2$
+				number(found.get("scrollY")), tag, (int) number(found.get("matches")), //$NON-NLS-1$ //$NON-NLS-2$
+				Boolean.TRUE.equals(found.get("disabled")), null); //$NON-NLS-1$
 	}
 
 	private static Target failed(String error) {
-		return new Target(0, 0, 0, 0, 0, 0, null, 0, error);
+		return new Target(0, 0, 0, 0, 0, 0, null, 0, false, error);
 	}
 
 	static double number(Object value) {

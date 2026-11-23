@@ -99,8 +99,10 @@ class WebToolsTest {
 
 	private static Map<String, Object> open(String path) throws Exception {
 		McpToolResult result = TestFixture.call("eclipse_web_open", Map.of("url", base + path));
-		Assumptions.assumeFalse(result.isError() && result.text().contains("No Chrome, Chromium or Edge"),
-				"No browser installed: " + result.text());
+		// a machine without a browser, or one whose browser cannot start there, cannot run these tests
+		Assumptions.assumeFalse(result.isError() && (result.text().contains("No Chrome, Chromium or Edge")
+				|| result.text().contains("before it was ready") || result.text().contains("did not open its DevTools port")),
+				"No usable browser: " + result.text());
 		assertFalse(result.isError(), result.text());
 		return TestFixture.parse(result.text());
 	}
@@ -146,6 +148,8 @@ class WebToolsTest {
 		assertEquals("42", TestFixture.callAndParse("eclipse_web_type", Map.of("selector", "#age", "text", "42")).get("value"));
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#locked", "text", "x")), "read-only");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#off", "text", "x")), "disabled");
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#off")), "disabled");
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "a[")), "not a valid CSS selector");
 
 		Map<String, Object> chosen = TestFixture.callAndParse("eclipse_web_type",
 				Map.of("selector", "#color", "text", "Green"));

@@ -180,7 +180,9 @@ final class PageScripts {
 			    if (!el) return JSON.stringify({error: 'No element ' + ref + ' in the last eclipse_web_snapshot of this page: it is gone, hidden, or the page navigated since. Take a new snapshot.'});
 			    if (!el.isConnected) return JSON.stringify({error: 'Element ' + ref + ' was removed from the page since the snapshot; take a new snapshot.'});
 			  } else {
-			    const all = document.querySelectorAll(selector);
+			    let all;
+			    try { all = document.querySelectorAll(selector); }
+			    catch (e) { return JSON.stringify({error: JSON.stringify(selector) + ' is not a valid CSS selector.'}); }
 			    if (!all.length) return JSON.stringify({error: 'No element matches ' + selector});
 			    el = all[0];
 			    matches = all.length;
