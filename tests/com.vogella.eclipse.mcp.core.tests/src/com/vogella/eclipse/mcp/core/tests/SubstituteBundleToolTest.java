@@ -104,6 +104,117 @@ class SubstituteBundleToolTest {
 		}
 	}
 
+	@Test
+	void restoringASubstitutionLayeredOnAnotherPutsBackTheShippedLine() throws Exception {
+		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
+		String shipped = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
+		String first = "a,1.0.0," + packed.resolve("a_first.jar").toUri() + ",4,false";
+		String second = "a,1.0.0," + packed.resolve("a_second.jar").toUri() + ",4,false";
+		String other = "b,1.0.0," + packed.resolve("b.jar").toUri() + ",4,false";
+		Path bundlesInfo = Files.writeString(configuration.resolve("bundles.info"),
+				String.join("\n", "#version=1", second, other) + "\n");
+		Files.writeString(packed.resolve("substitutions.txt"), "a\t" + shipped + "\t" + first + "\n" //
+				+ "b\tb,1.0.0,plugins/b_1.0.0.jar,4,false\t" + other + "\n" //
+				+ "a\t" + first + "\t" + second + "\n");
+		try {
+			Map<String, Object> answer = TestFixture
+					.parse(SubstituteBundleTool.restore(configuration, bundlesInfo, false, "a").text());
+
+			assertEquals(List.of("#version=1", shipped, other), Files.readAllLines(bundlesInfo), "got " + answer);
+			assertEquals("b\tb,1.0.0,plugins/b_1.0.0.jar,4,false\t" + other + "\n",
+					Files.readString(packed.resolve("substitutions.txt")), "only the other bundle's record may stay");
+		} finally {
+			try (var walk = Files.walk(configuration.getParent())) {
+				for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+					Files.deleteIfExists(path);
+				}
+			}
+		}
+	}
+
+	@Test
+	void restoringAfterAnUpdateBetweenTwoSubstitutionsStopsAtTheUpdatedLine() throws Exception {
+		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
+		String removedByUpdate = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
+		String updated = "a,2.0.0,plugins/a_2.0.0.jar,4,false";
+		String first = "a,1.0.0," + packed.resolve("a_first.jar").toUri() + ",4,false";
+		String second = "a,2.0.0," + packed.resolve("a_second.jar").toUri() + ",4,false";
+		// the form simpleconfigurator rewrites the line into, not the one that was recorded
+		Path bundlesInfo = Files.writeString(configuration.resolve("bundles.info"),
+				String.join("\n", "#version=1", "a,2.0.0," + fiveSlash(packed.resolve("a_second.jar")) + ",4,false") + "\n");
+		Files.writeString(packed.resolve("substitutions.txt"), "a\t" + removedByUpdate + "\t" + first + "\n" //
+				+ "a\t" + updated + "\t" + second + "\n");
+		try {
+			Map<String, Object> answer = TestFixture
+					.parse(SubstituteBundleTool.restore(configuration, bundlesInfo, false, "a").text());
+
+			assertEquals(List.of("#version=1", updated), Files.readAllLines(bundlesInfo), "got " + answer);
+		} finally {
+			try (var walk = Files.walk(configuration.getParent())) {
+				for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+					Files.deleteIfExists(path);
+				}
+			}
+		}
+	}
+
+	@Test
+	void restoringABundleThatIsAlreadyRestoredLeavesItAndItsRecordsAlone() throws Exception {
+		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
+		String shipped = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
+		String first = "a,1.0.0," + packed.resolve("a_first.jar").toUri() + ",4,false";
+		String second = "a,1.0.0," + packed.resolve("a_second.jar").toUri() + ",4,false";
+		Path bundlesInfo = Files.writeString(configuration.resolve("bundles.info"),
+				String.join("\n", "#version=1", shipped) + "\n");
+		String records = "a\t" + shipped + "\t" + first + "\n" + "a\t" + first + "\t" + second + "\n";
+		Files.writeString(packed.resolve("substitutions.txt"), records);
+		try {
+			SubstituteBundleTool.restore(configuration, bundlesInfo, false, "a");
+
+			assertEquals(List.of("#version=1", shipped), Files.readAllLines(bundlesInfo), "a packed jar was brought back");
+			assertEquals(records, Files.readString(packed.resolve("substitutions.txt")));
+		} finally {
+			try (var walk = Files.walk(configuration.getParent())) {
+				for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+					Files.deleteIfExists(path);
+				}
+			}
+		}
+	}
+
+	@Test
+	void restoringEverythingKeepsTheRecordsOfABundleItLeftAloneAndChangesNothingOnADryRun() throws Exception {
+		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
+		String shippedA = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
+		String shippedB = "b,1.0.0,plugins/b_1.0.0.jar,4,false";
+		String jarA = "a,1.0.0," + packed.resolve("a.jar").toUri() + ",4,false";
+		String jarB = "b,1.0.0," + packed.resolve("b.jar").toUri() + ",4,false";
+		String content = String.join("\n", "#version=1", jarA, shippedB) + "\n";
+		Path bundlesInfo = Files.writeString(configuration.resolve("bundles.info"), content);
+		String records = "a\t" + shippedA + "\t" + jarA + "\n" + "b\t" + shippedB + "\t" + jarB + "\n";
+		Files.writeString(packed.resolve("substitutions.txt"), records);
+		try {
+			SubstituteBundleTool.restore(configuration, bundlesInfo, true, null);
+			assertEquals(content, Files.readString(bundlesInfo), "a dry run wrote");
+			assertEquals(records, Files.readString(packed.resolve("substitutions.txt")));
+
+			SubstituteBundleTool.restore(configuration, bundlesInfo, false, null);
+			assertEquals(List.of("#version=1", shippedA, shippedB), Files.readAllLines(bundlesInfo));
+			assertEquals("b\t" + shippedB + "\t" + jarB + "\n", Files.readString(packed.resolve("substitutions.txt")),
+					"the record of the bundle that was left alone has to survive");
+		} finally {
+			try (var walk = Files.walk(configuration.getParent())) {
+				for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+					Files.deleteIfExists(path);
+				}
+			}
+		}
+	}
+
 	/** The form simpleconfigurator rewrites a file line into. */
 	private static String fiveSlash(Path path) {
 		String slashed = path.toString().replace(java.io.File.separatorChar, '/');
