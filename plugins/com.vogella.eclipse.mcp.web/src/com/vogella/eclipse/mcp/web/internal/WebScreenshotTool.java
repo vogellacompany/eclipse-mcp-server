@@ -129,7 +129,12 @@ public final class WebScreenshotTool implements IMcpTool {
 				shot = browser.send("Page.captureScreenshot", params); //$NON-NLS-1$
 			} finally {
 				if (element) {
-					browser.evaluate(PageScripts.RESTORE_OVERLAYS);
+					try {
+						browser.evaluate(PageScripts.RESTORE_OVERLAYS);
+					} catch (IOException e) {
+						// the capture is still good; say the page may keep its overlays hidden rather than fail
+						answer.put("overlaysRestored", Boolean.FALSE); //$NON-NLS-1$
+					}
 				}
 			}
 			if (!(shot.get("data") instanceof String data)) { //$NON-NLS-1$

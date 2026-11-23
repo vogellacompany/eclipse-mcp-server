@@ -64,6 +64,7 @@ public final class WebOpenTool implements IMcpTool {
 						+ connect + "."); //$NON-NLS-1$
 			}
 			WebBrowser browser = WebBrowser.start(args.getString("browserPath"), headless, connectUrl); //$NON-NLS-1$
+			long navigationStarted = System.nanoTime();
 			String error = browser.navigate(url, WebPage.waitMillis(args, 15));
 			if (WebBrowser.NOT_ANSWERED.equals(error)) {
 				// no page script here: while a navigation waits for the server, the page answers none
@@ -81,7 +82,12 @@ public final class WebOpenTool implements IMcpTool {
 				return McpToolResult.error("The browser could not load " + url + ": " + error //$NON-NLS-1$ //$NON-NLS-2$
 						+ ". Check that the server is running and the address is right. " + answer); //$NON-NLS-1$
 			}
-			JsonObject answer = WebPage.settleAndDescribe(browser, args, 15, null);
+			// one timeoutSeconds for loading and settling, so a slow server does not get it twice
+			int asked = args.getInt("timeoutSeconds", 15, 0, 120); //$NON-NLS-1$
+			int spent = (int) java.util.concurrent.TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - navigationStarted);
+			Map<String, Object> rest = new java.util.HashMap<>(arguments);
+			rest.put("timeoutSeconds", Integer.valueOf(asked == 0 ? 0 : Math.max(1, asked - spent))); //$NON-NLS-1$
+			JsonObject answer = WebPage.settleAndDescribe(browser, ToolArguments.of(rest), 15, null);
 			Integer status = browser.documentStatus();
 			if (status != null) {
 				answer.put("status", status); //$NON-NLS-1$

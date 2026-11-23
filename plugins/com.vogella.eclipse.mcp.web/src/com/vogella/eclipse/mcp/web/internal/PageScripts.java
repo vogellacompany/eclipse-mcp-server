@@ -122,6 +122,8 @@ final class PageScripts {
 			    return line;
 			  };
 			  const emit = line => { total++; if (lines.length < maxNodes) lines.push(line); };
+			  // past maxResults an element is only counted: no line, and no ref, which costs the most
+			  const emitElement = (el, role, depth) => { if (lines.length < maxNodes) emit(describe(el, role, depth)); else total++; };
 			  const walk = (node, depth) => {
 			    let text = '';
 			    const flush = () => {
@@ -144,7 +146,7 @@ final class PageScripts {
 			        continue;
 			      }
 			      flush();
-			      emit(describe(child, role, depth));
+			      emitElement(child, role, depth);
 			      if (role === 'combobox' && child.tagName === 'SELECT') continue;
 			      if (!LEAF.has(role) || child.querySelector('input,button,select,textarea,a[href]')) {
 			        if (NAME_FROM_CONTENT.has(role)) walkElements(child, depth + 1);
@@ -158,7 +160,7 @@ final class PageScripts {
 			      if (hidden(child)) continue;
 			      const role = roleOf(child);
 			      if (role && role !== 'presentation' && role !== 'none' && role !== 'label') {
-			        emit(describe(child, role, depth));
+			        emitElement(child, role, depth);
 			        if (!LEAF.has(role)) walkElements(child, depth + 1);
 			      } else {
 			        walkElements(child, depth);
@@ -294,6 +296,8 @@ final class PageScripts {
 			  const el = window.__mcpTarget;
 			  // a shadow root has a selection of its own in Chromium, which the document's does not reach into
 			  const selectionOf = e => { const r = e.getRootNode(); return r.getSelection ? r.getSelection() : window.getSelection(); };
+			  // the value before this call, so change is raised only for an edit that happened
+			  window.__mcpBefore = el.value;
 			  if (el.tagName === 'SELECT') {
 			    if (el.disabled || el.matches(':disabled')) return JSON.stringify({error: 'The select is disabled, so a user cannot pick an option in it.'});
 			    return JSON.stringify({select: true});

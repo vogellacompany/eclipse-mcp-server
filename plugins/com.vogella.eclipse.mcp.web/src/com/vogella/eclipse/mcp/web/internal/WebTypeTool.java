@@ -23,7 +23,7 @@ public final class WebTypeTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "TYPES text into a field of the web page eclipse_web_open opened: an input, a textarea or a contenteditable element, addressed by ref from eclipse_web_snapshot or by a CSS selector. Focuses it, replaces what it holds unless clear is false, and inserts the text through the browser's input pipeline, so the page's beforeinput, input and change handlers and frameworks such as React or Angular see the new value. It sends no keydown, keypress or keyup per character, so a field that masks or filters on key events (phone or card masks, autocomplete on keyup) may behave differently than for a person typing; check the answered value. For a select (a combobox in the snapshot) it picks the option whose label or value is the text and fires input and change. submit true presses Enter afterwards, which submits most forms. Then waits for the page to settle and answers the url and title, navigated, the field's value as it now stands (masked for a password) and any JavaScript dialog raised."; //$NON-NLS-1$
+		return "TYPES text into a field of the web page eclipse_web_open opened: an input, a textarea or a contenteditable element, addressed by ref from eclipse_web_snapshot or by a CSS selector. Focuses it, replaces what it holds unless clear is false, and inserts the text through the browser's input pipeline, so the page's beforeinput, input and change handlers and frameworks such as React or Angular see the new value. It sends no keydown, keypress or keyup per character, so a field that masks or filters on key events (phone or card masks, autocomplete on keyup) may behave differently than for a person typing; check the answered value. For a select (a combobox in the snapshot) it picks the option whose label or value is the text and fires input and change. submit true presses Enter afterwards, which submits most forms; not after picking an option, which a person does not confirm with Enter. Then waits for the page to settle and answers the url and title, navigated, the field's value as it now stands (masked for a password) and any JavaScript dialog raised."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -93,9 +93,12 @@ public final class WebTypeTool implements IMcpTool {
 					// typing raises input; change follows when a person leaves the field, which a later click or
 					// submit may never do for this one, so it is raised here for handlers that validate or save on it
 					browser.evaluate(
-							"(() => { const el = window.__mcpTarget; if (el && el.isConnected && !el.isContentEditable) el.dispatchEvent(new Event('change', {bubbles: true})); })()"); //$NON-NLS-1$
+							"(() => { const el = window.__mcpTarget; if (el && el.isConnected && !el.isContentEditable && el.value !== window.__mcpBefore) el.dispatchEvent(new Event('change', {bubbles: true})); })()"); //$NON-NLS-1$
 				}
-				if (args.getBoolean("submit", false)) { //$NON-NLS-1$
+				// a person picking an option does not press Enter on the select, and on a form whose default button is
+				// destructive that Enter could do what nobody asked for
+				boolean submitted = args.getBoolean("submit", false) && !Boolean.TRUE.equals(focus.get("select")); //$NON-NLS-1$ //$NON-NLS-2$
+				if (submitted) {
 					UserInput.press(browser, "Enter", 13, "\r"); //$NON-NLS-1$ //$NON-NLS-2$
 				}
 				JsonObject answer = WebPage.settleAndDescribe(browser, args, 10, before);
