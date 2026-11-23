@@ -149,6 +149,8 @@ final class BrowserLocator {
 				if (os.contains("mac")) { //$NON-NLS-1$
 					result.add(build.resolve("chrome-mac/Chromium.app/Contents/MacOS/Chromium")); //$NON-NLS-1$
 					result.add(build.resolve(
+							"chrome-mac/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")); //$NON-NLS-1$
+					result.add(build.resolve(
 							"chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")); //$NON-NLS-1$
 				} else if (os.contains("win")) { //$NON-NLS-1$
 					result.add(build.resolve("chrome-win/chrome.exe")); //$NON-NLS-1$

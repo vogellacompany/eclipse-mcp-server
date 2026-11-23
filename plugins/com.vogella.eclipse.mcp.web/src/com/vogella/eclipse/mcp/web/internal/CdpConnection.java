@@ -143,10 +143,13 @@ final class CdpConnection implements AutoCloseable {
 	public void close() {
 		if (!closed.isDone()) {
 			try {
-				socket.sendClose(WebSocket.NORMAL_CLOSURE, "").get(2, TimeUnit.SECONDS); //$NON-NLS-1$
+				// under the same lock as send, because the JDK socket refuses a send while another is under way
+				synchronized (socket) {
+					socket.sendClose(WebSocket.NORMAL_CLOSURE, "").get(2, TimeUnit.SECONDS); //$NON-NLS-1$
+				}
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
-			} catch (ExecutionException | TimeoutException e) {
+			} catch (ExecutionException | TimeoutException | IllegalStateException e) {
 				socket.abort();
 			}
 		}

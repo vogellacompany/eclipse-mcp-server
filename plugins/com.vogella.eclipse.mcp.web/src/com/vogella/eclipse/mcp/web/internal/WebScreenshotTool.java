@@ -63,10 +63,14 @@ public final class WebScreenshotTool implements IMcpTool {
 				}
 				double left = target.x() - target.width() / 2 + target.scrollX();
 				double top = target.y() - target.height() / 2 + target.scrollY();
-				params.put("clip", clip(left, top, target.width(), target.height())); //$NON-NLS-1$
+				double captured = Math.min(target.height(), MAX_FULL_PAGE_HEIGHT);
+				params.put("clip", clip(left, top, target.width(), captured)); //$NON-NLS-1$
 				params.put("captureBeyondViewport", Boolean.TRUE); //$NON-NLS-1$
 				answer.put("element", target.tag()); //$NON-NLS-1$
-				size(answer, target.width(), target.height());
+				size(answer, target.width(), captured);
+				if (captured < target.height()) {
+					answer.put("cutAtHeight", Double.valueOf(captured)).put("elementHeight", Double.valueOf(target.height())); //$NON-NLS-1$ //$NON-NLS-2$
+				}
 			} else if (args.getBoolean("fullPage", false)) { //$NON-NLS-1$
 				Map<String, Object> metrics = browser.send("Page.getLayoutMetrics", null); //$NON-NLS-1$
 				Map<?, ?> content = metrics.get("cssContentSize") instanceof Map<?, ?> map ? map : Map.of(); //$NON-NLS-1$

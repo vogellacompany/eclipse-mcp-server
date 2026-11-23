@@ -47,6 +47,7 @@ class WebToolsTest {
 			  <button type="button" id="greet" onclick="document.getElementById('out').textContent = 'Hello ' + document.getElementById('name').value;">Greet</button>
 			  <button type="button" id="ask" onclick="document.getElementById('out').textContent = confirm('Sure?') ? 'yes' : 'no';">Ask</button>
 			</form>
+			<fieldset disabled><input id="fenced" aria-label="Fenced"></fieldset>
 			<p id="out">nothing yet</p>
 			<div hidden><button>Invisible</button></div>
 			<button type="button" onclick="this.remove()">Remove me</button>
@@ -157,6 +158,8 @@ class WebToolsTest {
 		assertEquals("g", chosen.get("value"));
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#frozen", "text", "Only")),
 				"disabled");
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#fenced", "text", "x")),
+				"disabled");
 		assertTrue(snapshot().contains("Color g"), snapshot());
 
 		TestFixture.callAndParse("eclipse_web_click", Map.of("ref", ref(snapshot(), "button \"Shadow greet\"")));
@@ -164,10 +167,11 @@ class WebToolsTest {
 		assertEquals("inside", TestFixture.callAndParse("eclipse_web_type",
 				Map.of("ref", ref(snapshot(), "textbox \"Shadow name\""), "text", "inside")).get("value"));
 
-		// a page that has been quiet counts as settled even when the call leaves no time to wait
-		Thread.sleep(700);
-		assertEquals(Boolean.TRUE, TestFixture.callAndParse("eclipse_web_click",
-				Map.of("selector", "#greet", "timeoutSeconds", Integer.valueOf(0))).get("settled"));
+		// without time to wait the answer says so, instead of claiming the page is still loading
+		Map<String, Object> unwaited = TestFixture.callAndParse("eclipse_web_click",
+				Map.of("selector", "#greet", "timeoutSeconds", Integer.valueOf(0)));
+		assertEquals(Boolean.FALSE, unwaited.get("settled"));
+		assertTrue(String.valueOf(unwaited.get("settleNote")).startsWith("No time was left"), unwaited.toString());
 
 		Map<String, Object> followed = TestFixture.callAndParse("eclipse_web_click",
 				Map.of("ref", ref(snapshot(), "link \"Next page\"")));

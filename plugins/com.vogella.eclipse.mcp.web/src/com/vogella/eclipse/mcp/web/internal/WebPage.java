@@ -116,6 +116,10 @@ final class WebPage {
 			answer.put("pendingRequests", Integer.valueOf(browser.pendingRequests())); //$NON-NLS-1$
 			answer.put("settleNote", //$NON-NLS-1$
 					"The page was still loading or had requests in flight when the wait ended. A page that polls never settles; take a snapshot to see where it is."); //$NON-NLS-1$
+			if (bounded == 0) {
+				answer.put("settleNote", //$NON-NLS-1$
+						"No time was left to wait for the page to settle, so whether the action started a load is not known yet; take a snapshot to see where the page is."); //$NON-NLS-1$
+			}
 			if (bounded < requested) {
 				answer.put("waitNote", "Waited %d of the %d seconds asked for, because the server aborts any call that outlasts its %d second tool call timeout, set in Preferences > General > MCP Server." //$NON-NLS-1$ //$NON-NLS-2$
 						.formatted(Integer.valueOf(bounded), Integer.valueOf(requested),

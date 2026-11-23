@@ -56,8 +56,6 @@ final class WebBrowser {
 	private final List<JsonObject> dialogs = new ArrayList<>();
 	private String mainFrameId;
 	private boolean loading;
-	/** When the loading state or the requests in flight last changed, guarded by {@code state}. */
-	private long lastActivity = System.nanoTime();
 	private Integer documentStatus;
 	private boolean acceptConfirm;
 
@@ -320,7 +318,6 @@ final class WebBrowser {
 				// not needed to decide whether the page settled
 			}
 			}
-			lastActivity = System.nanoTime();
 			state.notifyAll();
 		}
 	}
@@ -431,9 +428,7 @@ final class WebBrowser {
 					quietSince = 0;
 				}
 				if (now >= deadline) {
-					// a wait too short to see quiet of its own still counts a page that has been quiet that long
-					return !loading && inflight.isEmpty()
-							&& now - lastActivity >= Duration.ofMillis(quietMillis).toNanos();
+					return false;
 				}
 				try {
 					state.wait(25);
@@ -445,16 +440,15 @@ final class WebBrowser {
 		}
 	}
 
-	/** The first ref number a new document's snapshot hands out, so no ref is ever reused for another element. */
-	/**
-	 * Sets aside {@code count} ref numbers and answers the first, before a snapshot that may hand out that many runs, so
-	 * the numbers stay taken even when the snapshot never answers.
-	 */
 	/** Records that the page handed out refs below {@code next}, in case it went past its reserved block. */
 	static synchronized void refsUsedBelow(long next) {
 		nextRef = Math.max(nextRef, next);
 	}
 
+	/**
+	 * Sets aside {@code count} ref numbers and answers the first, before a snapshot that may hand out that many runs, so
+	 * the numbers stay taken even when the snapshot never answers.
+	 */
 	static synchronized long reserveRefs(long count) {
 		long first = nextRef;
 		nextRef += Math.max(0, count) + 1;

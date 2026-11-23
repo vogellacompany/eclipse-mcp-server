@@ -201,7 +201,7 @@ final class PageScripts {
 			  window.__mcpTarget = el;
 			  return JSON.stringify({x, y, width: box.width, height: box.height, scrollX: window.scrollX,
 			      scrollY: window.scrollY, tag: el.tagName.toLowerCase(),
-			      disabled: !!el.disabled, coveredBy: covered ? describe(top) : null,
+			      disabled: !!el.disabled || (el.matches && el.matches(':disabled')), coveredBy: covered ? describe(top) : null,
 			      matches});
 			}""";
 
@@ -219,7 +219,7 @@ final class PageScripts {
 			    return JSON.stringify({error: 'The element is an input of type ' + el.type + ', which does not take typed text; use eclipse_web_click for it.'});
 			  const editable = el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA';
 			  if (!editable) return JSON.stringify({error: 'The element is a ' + el.tagName.toLowerCase() + ', which does not take text.'});
-			  if (el.disabled) return JSON.stringify({error: 'The field is disabled, so a user cannot type into it.'});
+			  if (el.disabled || el.matches(':disabled')) return JSON.stringify({error: 'The field is disabled, so a user cannot type into it.'});
 			  if (el.readOnly) return JSON.stringify({error: 'The field is read-only, so a user cannot type into it.'});
 			  // inside a shadow root the document's active element is the host, so ask the root the field lives in
 			  const active = el.getRootNode().activeElement;
