@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -227,6 +228,30 @@ class DebugLaunchEndToEndTest {
 		Map<String, Object> terminated = TestFixture.callAndParse("eclipse_debug_control",
 				Map.of("sessionId", sessionId, "action", "terminate"));
 		assertEquals("terminate", terminated.get("action"), String.valueOf(terminated));
+		waitUntilTerminated(sessionId);
+	}
+
+	@Test
+	void suspendStopsARunningProgramWithoutNamingAThread() throws Exception {
+		ensureDefaultVmInstall();
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		TestFixture.addType(project, "sample", "Idle", IDLE_SOURCE);
+		TestFixture.build(project.getProject());
+
+		Map<String, Object> launched = TestFixture.callAndParse("eclipse_debug_launch",
+				Map.of("project", PROJECT, "mainType", "sample.Idle", "waitForSuspendSeconds", Integer.valueOf(0)));
+		String sessionId = (String) launched.get("sessionId");
+		assertNotNull(sessionId, String.valueOf(launched));
+		assertTrue(runningProcess(sessionId), "the launch never started a process: " + launched);
+
+		McpToolResult suspended = TestFixture.call("eclipse_debug_control",
+				Map.of("sessionId", sessionId, "action", "suspend"));
+		assertFalse(suspended.isError(), "suspending a running program needs no thread: " + suspended.text());
+		Map<String, Object> answer = TestFixture.parse(suspended.text());
+		assertEquals(Boolean.TRUE, answer.get("suspended"), suspended.text());
+		assertEquals(Boolean.FALSE, answer.get("timedOut"), suspended.text());
+
+		TestFixture.callAndParse("eclipse_debug_control", Map.of("sessionId", sessionId, "action", "terminate"));
 		waitUntilTerminated(sessionId);
 	}
 
