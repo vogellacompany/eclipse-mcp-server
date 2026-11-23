@@ -98,9 +98,6 @@ public final class SaveLaunchConfigurationTool implements IMcpTool {
 			if (update) {
 				copy = existing.getWorkingCopy();
 			} else {
-				if (existing != null && !dryRun) {
-					existing.delete();
-				}
 				copy = type.newInstance(inProject ? project : null, name);
 			}
 			Map<String, Object> set = new LinkedHashMap<>();
@@ -124,8 +121,15 @@ public final class SaveLaunchConfigurationTool implements IMcpTool {
 					.put("action", update ? "update" : existing != null ? "replace" : "create") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
 					.put("attributes", attributes) //$NON-NLS-1$
 					.put("dryRun", Boolean.valueOf(dryRun)); //$NON-NLS-1$
+			String elsewhere = elsewhere(manager, name, existing);
+			if (elsewhere != null) {
+				json.put("warning", elsewhere); //$NON-NLS-1$
+			}
 			if (dryRun) {
 				return McpToolResult.of(json.put("note", "Nothing was written. Pass dryRun false to save.").toString()); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+			if (existing != null && !update) {
+				existing.delete();
 			}
 			ILaunchConfiguration saved = copy.doSave();
 			json.put("saved", Boolean.TRUE).put("file", //$NON-NLS-1$ //$NON-NLS-2$
@@ -141,6 +145,17 @@ public final class SaveLaunchConfigurationTool implements IMcpTool {
 			copy.setAttribute(key, value);
 			set.put(key, value);
 		}
+	}
+
+	private static String elsewhere(ILaunchManager manager, String name, ILaunchConfiguration target)
+			throws CoreException {
+		for (ILaunchConfiguration candidate : manager.getLaunchConfigurations()) {
+			if (candidate.getName().equals(name) && !candidate.equals(target)) {
+				return "Another launch configuration named '%s' is stored elsewhere, so launching by name needs 'project' to tell them apart." //$NON-NLS-1$
+						.formatted(name);
+			}
+		}
+		return null;
 	}
 
 	/** The configuration of this name in the target storage, so a same-named one elsewhere is left alone. */

@@ -82,7 +82,7 @@ public final class DebugLaunchTool implements IMcpTool {
 				    "quiet":                   {"type":"boolean","default":true,"description":"Neutralise, for as long as this launch runs, the settings that stop a program nobody is watching: suspend on uncaught exceptions, suspend on compilation errors, and the modal question about switching perspective on suspend. These are not breakpoints, so eclipse_list_breakpoints reports none of them, and OSGi startup trips the first one routinely. The previous values are restored when the launch ends."},
 				    "environment":             {"type":"object","additionalProperties":{"type":"string"},"description":"Extra environment variables, merged over the IDE's own. With 'configuration' they are merged over that configuration's own variables on a copy that is launched without being saved, so the saved configuration stays as it is."},
 				    "waitForOutput":           {"type":"string","description":"Regular expression; wait until the program's stdout or stderr contains a match, for example 'Started .*Application'. The answer carries ready true, or says the program terminated first (exit code and last output come with it) or that the wait timed out. A timeout is a normal answer and the program keeps running."},
-				    "waitForPort":             {"type":"integer","minimum":1,"maximum":65535,"description":"Wait until localhost accepts a TCP connection on this port. Combines with waitForOutput: either one makes the launch ready."},
+				    "waitForPort":             {"type":"integer","minimum":1,"maximum":65535,"description":"Wait until localhost (IPv4 or IPv6) accepts a TCP connection on this port, which proves that something listens there and not that this launch does. Combines with waitForOutput: either one makes the launch ready."},
 				    "readyTimeoutSeconds":     {"type":"integer","default":20,"minimum":1,"maximum":25,"description":"How long waitForOutput and waitForPort wait at most, capped by what the call timeout leaves. When either is given, waitForSuspendSeconds defaults to 0."},
 				    "flightRecordingSeconds":  {"type":"integer","default":0,"minimum":0,"maximum":3600,"description":"Write the recording after this many seconds WITHOUT ending the program. This is what makes a startup measurable: the file is complete while the application carries on. IT IS ONE WINDOW: the recording ends at that point and nothing is added later, not even at exit, so measure the start with it and use jcmd JFR.dump for a window further in. 0 relies on the exit dump alone, which needs the program to end."},
 				    "flightRecording":         {"type":"string","enum":["off","default","profile"],"default":"off","description":"Record the launched JVM with Java Flight Recorder. 'profile' includes allocation and execution samples at a few percent overhead, 'default' covers GC and threads at about one percent. The file is written when the program EXITS and opens in JDK Mission Control or with 'jfr print'. This is the only way to profile a launched program: recording the IDE works inside the IDE's JVM and cannot see another process."}
@@ -286,12 +286,15 @@ public final class DebugLaunchTool implements IMcpTool {
 	}
 
 	private static boolean accepts(int port) {
-		try (java.net.Socket socket = new java.net.Socket()) {
-			socket.connect(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port), 200);
-			return true;
-		} catch (java.io.IOException e) {
-			return false;
+		for (String host : new String[] { "127.0.0.1", "::1" }) { //$NON-NLS-1$ //$NON-NLS-2$
+			try (java.net.Socket socket = new java.net.Socket()) {
+				socket.connect(new java.net.InetSocketAddress(host, port), 200);
+				return true;
+			} catch (java.io.IOException e) {
+				// try the other loopback address
+			}
 		}
+		return false;
 	}
 
 	/** Merges the variables over the configuration's own; the working copy is launched, never saved. */

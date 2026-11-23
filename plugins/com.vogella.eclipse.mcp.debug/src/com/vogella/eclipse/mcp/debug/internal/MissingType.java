@@ -35,7 +35,7 @@ record MissingType(String name, String typeId, String location, boolean inProjec
 				.put(inProject ? "file" : "path", location); //$NON-NLS-1$ //$NON-NLS-2$
 		Bundle bundle = contributor(typeId);
 		if (bundle != null) {
-			json.put("plugin", bundle.getSymbolicName()).put("pluginState", stateName(bundle.getState())); //$NON-NLS-1$ //$NON-NLS-2$
+			json.put("nearestBundle", bundle.getSymbolicName()).put("nearestBundleState", stateName(bundle.getState())); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		return json;
 	}
@@ -93,7 +93,7 @@ record MissingType(String name, String typeId, String location, boolean inProjec
 		}
 	}
 
-	/** The installed bundle whose symbolic name is the longest prefix of the type id, if any. */
+	/** A guess, not evidence: the installed bundle whose symbolic name is the longest prefix of the type id. */
 	private static Bundle contributor(String id) {
 		Bundle bundle = FrameworkUtil.getBundle(MissingType.class);
 		if (bundle == null || bundle.getBundleContext() == null) {

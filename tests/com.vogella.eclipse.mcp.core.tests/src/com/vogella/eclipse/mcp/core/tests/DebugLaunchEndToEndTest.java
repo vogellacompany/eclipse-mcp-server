@@ -257,8 +257,6 @@ class DebugLaunchEndToEndTest {
 		waitUntilTerminated(sessionId);
 	}
 
-	}
-
 	private static final String NOISY_SOURCE = """
 			package sample;
 			public class Noisy {
@@ -347,8 +345,6 @@ class DebugLaunchEndToEndTest {
 		waitUntilTerminated(sessionId);
 	}
 
-	}
-
 	@Test
 	void waitForOutputReportsTerminatedWhenTheProgramDiesFirst() throws Exception {
 		ensureDefaultVmInstall();
@@ -363,6 +359,119 @@ class DebugLaunchEndToEndTest {
 		assertEquals(Boolean.TRUE, ((Map<?, ?>) launched.get("readiness")).get("terminated"), String.valueOf(launched));
 		assertTrue(String.valueOf(launched.get("processOutputTail")).contains("to-stdout"), String.valueOf(launched));
 		assertNotNull(launched.get("outputNote"));
+	}
+
+	@Test
+	void waitForOutputTimesOutWithoutEndingTheProgram() throws Exception {
+		ensureDefaultVmInstall();
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		TestFixture.addType(project, "sample", "Ready", READY_SOURCE);
+		TestFixture.build(project.getProject());
+
+		Map<String, Object> launched = TestFixture.callAndParse("eclipse_debug_launch",
+				Map.of("project", PROJECT, "mainType", "sample.Ready", "mode", "run", "waitForOutput", "never printed",
+						"readyTimeoutSeconds", Integer.valueOf(1)));
+		String sessionId = (String) launched.get("sessionId");
+		assertEquals(Boolean.FALSE, launched.get("ready"), String.valueOf(launched));
+		assertEquals(Boolean.TRUE, ((Map<?, ?>) launched.get("readiness")).get("timedOut"), String.valueOf(launched));
+		assertEquals(Boolean.FALSE, launched.get("terminated"), String.valueOf(launched));
+
+		TestFixture.callAndParse("eclipse_debug_control", Map.of("sessionId", sessionId, "action", "terminate"));
+		waitUntilTerminated(sessionId);
+	}
+
+	private static final String LISTENER_SOURCE = """
+			package sample;
+			public class Listener {
+				public static void main(String[] args) throws Exception {
+					try (java.net.ServerSocket server = new java.net.ServerSocket(Integer.parseInt(args[0]))) {
+						Thread.sleep(120000);
+					}
+				}
+			}
+			""";
+
+	@Test
+	void waitForPortAnswersReadyOnceTheProgramListens() throws Exception {
+		ensureDefaultVmInstall();
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		TestFixture.addType(project, "sample", "Listener", LISTENER_SOURCE);
+		TestFixture.build(project.getProject());
+		int port;
+		try (java.net.ServerSocket probe = new java.net.ServerSocket(0)) {
+			port = probe.getLocalPort();
+		}
+
+		Map<String, Object> launched = TestFixture.callAndParse("eclipse_debug_launch",
+				Map.of("project", PROJECT, "mainType", "sample.Listener", "mode", "run", "arguments",
+						String.valueOf(port), "waitForPort", Integer.valueOf(port), "readyTimeoutSeconds",
+						Integer.valueOf(20)));
+		assertEquals(Boolean.TRUE, launched.get("ready"), String.valueOf(launched));
+		assertEquals("port", ((Map<?, ?>) launched.get("readiness")).get("by"), String.valueOf(launched));
+
+		TestFixture.callAndParse("eclipse_debug_control",
+				Map.of("sessionId", launched.get("sessionId"), "action", "terminate"));
+		waitUntilTerminated((String) launched.get("sessionId"));
+	}
+
+	@Test
+	void environmentOnANamedConfigurationLeavesTheSavedOneAlone() throws Exception {
+		ensureDefaultVmInstall();
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		TestFixture.addType(project, "sample", "Noisy", NOISY_SOURCE);
+		TestFixture.build(project.getProject());
+		String name = "mcp-env-" + System.nanoTime();
+		TestFixture.callAndParse("eclipse_save_launch_configuration", Map.of("name", name, "project", PROJECT,
+				"mainType", "sample.Noisy", "environment", Map.of("MCP_TEST_VAR", "saved"), "dryRun", Boolean.FALSE));
+		try {
+			Map<String, Object> launched = TestFixture.callAndParse("eclipse_debug_launch", Map.of("configuration",
+					name, "environment", Map.of("MCP_TEST_VAR", "override"), "waitForSuspendSeconds", Integer.valueOf(0)));
+			String sessionId = (String) launched.get("sessionId");
+			assertNotNull(sessionId, String.valueOf(launched));
+			waitUntilTerminated(sessionId);
+			String text = "";
+			for (int attempt = 0; attempt < 20 && !text.contains("var="); attempt++) {
+				Map<?, ?> process = (Map<?, ?>) ((List<?>) TestFixture.callAndParse("eclipse_get_launch_output",
+						Map.of("sessionId", sessionId)).get("processes")).get(0);
+				text = String.valueOf(((Map<?, ?>) process.get("stdout")).get("text"));
+				Thread.sleep(250);
+			}
+			assertTrue(text.contains("var=override"), text);
+			for (var configuration : DebugPlugin.getDefault().getLaunchManager().getLaunchConfigurations()) {
+				if (configuration.getName().equals(name)) {
+					assertEquals("saved", configuration.getAttribute(
+							org.eclipse.debug.core.ILaunchManager.ATTR_ENVIRONMENT_VARIABLES, Map.<String, String>of())
+							.get("MCP_TEST_VAR"));
+				}
+			}
+		} finally {
+			for (var configuration : DebugPlugin.getDefault().getLaunchManager().getLaunchConfigurations()) {
+				if (configuration.getName().equals(name)) {
+					configuration.delete();
+				}
+			}
+		}
+	}
+
+	@Test
+	void aConfigurationSavedInTheProjectIsAFileThereAndRefusesATypeChange() throws Exception {
+		IJavaProject project = fixture.createJavaProject(PROJECT);
+		String name = "mcp-project-" + System.nanoTime();
+		Map<String, Object> save = new HashMap<>(Map.of("name", name, "project", PROJECT, "mainType", "sample.Noisy",
+				"storage", "project", "dryRun", Boolean.FALSE));
+		try {
+			Map<String, Object> saved = TestFixture.callAndParse("eclipse_save_launch_configuration", save);
+			assertEquals(Boolean.TRUE, saved.get("saved"), String.valueOf(saved));
+			assertTrue(project.getProject().getFile(name + ".launch").exists(), String.valueOf(saved));
+
+			var refused = org.junit.jupiter.api.Assertions.assertThrows(com.vogella.eclipse.mcp.core.McpToolException.class,
+					() -> TestFixture.call("eclipse_save_launch_configuration",
+							new HashMap<>(Map.of("name", name, "project", PROJECT, "storage", "project", "type",
+									"org.eclipse.jdt.launching.remoteJavaApplication", "dryRun", Boolean.FALSE))));
+			assertTrue(refused.getMessage().contains("allowTypeChange"), refused.getMessage());
+		} finally {
+			project.getProject().getFile(name + ".launch").delete(true, null);
+		}
 	}
 
 	@Test

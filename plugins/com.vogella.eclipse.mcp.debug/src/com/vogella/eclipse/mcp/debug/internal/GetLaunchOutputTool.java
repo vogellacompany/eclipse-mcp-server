@@ -155,9 +155,16 @@ public final class GetLaunchOutputTool implements IMcpTool {
 		}
 		int from = Math.max(0, count - tailLines);
 		String text = String.join("\n", Arrays.copyOfRange(lines, from, count)); //$NON-NLS-1$
-		boolean cut = text.length() > MAX_CHARS;
-		if (cut) {
+		boolean cut = false;
+		while (text.length() > MAX_CHARS && from < count - 1) {
+			// whole lines only, so returned counts exactly what text holds
+			text = text.substring(lines[from].length() + 1);
+			from++;
+			cut = true;
+		}
+		if (text.length() > MAX_CHARS) {
 			text = text.substring(text.length() - MAX_CHARS);
+			cut = true;
 		}
 		return new JsonObject().put("total", Integer.valueOf(count)) //$NON-NLS-1$
 				.put("returned", Integer.valueOf(count - from)) //$NON-NLS-1$
