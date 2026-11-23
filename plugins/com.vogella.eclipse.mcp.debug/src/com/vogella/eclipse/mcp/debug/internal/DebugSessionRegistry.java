@@ -146,8 +146,12 @@ public final class DebugSessionRegistry {
 		 * would restore them before the exception that would trip them.
 		 */
 		void holdQuiet() {
-			if (quietHeld.compareAndSet(false, true)) {
+			// a session that already ended released its hold, and nothing would pair with a new one
+			if (terminatedAt.get() == 0 && quietHeld.compareAndSet(false, true)) {
 				LaunchPrompts.quiet();
+				if (terminatedAt.get() != 0) {
+					releaseQuiet();
+				}
 			}
 		}
 
@@ -446,6 +450,8 @@ public final class DebugSessionRegistry {
 			if (session.startedByMcp()) {
 				terminateQuietly(session);
 			}
+			// the listeners are gone, so no terminate event releases what the session still holds
+			session.releaseQuiet();
 		}
 	}
 
