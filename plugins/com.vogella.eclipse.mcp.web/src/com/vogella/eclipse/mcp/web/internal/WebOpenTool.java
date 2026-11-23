@@ -64,7 +64,16 @@ public final class WebOpenTool implements IMcpTool {
 						+ connect + "."); //$NON-NLS-1$
 			}
 			WebBrowser browser = WebBrowser.start(args.getString("browserPath"), headless, connectUrl); //$NON-NLS-1$
-			String error = browser.navigate(url);
+			String error = browser.navigate(url, WebPage.waitMillis(args, 15));
+			if (WebBrowser.NOT_ANSWERED.equals(error)) {
+				// no page script here: while a navigation waits for the server, the page answers none
+				JsonObject answer = new JsonObject().put("url", url).put("settled", Boolean.FALSE) //$NON-NLS-1$ //$NON-NLS-2$
+						.put("navigationPending", Boolean.TRUE); //$NON-NLS-1$
+				WebPage.addDialogs(browser, answer);
+				answer.put("navigationNote", //$NON-NLS-1$
+						"The server has not answered " + url + " yet, so the browser still shows the previous page; a server stopped at a breakpoint looks like this. The page answers no other web tool until the server does, so open it again once the server is back."); //$NON-NLS-1$ //$NON-NLS-2$
+				return McpToolResult.of(answer.toString());
+			}
 			if (error != null) {
 				JsonObject answer = browser.describe();
 				answer.put("error", error); //$NON-NLS-1$

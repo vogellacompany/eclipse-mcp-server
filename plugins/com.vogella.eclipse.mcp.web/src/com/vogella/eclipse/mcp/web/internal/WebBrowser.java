@@ -437,20 +437,29 @@ final class WebBrowser {
 		return page.send(method, params, Math.max(1, Math.min(COMMAND_MILLIS, CallBudget.leftMillis())));
 	}
 
+	/** What {@link #navigate} answers while the server has not yet sent the response the navigation waits for. */
+	static final String NOT_ANSWERED = "not answered"; //$NON-NLS-1$
+
 	/**
-	 * Loads {@code url} in the page and waits until it settled.
+	 * Starts loading {@code url} in the page, waiting at most {@code timeoutMillis} for the browser to commit it.
 	 *
-	 * @return the navigation error Chromium reported, such as {@code net::ERR_NAME_NOT_RESOLVED}, or {@code null}
+	 * @return the navigation error Chromium reported, such as {@code net::ERR_NAME_NOT_RESOLVED},
+	 *         {@link #NOT_ANSWERED} when the load is still waiting for the server, or {@code null}
 	 */
-	String navigate(String url) throws IOException {
+	String navigate(String url, long timeoutMillis) throws IOException {
 		synchronized (state) {
 			documentStatus = null;
 			loading = true;
 		}
 		Map<String, Object> result;
 		try {
-			result = send("Page.navigate", new JsonObject().put("url", url)); //$NON-NLS-1$ //$NON-NLS-2$
+			result = page.send("Page.navigate", new JsonObject().put("url", url), //$NON-NLS-1$ //$NON-NLS-2$
+					Math.max(1, Math.min(Math.max(1_000, timeoutMillis), Math.min(COMMAND_MILLIS, CallBudget.leftMillis()))));
 		} catch (IOException e) {
+			if (e.getCause() instanceof java.util.concurrent.TimeoutException && page.isOpen()) {
+				// the load goes on in the browser, so the page stays loading and a later settle or snapshot sees it
+				return NOT_ANSWERED;
+			}
 			synchronized (state) {
 				loading = false;
 			}

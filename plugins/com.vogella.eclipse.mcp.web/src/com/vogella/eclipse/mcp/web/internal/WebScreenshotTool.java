@@ -37,7 +37,7 @@ public final class WebScreenshotTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Captures the web page eclipse_web_open opened as a PNG image: the visible viewport by default, the whole scrollable page with fullPage true, or one element when ref or selector names it (it is scrolled into view first). Answers the url, title, and the size in CSS pixels, with the picture attached. Changes nothing but the scroll position for an element capture. Use eclipse_web_snapshot to find what to act on; use this to check how the page looks."; //$NON-NLS-1$
+		return "Captures the web page eclipse_web_open opened as a PNG image: the visible viewport by default, the whole scrollable page with fullPage true, or one element when ref or selector names it (it is scrolled into view first, and fixed or sticky elements outside it, such as a site header, are hidden while it is captured so they cannot paint over it; hiddenOverlays says how many). Answers the url, title, and the size in CSS pixels, with the picture attached. Changes nothing but the scroll position for an element capture. Use eclipse_web_snapshot to find what to act on; use this to check how the page looks."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -67,7 +67,8 @@ public final class WebScreenshotTool implements IMcpTool {
 		try {
 			JsonObject params = new JsonObject().put("format", "png"); //$NON-NLS-1$ //$NON-NLS-2$
 			JsonObject answer = browser.describe();
-			if (args.has("ref") || args.has("selector")) { //$NON-NLS-1$ //$NON-NLS-2$
+			boolean element = args.has("ref") || args.has("selector"); //$NON-NLS-1$ //$NON-NLS-2$
+			if (element) {
 				WebPage.Target target = WebPage.locate(browser, args, true);
 				if (target.error() != null) {
 					return McpToolResult.error(target.error());
@@ -115,7 +116,17 @@ public final class WebScreenshotTool implements IMcpTool {
 				params.put("clip", clip(WebPage.number(view.get("x")), WebPage.number(view.get("y")), width, height)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				size(answer, width, height);
 			}
-			Map<String, Object> shot = browser.send("Page.captureScreenshot", params); //$NON-NLS-1$
+			if (element) {
+				answer.put("hiddenOverlays", Long.valueOf(Math.round(WebPage.number(browser.evaluate(PageScripts.HIDE_OVERLAYS))))); //$NON-NLS-1$
+			}
+			Map<String, Object> shot;
+			try {
+				shot = browser.send("Page.captureScreenshot", params); //$NON-NLS-1$
+			} finally {
+				if (element) {
+					browser.evaluate(PageScripts.RESTORE_OVERLAYS);
+				}
+			}
 			if (!(shot.get("data") instanceof String data)) { //$NON-NLS-1$
 				return McpToolResult.error("The browser answered no image."); //$NON-NLS-1$
 			}

@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -14,9 +16,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+
+import javax.imageio.ImageIO;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assumptions;
@@ -79,20 +86,51 @@ class WebToolsTest {
 			<div style="position:fixed;inset:0;background:rgba(0,0,0,.3)" id="modal"></div>
 			</body></html>""";
 
+	private static final String STICKY = """
+			<!doctype html><html><head><title>Sticky</title></head><body style="margin:0">
+			<header id="bar" style="position:fixed;top:0;left:0;right:0;height:60px;background:#f00">Site header</header>
+			<section id="tall" style="height:3000px;background:#00f">Tall</section>
+			</body></html>""";
+
+	private static final String FADE = """
+			<!doctype html><html><head><title>Fade</title>
+			<style>@keyframes in { from { opacity: 0 } to { opacity: 1 } } .panel { animation: in 1.5s linear }</style>
+			</head><body style="margin:0;background:#fff">
+			<button id="show" onclick="const p = document.createElement('div'); p.id = 'panel'; p.className = 'panel';
+			  p.style.cssText = 'width:200px;height:200px;background:#f00'; document.body.append(p)">Show</button>
+			</body></html>""";
+
+	private static final CountDownLatch RELEASE_SLOW = new CountDownLatch(1);
+
 	private static HttpServer server;
 	private static String base;
 
 	@BeforeAll
 	static void serve() throws IOException {
 		server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-		server.createContext("/", exchange -> respond(exchange,
-				exchange.getRequestURI().getPath().equals("/second") ? SECOND : FORM));
+		server.createContext("/", exchange -> respond(exchange, switch (exchange.getRequestURI().getPath()) {
+		case "/second" -> SECOND;
+		case "/sticky" -> STICKY;
+		case "/fade" -> FADE;
+		default -> FORM;
+		}));
+		// a server that holds its answer, as one stopped at a breakpoint does
+		server.createContext("/slow", exchange -> {
+			try {
+				RELEASE_SLOW.await(30, TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			respond(exchange, SECOND);
+		});
+		server.setExecutor(Executors.newCachedThreadPool());
 		server.start();
 		base = "http://127.0.0.1:" + server.getAddress().getPort();
 	}
 
 	@AfterAll
 	static void stop() throws Exception {
+		RELEASE_SLOW.countDown();
 		TestFixture.call("eclipse_web_close", Map.of());
 		server.stop(0);
 	}
@@ -280,6 +318,44 @@ class WebToolsTest {
 		McpToolResult full = TestFixture.call("eclipse_web_screenshot", Map.of("fullPage", Boolean.TRUE));
 		assertFalse(full.isError(), full.text());
 		assertEquals(1, full.images().size());
+	}
+
+	@Test
+	void hidesAFixedHeaderWhileCapturingAnElementThatReachesUnderIt() throws Exception {
+		open("/sticky");
+		McpToolResult element = TestFixture.call("eclipse_web_screenshot", Map.of("selector", "#tall"));
+		assertFalse(element.isError(), element.text());
+		assertEquals(1L, ((Number) TestFixture.parse(element.text()).get("hiddenOverlays")).longValue(), element.text());
+		BufferedImage image = ImageIO.read(new ByteArrayInputStream(element.images().get(0).data()));
+		// the top row is the blue section, not the red header painted over it
+		assertEquals(0x0000ff, image.getRGB(image.getWidth() / 2, 5) & 0xffffff);
+		assertTrue(snapshot().contains("Site header"), "The header stays hidden after the capture");
+	}
+
+	@Test
+	void waitsForAPanelToFadeInBeforeAnswering() throws Exception {
+		open("/fade");
+		Map<String, Object> click = TestFixture.callAndParse("eclipse_web_click", Map.of("selector", "#show"));
+		assertEquals(Boolean.TRUE, click.get("settled"), click.toString());
+		McpToolResult panel = TestFixture.call("eclipse_web_screenshot", Map.of("selector", "#panel"));
+		assertFalse(panel.isError(), panel.text());
+		BufferedImage image = ImageIO.read(new ByteArrayInputStream(panel.images().get(0).data()));
+		assertEquals(0xff0000, image.getRGB(100, 100) & 0xffffff, "The panel was captured while still fading in");
+	}
+
+	@Test
+	void answersInTimeWhileTheServerHoldsItsResponse() throws Exception {
+		open("/");
+		long started = System.nanoTime();
+		McpToolResult result = TestFixture.call("eclipse_web_open", Map.of("url", base + "/slow", "timeoutSeconds", 2));
+		long seconds = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - started);
+		assertFalse(result.isError(), result.text());
+		Map<String, Object> answer = TestFixture.parse(result.text());
+		assertEquals(Boolean.TRUE, answer.get("navigationPending"), result.text());
+		assertEquals(Boolean.FALSE, answer.get("settled"), result.text());
+		assertTrue(seconds < 8, "Took " + seconds + " s for a 2 s timeout");
+		RELEASE_SLOW.countDown();
+		assertEquals("Second", open("/second").get("title"));
 	}
 
 	@Test
