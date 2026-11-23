@@ -30,6 +30,7 @@ plugins/com.vogella.eclipse.mcp.ui       editor, view, perspective and layout to
 plugins/com.vogella.eclipse.mcp.pde      PDE tools
 plugins/com.vogella.eclipse.mcp.debug    breakpoint tools, debug session tools, session registry
 plugins/com.vogella.eclipse.mcp.git      EGit tools, checkout and pull request fetch
+plugins/com.vogella.eclipse.mcp.gradle   Gradle tools through Buildship: refresh, run tasks, task list
 plugins/com.vogella.eclipse.mcp.ide      IDE-only tools: open in editor, compare, launch shortcuts, project import
 plugins/com.vogella.eclipse.mcp.p2       provisioning tools, repositories, install, update, headless trust
 plugins/com.vogella.eclipse.mcp.web      web page tools: a Chromium driven over the DevTools Protocol
@@ -266,6 +267,15 @@ Do not undo these without understanding why they are there.
   The requirements state the minimum 7.0.0 and no upper bound: the resolver drops an optional requirement whose range excludes the installed EGit without a log entry, and every git tool then refuses. `EGit.unavailable()` tells that case from a missing EGit.
   Verifying a class can load the JGit types its methods use, and a failure there loses the tool with an error at every start; `RevertFilesTool` and `FetchPullRequestTool` keep their JGit code in a nested class for that reason, and `GitToolsWithoutEGitTest` loads every git tool with JGit and EGit hidden.
 - The ide bundle requires `org.eclipse.jgit` with `resolution:=optional` and references it only from `GitContent`, so an IDE without EGit loses only `eclipse_open_compare`'s `revision` argument.
+
+### Gradle
+
+- The gradle bundle requires Buildship (`org.eclipse.buildship.core`, which re-exports the Tooling API) with `resolution:=optional`, and every tool that starts Gradle checks `Buildship.isAvailable()` first; `GradleToolsWithoutBuildshipTest` loads every tool with Buildship and `org.gradle.*` hidden.
+  Only `GradleOperations` names a Buildship or Tooling API type, and no signature there or in the tools carries one, so a missing Buildship never breaks class loading.
+- Gradle work runs as a `GradleRuns` job answered with a `runId`, which `eclipse_get_gradle_run` polls and cancels, the way `eclipse_run_command` does; a wait goes through `CallBudget`.
+  `eclipse_list_gradle_tasks` keeps its in-flight model request in `PENDING`, so a call that outlasts the wait finds the list on the next one.
+- A project counts as Gradle by `Buildship.NATURE`, checked before any Buildship call, so a plain project is refused by name.
+- Tools that start Gradle say RUNS in capitals, since build scripts, tests and applications execute.
 
 ### p2
 
