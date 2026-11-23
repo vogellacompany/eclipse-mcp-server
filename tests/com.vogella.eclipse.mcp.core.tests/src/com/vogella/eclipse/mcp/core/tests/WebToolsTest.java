@@ -413,6 +413,9 @@ class WebToolsTest {
 			Map<String, Object> again = TestFixture.callAndParse("eclipse_web_open", Map.of("url", base + "/second"));
 			assertEquals("connected", ((Map<String, Object>) again.get("browser")).get("mode"),
 					"a later open without connectUrl keeps the connected tab");
+			assertEquals("connected", ((Map<String, Object>) TestFixture.callAndParse("eclipse_web_open",
+					Map.of("url", base + "/", "headless", Boolean.TRUE)).get("browser")).get("mode"),
+					"headless, even the default true, does not close the user's tab");
 			assertEquals(Boolean.TRUE, TestFixture.callAndParse("eclipse_web_close", Map.of()).get("closed"));
 			assertTrue(browser.isAlive(), "closing the tab must leave the user's browser running");
 		} finally {

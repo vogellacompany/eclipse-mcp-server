@@ -92,22 +92,33 @@ final class WebPage {
 		return value instanceof Number number ? number.doubleValue() : 0;
 	}
 
+	/** The seconds {@code timeoutSeconds} asks for, or {@code defaultSeconds}. */
+	private static int requestedSeconds(ToolArguments args, int defaultSeconds) {
+		return args.getInt("timeoutSeconds", defaultSeconds, 0, 120); //$NON-NLS-1$
+	}
+
+	/**
+	 * {@code requested} seconds capped by what is left of the call, less a couple of seconds for reading the page
+	 * afterwards, or the answer is what times out.
+	 */
+	private static int boundedSeconds(int requested) {
+		return Math.max(0, Math.min(requested, (int) (CallBudget.leftMillis() / 1000) - ANSWER_SECONDS));
+	}
+
+	/** The wait {@code timeoutSeconds} asks for, capped like the settle wait by what is left of the call. */
+	static long waitMillis(ToolArguments args, int defaultSeconds) {
+		return TimeUnit.SECONDS.toMillis(boundedSeconds(requestedSeconds(args, defaultSeconds)));
+	}
+
 	/**
 	 * Waits for the page to settle, for {@code timeoutSeconds} or {@code defaultSeconds} capped by what is left of the
 	 * call, and answers the page's address and title, whether it settled and the dialogs it raised, which every acting
 	 * tool reports; with {@code urlBefore}, also whether the address changed.
 	 */
-	/** The wait {@code timeoutSeconds} asks for, capped like the settle wait by what is left of the call. */
-	static long waitMillis(ToolArguments args, int defaultSeconds) {
-		int requested = args.getInt("timeoutSeconds", defaultSeconds, 0, 120); //$NON-NLS-1$
-		return TimeUnit.SECONDS.toMillis(Math.max(0, Math.min(requested, (int) (CallBudget.leftMillis() / 1000) - ANSWER_SECONDS)));
-	}
-
 	static JsonObject settleAndDescribe(WebBrowser browser, ToolArguments args, int defaultSeconds, String urlBefore)
 			throws IOException {
-		int requested = args.getInt("timeoutSeconds", defaultSeconds, 0, 120); //$NON-NLS-1$
-		// leaves a couple of seconds of the call for reading the page afterwards, or the answer is what times out
-		int bounded = Math.max(0, Math.min(requested, (int) (CallBudget.leftMillis() / 1000) - ANSWER_SECONDS));
+		int requested = requestedSeconds(args, defaultSeconds);
+		int bounded = boundedSeconds(requested);
 		JsonObject answer = new JsonObject();
 		long budget = TimeUnit.SECONDS.toMillis(bounded);
 		long started = System.nanoTime();
@@ -140,21 +151,21 @@ final class WebPage {
 		}
 		answer.put("settled", Boolean.valueOf(settled)); //$NON-NLS-1$
 		if (!settled) {
-			answer.put("pendingRequests", Integer.valueOf(browser.pendingRequests())); //$NON-NLS-1$
-			answer.put("settleNote", //$NON-NLS-1$
-					"The page was still loading or had requests in flight when the wait ended. A page that polls never settles; take a snapshot to see where it is."); //$NON-NLS-1$
-			if (animating) {
-				answer.put("settleNote", //$NON-NLS-1$
-						"The page loaded, but an animation or transition was still running when the wait ended, so a screenshot may catch it halfway."); //$NON-NLS-1$
-			}
+			// one note, the one that says why this wait ended unsettled
+			String note;
 			if (requested == 0) {
-				answer.put("settleNote", //$NON-NLS-1$
-						"No wait was asked for, so whether the action started a load is not known yet; take a snapshot to see where the page is."); //$NON-NLS-1$
+				note = "No wait was asked for, so whether the action started a load is not known yet; take a snapshot to see where the page is."; //$NON-NLS-1$
 			} else if (bounded == 0) {
-				answer.put("settleNote", //$NON-NLS-1$
-						"No time was left to wait for the page to settle, so whether the action started a load is not known yet; take a snapshot to see where the page is."); //$NON-NLS-1$
+				note = "No time was left to wait for the page to settle, so whether the action started a load is not known yet; take a snapshot to see where the page is."; //$NON-NLS-1$
+			} else if (animating) {
+				note = "The page loaded, but an animation or transition was still running when the wait ended, so a screenshot may catch it halfway."; //$NON-NLS-1$
+			} else {
+				answer.put("pendingRequests", Integer.valueOf(browser.pendingRequests())); //$NON-NLS-1$
+				note = "The page was still loading or had requests in flight when the wait ended. A page that polls never settles; take a snapshot to see where it is."; //$NON-NLS-1$
 			}
-			if (bounded < requested) {
+			answer.put("settleNote", note); //$NON-NLS-1$
+			// a wait cut short by the call timeout, unless it never started, which the note already says
+			if (bounded > 0 && bounded < requested) {
 				answer.put("waitNote", "Waited %d of the %d seconds asked for, because the server aborts any call that outlasts its %d second tool call timeout, set in Preferences > General > MCP Server." //$NON-NLS-1$ //$NON-NLS-2$
 						.formatted(Integer.valueOf(bounded), Integer.valueOf(requested),
 								Integer.valueOf(CallBudget.callTimeoutSeconds())));

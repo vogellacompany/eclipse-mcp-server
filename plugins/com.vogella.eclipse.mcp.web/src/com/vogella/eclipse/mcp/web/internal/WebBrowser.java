@@ -36,8 +36,8 @@ final class WebBrowser {
 
 	private static final long COMMAND_MILLIS = 15_000;
 
-	/** The most JavaScript dialogs kept for one answer. */
-	private static final int MAX_DIALOGS = 20;
+	/** The most JavaScript dialogs, and downloads, kept for one answer. */
+	private static final int MAX_REPORTED = 20;
 
 	private static WebBrowser instance;
 
@@ -59,8 +59,10 @@ final class WebBrowser {
 	private final Set<String> inflight = new HashSet<>();
 	private final List<JsonObject> dialogs = new ArrayList<>();
 	private final List<JsonObject> downloads = new ArrayList<>();
-	/** Dialogs answered beyond {@link #MAX_DIALOGS} since the last report, guarded by {@code state}. */
+	/** Dialogs answered beyond {@link #MAX_REPORTED} since the last report, guarded by {@code state}. */
 	private int droppedDialogs;
+	/** Downloads started beyond {@link #MAX_REPORTED} since the last report, guarded by {@code state}. */
+	private int droppedDownloads;
 	private String mainFrameId;
 	private boolean loading;
 	private Integer documentStatus;
@@ -103,8 +105,9 @@ final class WebBrowser {
 			if (connectUrl != null) {
 				sameKind = connectUrl.equals(open.endpoint);
 			} else if (open.process == null) {
-				// a tab in the user's browser stays until a call asks for a browser of this IDE's own
-				sameKind = browserPath == null && requestedHeadless == null;
+				// a tab in the user's browser stays until a call names a browser of this IDE's own; headless does not
+				// apply to the user's browser, so passing it, even as the default true, does not close their tab
+				sameKind = browserPath == null;
 			} else {
 				sameKind = (requestedHeadless == null || open.headless == headless)
 						&& (browserPath == null || BrowserLocator.locate(browserPath).equals(open.executable));
@@ -362,7 +365,9 @@ final class WebBrowser {
 			inflight.remove(String.valueOf(params.get("requestId"))); //$NON-NLS-1$
 		case "Page.javascriptDialogOpening" -> answerDialog(params); //$NON-NLS-1$
 		case "Page.downloadWillBegin" -> { //$NON-NLS-1$
-			if (downloads.size() < MAX_DIALOGS) {
+			if (downloads.size() >= MAX_REPORTED) {
+				droppedDownloads++;
+			} else {
 				downloads.add(new JsonObject().put("url", params.get("url")) //$NON-NLS-1$ //$NON-NLS-2$
 						.put("file", params.get("suggestedFilename")) //$NON-NLS-1$ //$NON-NLS-2$
 						.put("saved", process != null ? "no, downloads are denied in this IDE's own browser" //$NON-NLS-1$ //$NON-NLS-2$
@@ -386,7 +391,7 @@ final class WebBrowser {
 	private void answerDialog(Map<String, Object> params) {
 		String type = String.valueOf(params.get("type")); //$NON-NLS-1$
 		boolean accept = !"confirm".equals(type) && !"prompt".equals(type) || acceptConfirm; //$NON-NLS-1$ //$NON-NLS-2$
-		if (dialogs.size() >= MAX_DIALOGS) {
+		if (dialogs.size() >= MAX_REPORTED) {
 			droppedDialogs++;
 		} else {
 			// a page in a dialog loop is still answered every time, but only the first ones are kept for the report
@@ -414,16 +419,20 @@ final class WebBrowser {
 		}
 	}
 
-	/** The dialogs answered since the last call, for the answer of the tool that raised them. */
 	/** The downloads the page started since the last call, which a click answers with. */
 	List<JsonObject> takeDownloads() {
 		synchronized (state) {
-			List<JsonObject> taken = List.copyOf(downloads);
+			List<JsonObject> taken = new ArrayList<>(downloads);
+			if (droppedDownloads > 0) {
+				taken.add(new JsonObject().put("more", Integer.valueOf(droppedDownloads))); //$NON-NLS-1$
+			}
 			downloads.clear();
+			droppedDownloads = 0;
 			return taken;
 		}
 	}
 
+	/** The dialogs answered since the last call, for the answer of the tool that raised them. */
 	List<JsonObject> takeDialogs() {
 		synchronized (state) {
 			List<JsonObject> taken = new ArrayList<>(dialogs);
