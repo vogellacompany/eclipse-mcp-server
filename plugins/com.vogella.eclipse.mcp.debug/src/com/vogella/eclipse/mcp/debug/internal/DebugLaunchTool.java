@@ -122,7 +122,7 @@ public final class DebugLaunchTool implements IMcpTool {
 				// the same prompt eclipse_run_tests answers: launching a project with
 				// compile errors otherwise opens a modal dialog and the launch waits for
 				// a person who does not know they are being asked
-				String promptWas = CompileErrorPrompt.suppress();
+				CompileErrorPrompt.suppress();
 				try {
 					org.eclipse.debug.core.ILaunch launched = configuration.launch(mode, progress);
 					if (!session.registered()) {
@@ -132,7 +132,7 @@ public final class DebugLaunchTool implements IMcpTool {
 				} catch (CoreException | RuntimeException e) {
 					session.failed(e.getMessage() == null ? String.valueOf(e) : e.getMessage());
 				} finally {
-					CompileErrorPrompt.restore(promptWas);
+					CompileErrorPrompt.restore();
 				}
 				return org.eclipse.core.runtime.Status.OK_STATUS;
 			}).schedule();

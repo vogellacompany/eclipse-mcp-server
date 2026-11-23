@@ -165,7 +165,7 @@ public final class RunTestsTool implements IMcpTool {
 			boolean ui = args.getBoolean("ui", false); //$NON-NLS-1$
 			String launchedAs = launchedAs(project, args);
 			// this run answers the prompt itself and puts the setting back
-			String compileErrorPromptWas = CompileErrorPrompt.effectiveValue();
+			String compileErrorPromptWas = CompileErrorPrompt.originalValue();
 			TestRunRegistry.Run run = TestRunRegistry.getInstance()
 					.create(testClass == null ? projectName : testClass + (testMethod == null ? "" : "#" + testMethod)); //$NON-NLS-1$ //$NON-NLS-2$
 
@@ -230,7 +230,7 @@ public final class RunTestsTool implements IMcpTool {
 				run.launchedAs(launchedAs);
 				boolean debug = args.getBoolean("debug", false); //$NON-NLS-1$
 				Job.create("MCP test launch " + run.id(), progress -> { //$NON-NLS-1$
-					String previous = CompileErrorPrompt.suppress();
+					CompileErrorPrompt.suppress();
 					try {
 						ILaunch launch = configuration.launch(
 								debug ? ILaunchManager.DEBUG_MODE : ILaunchManager.RUN_MODE, null);
@@ -240,7 +240,7 @@ public final class RunTestsTool implements IMcpTool {
 						// as an assertion rather than a CoreException
 						TestRunRegistry.failed(run, describe(e));
 					} finally {
-						CompileErrorPrompt.restore(previous);
+						CompileErrorPrompt.restore();
 					}
 					return Status.OK_STATUS;
 				}).schedule();
