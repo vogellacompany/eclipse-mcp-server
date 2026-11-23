@@ -22,7 +22,7 @@ public final class WebClickTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "CLICKS an element of the web page eclipse_web_open opened, as a user would: scrolls it into view and sends real mouse events to its centre, so the page's own handlers, links and form submits run. Address it by ref from eclipse_web_snapshot (preferred) or by a CSS selector. Refuses an element that another one covers at that point, such as a cookie banner or a modal, which would get the click instead, unless force is set. Then waits for the page to settle and answers the url and title afterwards, navigated true when the click changed the address, and any JavaScript dialog the click raised: alerts are accepted, a confirm or prompt is dismissed unless acceptDialogs is true."; //$NON-NLS-1$
+		return "CLICKS an element of the web page eclipse_web_open opened, as a user would: scrolls it into view and sends real mouse events to its centre, so the page's own handlers, links and form submits run. Address it by ref from eclipse_web_snapshot (preferred) or by a CSS selector. Refuses an element that another one covers at that point, such as a cookie banner or a modal, which would get the click instead; force sends it there anyway. Then waits for the page to settle and answers the url and title afterwards, navigated true when the click changed the address, and any JavaScript dialog the click raised: alerts are accepted, a confirm or prompt is dismissed unless acceptDialogs is true."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -33,7 +33,7 @@ public final class WebClickTool implements IMcpTool {
 				  "properties": {
 				%s,
 				    "doubleClick":    {"type":"boolean","default":false},
-				    "force":          {"type":"boolean","default":false,"description":"Click at the element's centre even when another element covers it there."},
+				    "force":          {"type":"boolean","default":false,"description":"Send the click to the element's centre even when another element covers it there; the covering element then receives it, as it would for a user."},
 				    "acceptDialogs":  {"type":"boolean","default":false,"description":"Accept a confirm or prompt the click raises, e.g. 'Really delete?', instead of dismissing it."},
 				    "timeoutSeconds": {"type":"integer","default":10,"minimum":0,"maximum":120,"description":"How long to wait for the page to settle after the click."}
 				  },

@@ -207,7 +207,7 @@ final class PageScripts {
 			  const editable = el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA';
 			  if (!editable) return JSON.stringify({error: 'The element is a ' + el.tagName.toLowerCase() + ', which does not take text.'});
 			  if (clear) {
-			    if (el.isContentEditable) { document.execCommand('selectAll'); }
+			    if (el.isContentEditable) { window.getSelection().selectAllChildren(el); }
 			    else { el.select(); }
 			  } else if (!el.isContentEditable && typeof el.setSelectionRange === 'function') {
 			    try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* types without selection */ }
