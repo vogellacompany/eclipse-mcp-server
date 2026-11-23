@@ -33,7 +33,7 @@ public final class WebClickTool implements IMcpTool {
 				  "properties": {
 				%s,
 				    "doubleClick":    {"type":"boolean","default":false},
-				    "force":          {"type":"boolean","default":false,"description":"Send the click to the element's centre even when another element covers it there; the covering element then receives it, as it would for a user."},
+				    "force":          {"type":"boolean","default":false,"description":"Send the click to the element's centre even when another element covers it there; the covering element then receives it, as it would for a user. Also clicks an element in an inert part of the page, which then does nothing, and a link that opens a new tab, which these tools do not follow."},
 				    "acceptDialogs":  {"type":"boolean","default":false,"description":"Accept a confirm or prompt the click raises, e.g. 'Really delete?', instead of dismissing it."},
 				    "timeoutSeconds": {"type":"integer","default":10,"minimum":0,"maximum":120,"description":"How long to wait for the page to settle after the click."}
 				  },
@@ -60,6 +60,14 @@ public final class WebClickTool implements IMcpTool {
 			if (target.disabled()) {
 				return McpToolResult.error("The " + target.tag() //$NON-NLS-1$
 						+ " is disabled, so the browser would not deliver a click to it; the page usually enables it once a form is complete."); //$NON-NLS-1$
+			}
+			if (target.fileInput()) {
+				return McpToolResult.error(
+						"The element is a file input. A click opens the system's file chooser, which these tools cannot see or answer, so it is refused; choosing files for an upload is not supported."); //$NON-NLS-1$
+			}
+			if (target.newTab() != null && !args.getBoolean("force", false)) { //$NON-NLS-1$
+				return McpToolResult.error("The link opens " + target.newTab() //$NON-NLS-1$
+						+ " in a new tab, which these tools do not follow, and it would push this page into the background. Call eclipse_web_open with that url to go there, or pass force to click anyway."); //$NON-NLS-1$
 			}
 			String before = String.valueOf(browser.evaluate("location.href")); //$NON-NLS-1$
 			browser.acceptConfirmations(args.getBoolean("acceptDialogs", false)); //$NON-NLS-1$

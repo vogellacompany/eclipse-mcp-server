@@ -39,7 +39,7 @@ final class WebPage {
 
 	/** The location of an element, or the error to answer with. */
 	record Target(double x, double y, double width, double height, double scrollX, double scrollY, String tag,
-			int matches, boolean disabled, String error) {
+			int matches, boolean disabled, boolean fileInput, String newTab, String error) {
 	}
 
 	/** Parses the JSON a page script answered with. */
@@ -80,11 +80,12 @@ final class WebPage {
 		}
 		return new Target(number(found.get("x")), number(found.get("y")), width, height, number(found.get("scrollX")), //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				number(found.get("scrollY")), tag, (int) number(found.get("matches")), //$NON-NLS-1$ //$NON-NLS-2$
-				Boolean.TRUE.equals(found.get("disabled")), null); //$NON-NLS-1$
+				Boolean.TRUE.equals(found.get("disabled")), Boolean.TRUE.equals(found.get("fileInput")), //$NON-NLS-1$ //$NON-NLS-2$
+				found.get("newTab") instanceof String url ? url : null, null); //$NON-NLS-1$
 	}
 
 	private static Target failed(String error) {
-		return new Target(0, 0, 0, 0, 0, 0, null, 0, false, error);
+		return new Target(0, 0, 0, 0, 0, 0, null, 0, false, false, null, error);
 	}
 
 	static double number(Object value) {

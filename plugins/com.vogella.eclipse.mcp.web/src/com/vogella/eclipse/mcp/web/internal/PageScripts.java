@@ -41,7 +41,7 @@ final class PageScripts {
 			      FIELDSET: 'group', LEGEND: 'legend', IFRAME: 'iframe', PROGRESS: 'progressbar', SECTION: 'region',
 			      ARTICLE: 'article', HR: 'separator', CODE: 'code', PRE: 'code'};
 			  const INPUTS = {button: 'button', submit: 'button', reset: 'button', image: 'button', checkbox: 'checkbox',
-			      radio: 'radio', range: 'slider', number: 'spinbutton', search: 'searchbox', hidden: null};
+			      radio: 'radio', range: 'slider', number: 'spinbutton', search: 'searchbox', file: 'button', hidden: null};
 			  const roleOf = el => {
 			    const explicit = el.getAttribute('role');
 			    if (explicit) return explicit.split(' ')[0];
@@ -207,6 +207,12 @@ final class PageScripts {
 			      scrollY: window.scrollY, tag: el.tagName.toLowerCase(),
 			      disabled: !!el.disabled || (el.matches && el.matches(':disabled')), coveredBy: covered ? describe(top) : null,
 			      inert: !!(el.closest && el.closest('[inert]')),
+			      fileInput: el.tagName === 'INPUT' && el.type === 'file',
+			      newTab: (() => {
+			        const link = el.closest && el.closest('a[href]');
+			        const target = link ? (link.getAttribute('target') || '').toLowerCase() : '';
+			        return link && target && !['_self', '_parent', '_top'].includes(target) ? link.href : null;
+			      })(),
 			      matches});
 			}""";
 

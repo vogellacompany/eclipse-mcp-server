@@ -51,6 +51,8 @@ class WebToolsTest {
 			<p id="out">nothing yet</p>
 			<div hidden><button>Invisible</button></div>
 			<details><summary>More</summary><button>Folded</button></details>
+			<input type="file" id="upload" aria-label="Upload">
+			<a id="away" href="/second" target="_blank">Elsewhere</a>
 			<div inert><button id="behind">Behind</button></div>
 			<button type="button" onclick="this.remove()">Remove me</button>
 			<input id="age" type="number" value="41"> <input id="locked" value="fixed" readonly> <input id="off" disabled>
@@ -137,6 +139,8 @@ class WebToolsTest {
 		assertFalse(snapshot.contains("Invisible"), snapshot);
 		assertFalse(snapshot.contains("Folded"), snapshot);
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#behind")), "inert");
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#upload")), "file chooser");
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#away")), "new tab");
 
 		Map<String, Object> typed = TestFixture.callAndParse("eclipse_web_type",
 				Map.of("ref", ref(snapshot, "textbox \"Name\""), "text", "Lars"));

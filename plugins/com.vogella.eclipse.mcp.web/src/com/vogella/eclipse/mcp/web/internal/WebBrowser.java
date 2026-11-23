@@ -35,6 +35,9 @@ final class WebBrowser {
 
 	private static final long COMMAND_MILLIS = 15_000;
 
+	/** The most JavaScript dialogs kept for one answer. */
+	private static final int MAX_DIALOGS = 20;
+
 	private static WebBrowser instance;
 
 	/** Starts Chromium without its sandbox, for containers where it cannot set one up even for a normal user. */
@@ -129,6 +132,16 @@ final class WebBrowser {
 	private static WebBrowser launch(String browserPath, boolean headless) throws IOException {
 		Path executable = BrowserLocator.locate(browserPath);
 		Path profile = Files.createTempDirectory("mcp-web-"); //$NON-NLS-1$
+		try {
+			return launch(executable, profile, headless);
+		} catch (IOException | RuntimeException e) {
+			// also when the process could not even be started
+			deleteQuietly(profile);
+			throw e;
+		}
+	}
+
+	private static WebBrowser launch(Path executable, Path profile, boolean headless) throws IOException {
 		List<String> command = new ArrayList<>(List.of(executable.toString(), "--remote-debugging-port=0", //$NON-NLS-1$
 				"--user-data-dir=" + profile, "--no-first-run", "--no-default-browser-check", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				"--disable-background-networking", "--disable-sync", "--disable-features=Translate", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
@@ -164,7 +177,6 @@ final class WebBrowser {
 				connection.close();
 			}
 			process.destroyForcibly();
-			deleteQuietly(profile);
 			throw e;
 		}
 	}
@@ -284,6 +296,14 @@ final class WebBrowser {
 		send("Page.enable", null); //$NON-NLS-1$
 		send("Network.enable", null); //$NON-NLS-1$
 		send("Runtime.enable", null); //$NON-NLS-1$
+		if (process != null) {
+			try {
+				// a download in this IDE's own browser would land in the user's Downloads folder unasked
+				send("Page.setDownloadBehavior", new JsonObject().put("behavior", "deny")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			} catch (IOException e) {
+				// a browser without the command keeps its default
+			}
+		}
 		Map<String, Object> tree = send("Page.getFrameTree", null); //$NON-NLS-1$
 		if (tree.get("frameTree") instanceof Map<?, ?> frameTree && frameTree.get("frame") instanceof Map<?, ?> frame) { //$NON-NLS-1$ //$NON-NLS-2$
 			synchronized (state) {
@@ -347,8 +367,11 @@ final class WebBrowser {
 	private void answerDialog(Map<String, Object> params) {
 		String type = String.valueOf(params.get("type")); //$NON-NLS-1$
 		boolean accept = !"confirm".equals(type) && !"prompt".equals(type) || acceptConfirm; //$NON-NLS-1$ //$NON-NLS-2$
-		dialogs.add(new JsonObject().put("type", type).put("message", params.get("message")) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-				.put("answered", accept ? "accepted" : "dismissed")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		if (dialogs.size() < MAX_DIALOGS) {
+			// a page in a dialog loop is still answered every time, but only the first ones are kept for the report
+			dialogs.add(new JsonObject().put("type", type).put("message", params.get("message")) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+					.put("answered", accept ? "accepted" : "dismissed")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		}
 		JsonObject answer = new JsonObject().put("accept", Boolean.valueOf(accept)); //$NON-NLS-1$
 		if (accept && params.get("defaultPrompt") instanceof String prompt) { //$NON-NLS-1$
 			answer.put("promptText", prompt); //$NON-NLS-1$
