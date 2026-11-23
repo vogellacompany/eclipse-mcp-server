@@ -156,7 +156,11 @@ final class PageScripts {
 			    flush();
 			  };
 			  const walkElements = (node, depth) => {
-			    for (const child of node.children) {
+			    // a web component inside a button, cell or list item renders its shadow tree, not its light children
+			    // and a slot renders the light children assigned to it
+			    const children = node.shadowRoot ? node.shadowRoot.children
+			        : node.tagName === 'SLOT' ? node.assignedElements({flatten: true}) : node.children;
+			    for (const child of children) {
 			      if (hidden(child)) continue;
 			      const role = roleOf(child);
 			      if (role && role !== 'presentation' && role !== 'none' && role !== 'label') {
@@ -319,7 +323,8 @@ final class PageScripts {
 			    else if (el.selectionStart === null) {
 			      // number, date and similar inputs have no text selection, and select() quietly does nothing for them;
 			      // empty them as a user selecting all and deleting would
-			      el.value = '';
+			      // through the native setter, which a framework tracking the value (React) sees as a real edit
+			      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value').set.call(el, '');
 			      el.dispatchEvent(new Event('input', {bubbles: true}));
 			    } else {
 			      el.select();
@@ -358,7 +363,7 @@ final class PageScripts {
 			  if (!option) return JSON.stringify({error: 'No option ' + JSON.stringify(wanted) + '; the options are ' +
 			      JSON.stringify(Array.from(el.options).map(o => o.label.trim()))});
 			  el.focus();
-			  el.value = option.value;
+			  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, option.value);
 			  el.dispatchEvent(new Event('input', {bubbles: true}));
 			  el.dispatchEvent(new Event('change', {bubbles: true}));
 			  return JSON.stringify({chosen: option.label.trim(), value: option.value});

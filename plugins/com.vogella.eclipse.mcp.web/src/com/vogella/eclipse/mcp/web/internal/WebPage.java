@@ -186,10 +186,14 @@ final class WebPage {
 			answer.put("dialogs", list); //$NON-NLS-1$
 		}
 		List<JsonObject> downloads = browser.takeDownloads();
+		int unlisted = browser.takeUnlistedDownloads();
 		if (!downloads.isEmpty()) {
 			JsonArray list = new JsonArray();
 			downloads.forEach(list::add);
 			answer.put("downloads", list); //$NON-NLS-1$
+			if (unlisted > 0) {
+				answer.put("downloadsTotal", Integer.valueOf(downloads.size() + unlisted)).put("downloadsTruncated", Boolean.TRUE); //$NON-NLS-1$ //$NON-NLS-2$
+			}
 		}
 	}
 

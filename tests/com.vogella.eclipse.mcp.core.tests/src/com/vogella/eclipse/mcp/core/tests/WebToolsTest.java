@@ -69,7 +69,13 @@ class WebToolsTest {
 			<a href="/second">Next page</a>
 			<div id="overlay-host"></div>
 			<shadow-greeter></shadow-greeter>
+			<ul><li><shadow-tag><b>slotted</b></shadow-tag></li></ul>
 			<script>
+			customElements.define('shadow-tag', class extends HTMLElement {
+			  connectedCallback() {
+			    this.attachShadow({mode: 'open'}).innerHTML = '<button>Nested shadow</button><slot></slot>';
+			  }
+			});
 			customElements.define('shadow-greeter', class extends HTMLElement {
 			  connectedCallback() {
 			    const root = this.attachShadow({mode: 'open'});
@@ -187,6 +193,7 @@ class WebToolsTest {
 		assertTrue(snapshot.contains("- text: \"nothing yet\""), snapshot);
 		assertFalse(snapshot.contains("Invisible"), snapshot);
 		assertFalse(snapshot.contains("Folded"), snapshot);
+		assertTrue(snapshot.contains("button \"Nested shadow\""), snapshot);
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#behind")), "inert");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#upload")), "file chooser");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#uploadLabel")), "file chooser");

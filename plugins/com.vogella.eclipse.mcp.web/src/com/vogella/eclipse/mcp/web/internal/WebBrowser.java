@@ -104,7 +104,8 @@ final class WebBrowser {
 		if (open != null) {
 			boolean sameKind;
 			if (connectUrl != null) {
-				sameKind = connectUrl.equals(open.endpoint);
+				// localhost and 127.0.0.1 name the same browser; another spelling must not dispose the one just used
+				sameKind = sameEndpoint(connectUrl, open.endpoint);
 			} else if (open.process == null) {
 				// a tab in the user's browser stays until a call names a browser of this IDE's own; headless does not
 				// apply to the user's browser, so passing it, even as the default true, does not close their tab
@@ -136,6 +137,14 @@ final class WebBrowser {
 		}
 		open.dispose();
 		return true;
+	}
+
+	private static boolean sameEndpoint(String one, String other) {
+		return other != null && canonical(one).equals(canonical(other));
+	}
+
+	private static String canonical(String endpoint) {
+		return endpoint.toLowerCase(Locale.ROOT).replace("://localhost:", "://127.0.0.1:").replace("://[::1]:", "://127.0.0.1:"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 	}
 
 	private static WebBrowser launch(String browserPath, boolean headless) throws IOException {
@@ -431,13 +440,18 @@ final class WebBrowser {
 	/** The downloads the page started since the last call, which a click answers with. */
 	List<JsonObject> takeDownloads() {
 		synchronized (state) {
-			List<JsonObject> taken = new ArrayList<>(downloads);
-			if (droppedDownloads > 0) {
-				taken.add(new JsonObject().put("more", Integer.valueOf(droppedDownloads))); //$NON-NLS-1$
-			}
+			List<JsonObject> taken = List.copyOf(downloads);
 			downloads.clear();
-			droppedDownloads = 0;
 			return taken;
+		}
+	}
+
+	/** How many downloads beyond {@link #MAX_REPORTED} were started since the last call and not listed. */
+	int takeUnlistedDownloads() {
+		synchronized (state) {
+			int dropped = droppedDownloads;
+			droppedDownloads = 0;
+			return dropped;
 		}
 	}
 
