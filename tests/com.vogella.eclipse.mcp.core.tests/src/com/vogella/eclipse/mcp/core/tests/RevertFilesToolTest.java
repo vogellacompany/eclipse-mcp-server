@@ -27,7 +27,8 @@ import com.vogella.eclipse.mcp.core.McpToolResult;
  * headlessly. What is checked here is the part a caller depends on before
  * anything is destroyed, since this tool destroys uncommitted work: that the dry
  * run changes nothing, that an untracked file is refused rather than deleted,
- * and that a file already matching HEAD is left alone.
+ * that a file already matching HEAD with nothing staged is left alone, and that
+ * a staged change is reset in the index too.
  */
 class RevertFilesToolTest {
 
@@ -126,6 +127,69 @@ class RevertFilesToolTest {
 		Map<String, Object> file = ((List<Map<String, Object>>) answer.get("files")).get(0);
 		assertEquals("reverted", file.get("state"), "got " + file);
 		assertEquals("committed\n", Files.readString(tracked), "the file has to hold what HEAD holds");
+	}
+
+	@Test
+	void revertingAStagedChangeResetsTheIndexToo() throws Exception {
+		Files.writeString(tracked, "staged edit\n");
+		try (Git git = Git.open(directory.toFile())) {
+			git.add().addFilepattern("tracked.txt").call();
+		}
+
+		TestFixture.callAndParse(NAME, Map.of("paths", List.of(tracked.toString()), "dryRun", Boolean.FALSE));
+
+		assertEquals("committed\n", Files.readString(tracked));
+		try (Git git = Git.open(directory.toFile())) {
+			assertTrue(git.status().call().isClean(), "the staged change would otherwise be committed next");
+		}
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void aStagedChangeIsResetEvenWhenTheFileAlreadyMatchesHead() throws Exception {
+		Files.writeString(tracked, "staged edit\n");
+		try (Git git = Git.open(directory.toFile())) {
+			git.add().addFilepattern("tracked.txt").call();
+		}
+		Files.writeString(tracked, "committed\n");
+
+		Map<String, Object> answer = TestFixture.callAndParse(NAME,
+				Map.of("paths", List.of(tracked.toString()), "dryRun", Boolean.FALSE));
+
+		Map<String, Object> file = ((List<Map<String, Object>>) answer.get("files")).get(0);
+		assertEquals("reverted", file.get("state"), "got " + file);
+		assertEquals(Boolean.TRUE, file.get("unstaged"), "got " + file);
+		try (Git git = Git.open(directory.toFile())) {
+			assertTrue(git.status().call().isClean(), "the staged change would otherwise be committed next");
+		}
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void anUnmergedPathTakesHeadsSideAndTheMergeStaysInProgress() throws Exception {
+		try (Git git = Git.open(directory.toFile())) {
+			git.checkout().setCreateBranch(true).setName("side").call();
+			Files.writeString(tracked, "side\n");
+			git.commit().setAll(true).setMessage("side").setAuthor("Test", "test@example.com")
+					.setCommitter("Test", "test@example.com").setSign(Boolean.FALSE).call();
+			git.checkout().setName("main").call();
+			Files.writeString(tracked, "main\n");
+			git.commit().setAll(true).setMessage("main").setAuthor("Test", "test@example.com")
+					.setCommitter("Test", "test@example.com").setSign(Boolean.FALSE).call();
+			git.merge().include(git.getRepository().resolve("side")).call();
+			assertTrue(git.status().call().getConflicting().contains("tracked.txt"), "the fixture needs a conflict");
+		}
+
+		Map<String, Object> answer = TestFixture.callAndParse(NAME,
+				Map.of("paths", List.of(tracked.toString()), "dryRun", Boolean.FALSE));
+
+		Map<String, Object> file = ((List<Map<String, Object>>) answer.get("files")).get(0);
+		assertEquals("reverted", file.get("state"), "got " + file);
+		assertEquals("main\n", Files.readString(tracked));
+		try (Git git = Git.open(directory.toFile())) {
+			assertTrue(git.status().call().getConflicting().isEmpty(), "the path no longer conflicts");
+			assertTrue(git.getRepository().readMergeHeads() != null, "the merge stays in progress");
+		}
 	}
 
 	@Test
