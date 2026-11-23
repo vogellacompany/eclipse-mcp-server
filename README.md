@@ -109,7 +109,7 @@ The `workspace` field in the discovery file tells which workspace an endpoint se
 After `eclipse_restart`, compare `startedAt` to know the new server is up; some clients need a manual reconnect, in Claude Code through `/mcp`.
 
 Several clients can share one server.
-While more than one is connected, `eclipse_get_build_status`, `eclipse_get_test_results` and `eclipse_get_provisioning_status` refuse to guess "the most recent" entry, so pass the id explicitly.
+While more than one is connected, `eclipse_get_build_status`, `eclipse_get_test_results`, `eclipse_get_provisioning_status` and `eclipse_get_command_output` refuse to guess "the most recent" entry, so pass the id explicitly.
 
 The server offers tools only: `initialize`, `ping`, `tools/list` and `tools/call`.
 Every tool returns pretty-printed JSON, and every list-returning tool honours `maxResults` and reports `total` and `truncated`.
