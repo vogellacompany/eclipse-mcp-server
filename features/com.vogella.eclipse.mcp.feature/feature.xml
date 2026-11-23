@@ -35,6 +35,7 @@
    <plugin id="com.vogella.eclipse.mcp.p2" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="com.vogella.eclipse.mcp.debug" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="com.vogella.eclipse.mcp.git" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
+   <plugin id="com.vogella.eclipse.mcp.gradle" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="com.vogella.eclipse.mcp.ide" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="com.vogella.eclipse.mcp.web" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
 

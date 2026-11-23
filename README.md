@@ -201,6 +201,16 @@ Tools marked ✎ change something; the rest are read-only.
 | ✎ `eclipse_add_git_repository`, `eclipse_checkout`, `eclipse_fetch_pull_request` | Register a repository, switch branches, fetch a GitHub pull request |
 | ✎ `eclipse_revert_files` | Revert files to HEAD, keeping the discarded content in local history |
 
+**Gradle**
+
+Needs Buildship; without it the tools say so.
+
+| Tool | Purpose |
+|---|---|
+| ✎ `eclipse_refresh_gradle_project` | Synchronize a project with its build scripts, reporting what Buildship found |
+| ✎ `eclipse_run_gradle_tasks`, `eclipse_get_gradle_run` | Run tasks as a job through Buildship, then poll, read the output or cancel |
+| `eclipse_list_gradle_tasks` | The tasks of a project and its subprojects, from Buildship's Gradle model |
+
 **Workbench and UI**
 
 | Tool | Purpose |
@@ -291,6 +301,7 @@ Contributed texts are appended to the default instructions, which describe the I
 | `com.vogella.eclipse.mcp.debug` | Breakpoint and debug session tools |
 | `com.vogella.eclipse.mcp.pde` | Plug-in development tools |
 | `com.vogella.eclipse.mcp.git` | EGit tools |
+| `com.vogella.eclipse.mcp.gradle` | Gradle tools through Buildship |
 | `com.vogella.eclipse.mcp.ide` | IDE-only tools: open in editor, compare, launch shortcuts, project import |
 | `com.vogella.eclipse.mcp.p2` | Provisioning tools |
 | `com.vogella.eclipse.mcp.web` | Web page tools over the Chrome DevTools Protocol; needs only core and an installed Chromium based browser |
