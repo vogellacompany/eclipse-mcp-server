@@ -80,6 +80,9 @@ final class BrowserLocator {
 					result.add(Path.of(base, "Chromium", "Application", "chrome.exe")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				}
 			}
+		} else {
+			result.add(Path.of("/opt/google/chrome/chrome")); //$NON-NLS-1$
+			result.add(Path.of("/opt/microsoft/msedge/msedge")); //$NON-NLS-1$
 		}
 		String path = System.getenv("PATH"); //$NON-NLS-1$
 		if (path != null) {
