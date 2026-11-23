@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+   <extension point="com.vogella.eclipse.mcp.core.tools">
+      <tool class="com.vogella.eclipse.mcp.web.internal.WebOpenTool"/>
+      <tool class="com.vogella.eclipse.mcp.web.internal.WebSnapshotTool"/>
+      <tool class="com.vogella.eclipse.mcp.web.internal.WebClickTool"/>
+      <tool class="com.vogella.eclipse.mcp.web.internal.WebTypeTool"/>
+      <tool class="com.vogella.eclipse.mcp.web.internal.WebScreenshotTool"/>
+      <tool class="com.vogella.eclipse.mcp.web.internal.WebCloseTool"/>
+   </extension>
+
+</plugin>

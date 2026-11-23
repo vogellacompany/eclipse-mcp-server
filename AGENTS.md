@@ -32,6 +32,7 @@ plugins/com.vogella.eclipse.mcp.debug    breakpoint tools, debug session tools, 
 plugins/com.vogella.eclipse.mcp.git      EGit tools, checkout and pull request fetch
 plugins/com.vogella.eclipse.mcp.ide      IDE-only tools: open in editor, compare, launch shortcuts, project import
 plugins/com.vogella.eclipse.mcp.p2       provisioning tools, repositories, install, update, headless trust
+plugins/com.vogella.eclipse.mcp.web      web page tools: a Chromium driven over the DevTools Protocol
 features/com.vogella.eclipse.mcp.feature
 tests/com.vogella.eclipse.mcp.core.tests    the tools, headless
 tests/com.vogella.eclipse.mcp.server.tests  the HTTP endpoint, driven by a real MCP client
@@ -126,6 +127,14 @@ Build a lookup key in one helper, as `FindReferencesTool.locationOf` does; two s
 **"The most recent" is ambiguous with more than one client.**
 The build, test run and provisioning registries are per IDE, so those tools consult `ClientSessions` and refuse the implicit default when a second client is connected.
 `ActiveSessions` counts `Mcp-Session-Id` headers and drops a session on its DELETE; with no provider (headless, tests) the count is one.
+
+**The web bundle has no third party dependency.**
+`com.vogella.eclipse.mcp.web` speaks the Chrome DevTools Protocol over `java.net.http.WebSocket` and never downloads a browser; Playwright for Java would need a Node.js driver per platform inside the bundle and a browser download on first use.
+`CdpConnection.HTTP` bypasses any proxy, because the browser listens on loopback and an IDE's system proxy would not reach it.
+A started browser picks its own port (`--remote-debugging-port=0`) and writes it to `DevToolsActivePort` in its temporary profile, which is the only race-free way to learn it.
+Refs from `eclipse_web_snapshot` live in `window.__mcpRefs` in the page rather than in DOM attributes, so the page is never changed and a navigation drops them.
+JavaScript dialogs block the page until answered, so `WebBrowser` answers each at once and the acting tool reports it under `dialogs`; a confirm or prompt is dismissed unless the call passes `acceptDialogs`.
+`WebToolsTest` drives a real headless browser and is skipped where none is installed.
 
 ## Tests and CI
 
