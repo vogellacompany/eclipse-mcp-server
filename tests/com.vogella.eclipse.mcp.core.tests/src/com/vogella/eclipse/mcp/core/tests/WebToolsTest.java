@@ -48,6 +48,7 @@ class WebToolsTest {
 			</form>
 			<p id="out">nothing yet</p>
 			<div hidden><button>Invisible</button></div>
+			<button type="button" onclick="this.remove()">Remove me</button>
 			<a href="/second">Next page</a>
 			<div id="overlay-host"></div>
 			</body></html>""";
@@ -169,10 +170,21 @@ class WebToolsTest {
 		String ask = ref(first, "button \"Ask\"");
 		String second = snapshot();
 		assertEquals(greet, ref(second, "button \"Greet\""));
-		TestFixture.call("eclipse_web_type", Map.of("selector", "#name", "text", "x"));
 		TestFixture.callAndParse("eclipse_web_snapshot", Map.of("selector", "#out"));
-		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("ref", ask)), "take a new snapshot");
-		assertEquals(ask, ref(snapshot(), "button \"Ask\""));
+		assertFalse(TestFixture.call("eclipse_web_click", Map.of("ref", ask)).isError(),
+				"a snapshot of part of the page keeps the other refs");
+		String remove = ref(snapshot(), "button \"Remove me\"");
+		TestFixture.callAndParse("eclipse_web_click", Map.of("ref", remove));
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("ref", remove)), "removed");
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#color", "text", "")),
+				"cannot be emptied");
+
+		open("/second");
+		String covered = ref(snapshot(), "button \"Under\"");
+		assertFalse(List.of(greet, ask, remove).contains(covered), "a new document must not reuse refs: " + covered);
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("ref", greet)), "take a new snapshot");
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#covered", "text", "")),
+				"does not take text");
 	}
 
 	@Test

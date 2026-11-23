@@ -5,10 +5,11 @@ import com.vogella.eclipse.mcp.core.json.Json;
 /**
  * The JavaScript the web tools run in the page.
  * <p>
- * The snapshot keeps the elements it listed in {@code window.__mcpRefs}, a map from ref to element, and gives an
- * element the same ref in every snapshot of a document through the weak map {@code window.__mcpIds}. A ref is never
- * reused for another element, so a ref from an older snapshot either still names its element or is refused. The page's
- * DOM is never changed, and a new document drops the refs by itself.
+ * The snapshot keeps every element it listed in {@code window.__mcpRefs}, a map from ref to element, and gives an
+ * element the same ref in every snapshot of a document through the weak map {@code window.__mcpIds}. Numbering
+ * continues from where the previous document stopped, which {@link WebBrowser} remembers, so a ref is never reused for
+ * another element, not even after a navigation: an old ref either still names its element or is refused. The page's DOM
+ * is never changed.
  */
 final class PageScripts {
 
@@ -16,9 +17,9 @@ final class PageScripts {
 	}
 
 	private static final String SNAPSHOT = """
-			(rootSelector, maxNodes) => {
-			  const refs = new Map();
-			  window.__mcpRefs = refs;
+			(rootSelector, maxNodes, firstRef) => {
+			  const refs = window.__mcpRefs || (window.__mcpRefs = new Map());
+			  if (!window.__mcpNext) window.__mcpNext = firstRef - 1;
 			  const ids = window.__mcpIds || (window.__mcpIds = new WeakMap());
 			  const lines = [];
 			  let total = 0;
@@ -82,7 +83,7 @@ final class PageScripts {
 			  const describe = (el, role, depth) => {
 			    let ref = ids.get(el);
 			    if (!ref) {
-			      window.__mcpNext = (window.__mcpNext || 0) + 1;
+			      window.__mcpNext++;
 			      ref = 'e' + window.__mcpNext;
 			      ids.set(el, ref);
 			    }
@@ -161,7 +162,8 @@ final class PageScripts {
 			  const root = rootSelector ? document.querySelector(rootSelector) : document.body;
 			  if (!root) throw new Error('No element matches ' + rootSelector);
 			  walk(root, 0);
-			  return JSON.stringify({snapshot: lines.join('\\n'), total, truncated: total > lines.length});
+			  return JSON.stringify({snapshot: lines.join('\\n'), total, truncated: total > lines.length,
+			      nextRef: window.__mcpNext + 1});
 			}""";
 
 	/**
@@ -218,6 +220,7 @@ final class PageScripts {
 			((text) => {
 			  const el = window.__mcpTarget;
 			  const wanted = text.trim();
+			  if (!wanted) return JSON.stringify({error: 'Pass the label or value of the option to pick; a select cannot be emptied by typing.'});
 			  const option = Array.from(el.options).find(o => o.label.trim() === wanted || o.value === wanted)
 			      || Array.from(el.options).find(o => o.label.trim().toLowerCase().includes(wanted.toLowerCase()));
 			  if (!option) return JSON.stringify({error: 'No option ' + JSON.stringify(wanted) + '; the options are ' +
@@ -229,8 +232,8 @@ final class PageScripts {
 			  return JSON.stringify({chosen: option.label.trim(), value: option.value});
 			})""";
 
-	static String snapshot(String rootSelector, int maxNodes) {
-		return call(SNAPSHOT, Json.write(rootSelector), String.valueOf(maxNodes));
+	static String snapshot(String rootSelector, int maxNodes, long firstRef) {
+		return call(SNAPSHOT, Json.write(rootSelector), String.valueOf(maxNodes), String.valueOf(firstRef));
 	}
 
 	static String locate(String ref, String selector) {

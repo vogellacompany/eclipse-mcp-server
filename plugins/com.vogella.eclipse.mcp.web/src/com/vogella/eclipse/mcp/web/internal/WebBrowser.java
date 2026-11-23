@@ -37,6 +37,9 @@ final class WebBrowser {
 
 	private static WebBrowser instance;
 
+	/** Survives a navigation and a restart of the browser, because a ref a client still holds must never name another element. */
+	private static long nextRef = 1;
+
 	private final Process process;
 	private final Path executable;
 	private final Path profile;
@@ -113,7 +116,6 @@ final class WebBrowser {
 		Path executable = BrowserLocator.locate(browserPath);
 		Path profile = Files.createTempDirectory("mcp-web-"); //$NON-NLS-1$
 		List<String> command = new ArrayList<>(List.of(executable.toString(), "--remote-debugging-port=0", //$NON-NLS-1$
-				"--remote-allow-origins=*", //$NON-NLS-1$
 				"--user-data-dir=" + profile, "--no-first-run", "--no-default-browser-check", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				"--disable-background-networking", "--disable-sync", "--disable-features=Translate", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				"--window-size=1280,800")); //$NON-NLS-1$
@@ -334,7 +336,15 @@ final class WebBrowser {
 			documentStatus = null;
 			loading = true;
 		}
-		Map<String, Object> result = send("Page.navigate", new JsonObject().put("url", url)); //$NON-NLS-1$ //$NON-NLS-2$
+		Map<String, Object> result;
+		try {
+			result = send("Page.navigate", new JsonObject().put("url", url)); //$NON-NLS-1$ //$NON-NLS-2$
+		} catch (IOException e) {
+			synchronized (state) {
+				loading = false;
+			}
+			throw e;
+		}
 		Object error = result.get("errorText"); //$NON-NLS-1$
 		if (error instanceof String text && !text.isBlank()) {
 			synchronized (state) {
@@ -384,6 +394,15 @@ final class WebBrowser {
 				}
 			}
 		}
+	}
+
+	/** The first ref number a new document's snapshot hands out, so no ref is ever reused for another element. */
+	static synchronized long nextRef() {
+		return nextRef;
+	}
+
+	static synchronized void refsUsedUpTo(long next) {
+		nextRef = Math.max(nextRef, next);
 	}
 
 	int pendingRequests() {
