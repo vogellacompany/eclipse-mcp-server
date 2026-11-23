@@ -22,7 +22,6 @@ import org.eclipse.equinox.p2.query.QueryUtil;
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.core.ToolArguments;
-import com.vogella.eclipse.mcp.core.json.JsonArray;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
 /**
@@ -101,17 +100,17 @@ public final class UninstallTool implements IMcpTool {
 			return McpToolResult.error(ResolutionStatuses.failure("The uninstall could not be resolved", resolution)); //$NON-NLS-1$
 		}
 		IProvisioningPlan plan = operation.getProvisioningPlan();
-		Changes changes = capped(units(plan == null ? null : plan.getRemovals()),
+		CappedList changes = capped(units(plan == null ? null : plan.getRemovals()),
 				units(plan == null ? null : plan.getAdditions()), maxResults);
 
 		if (args.getBoolean("dryRun", true)) { //$NON-NLS-1$
 			return McpToolResult.of(Provisioning
 					.record("uninstall", "dryRun", //$NON-NLS-1$ //$NON-NLS-2$
 							"Nothing was changed. This is what would be removed; pass dryRun false to apply it. A removal takes effect on the next IDE restart.", //$NON-NLS-1$
-							changes.entries)
+							changes.listed())
 					.toJson()
-					.put("total", Integer.valueOf(changes.total)) //$NON-NLS-1$
-					.put("truncated", Boolean.valueOf(changes.truncated)) //$NON-NLS-1$
+					.put("total", Integer.valueOf(changes.total())) //$NON-NLS-1$
+					.put("truncated", Boolean.valueOf(changes.truncated())) //$NON-NLS-1$
 					.toString());
 		}
 		// an uninstall downloads nothing, so trust prompts should never fire here;
@@ -125,7 +124,7 @@ public final class UninstallTool implements IMcpTool {
 			return McpToolResult.error("p2 produced no provisioning job for the resolved uninstall."); //$NON-NLS-1$
 		}
 		Provisioning.Operation handle = Provisioning.start("uninstall", tracked -> { //$NON-NLS-1$
-			Provisioning.setChanges(tracked, changes.entries, changes.total, changes.truncated);
+			Provisioning.setChanges(tracked, changes.listed(), changes.total(), changes.truncated());
 			return job;
 		});
 		Provisioning.onFinished(handle, () -> {
@@ -140,25 +139,11 @@ public final class UninstallTool implements IMcpTool {
 				.put("version", unit.getVersion().toString()); //$NON-NLS-1$
 	}
 
-	/** The capped change list, with the count and the truncation flag behind the cap. */
-	private record Changes(JsonArray entries, int total, boolean truncated) {
-	}
-
-	private static Changes capped(List<IInstallableUnit> removed, List<IInstallableUnit> added, int maxResults) {
-		JsonArray entries = new JsonArray();
-		for (IInstallableUnit unit : removed) {
-			if (entries.size() >= maxResults) {
-				return new Changes(entries, removed.size() + added.size(), true);
-			}
-			entries.add(change("removed", unit)); //$NON-NLS-1$
-		}
-		for (IInstallableUnit unit : added) {
-			if (entries.size() >= maxResults) {
-				return new Changes(entries, removed.size() + added.size(), true);
-			}
-			entries.add(change("added", unit)); //$NON-NLS-1$
-		}
-		return new Changes(entries, entries.size(), false);
+	private static CappedList capped(List<IInstallableUnit> removed, List<IInstallableUnit> added, int maxResults) {
+		List<JsonObject> entries = new ArrayList<>();
+		removed.forEach(unit -> entries.add(change("removed", unit))); //$NON-NLS-1$
+		added.forEach(unit -> entries.add(change("added", unit))); //$NON-NLS-1$
+		return CappedList.cap(entries, maxResults);
 	}
 
 	private static List<IInstallableUnit> installed(IProvisioningAgent agent, String unitId, Version version) {

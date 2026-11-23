@@ -26,6 +26,8 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
 /** Applies available updates to the running IDE. */
 public final class UpdateTool implements IMcpTool {
 
+	private static final int DEFAULT_MAX_RESULTS = 200;
+
 	@Override
 	public String getName() {
 		return "eclipse_update"; //$NON-NLS-1$
@@ -48,7 +50,8 @@ public final class UpdateTool implements IMcpTool {
 				    "refresh":        {"type":"boolean","default":true,"description":"Re-read the repository metadata first. Without it the update resolves against p2's cache and may find nothing to apply."},
 				    "trustUnsigned":  {"type":"boolean","default":true,"description":"Accept unsigned content, or content signed by a certificate this IDE does not trust. On by default, because an install performed by this server is unattended and there is nobody to answer the dialog p2 would otherwise raise. This is NOT bounded by which sites are configured, because eclipse_add_repository can configure a new one: whoever can call these tools decides what gets installed. Nothing is added to the IDE's permanent trust store, and whatever was accepted is reported. Set false to refuse unsigned content instead."},
 				    "wait":           {"type":"boolean","default":false,"description":"Wait for the job. Updates are slow, so this is off by default."},
-				    "timeoutSeconds": {"type":"integer","default":25,"minimum":1,"maximum":3600,"description":"How long to wait when wait is true. Bounded in practice by the server's own call timeout."}
+				    "timeoutSeconds": {"type":"integer","default":25,"minimum":1,"maximum":3600,"description":"How long to wait when wait is true. Bounded in practice by the server's own call timeout."},
+				    "maxResults":     {"type":"integer","default":200,"minimum":1,"maximum":2000,"description":"Cap on the listed changes. This only limits what the answer lists, never what is installed: every resolved update is still applied. total counts them all and truncated says the list was cut."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -57,6 +60,7 @@ public final class UpdateTool implements IMcpTool {
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
+		int maxResults = args.getInt("maxResults", DEFAULT_MAX_RESULTS, 1, 2000); //$NON-NLS-1$
 		IProvisioningAgent agent = Provisioning.agent();
 		if (agent == null) {
 			return McpToolResult.error("No p2 provisioning agent is available, so this IDE cannot update itself."); //$NON-NLS-1$
@@ -85,7 +89,7 @@ public final class UpdateTool implements IMcpTool {
 			return McpToolResult.of(Provisioning
 					.record("update", "done", //$NON-NLS-1$ //$NON-NLS-2$
 							"Nothing to update; everything installed is already current. Every enabled repository was searched, not only the one the installed version came from.", //$NON-NLS-1$
-							new JsonArray())
+							new JsonArray(), 0, false)
 					.toJson().toString());
 		}
 		if (!unitIds.isEmpty()) {
@@ -95,7 +99,7 @@ public final class UpdateTool implements IMcpTool {
 			List<Update> wanted = newestPerUnit(possible, unitIds);
 			if (wanted.isEmpty()) {
 				return McpToolResult.of(Provisioning.record("update", "done", //$NON-NLS-1$ //$NON-NLS-2$
-						"No update is available for %s.".formatted(unitIds), new JsonArray()).toJson().toString()); //$NON-NLS-1$
+						"No update is available for %s.".formatted(unitIds), new JsonArray(), 0, false).toJson().toString()); //$NON-NLS-1$
 			}
 			operation.setSelectedUpdates(wanted.toArray(Update[]::new));
 			resolution = operation.resolveModal(monitor);
@@ -104,16 +108,18 @@ public final class UpdateTool implements IMcpTool {
 		if (!resolution.isOK() && resolution.getSeverity() == IStatus.ERROR) {
 			return McpToolResult.error(ResolutionStatuses.failure("The update could not be resolved", resolution)); //$NON-NLS-1$
 		}
-		JsonArray changes = new JsonArray();
+		List<JsonObject> entries = new ArrayList<>();
 		List<String> unexpected = new ArrayList<>();
 		for (Update update : possible) {
-			changes.add(new JsonObject().put("unit", update.toUpdate.getId()) //$NON-NLS-1$
+			entries.add(new JsonObject().put("unit", update.toUpdate.getId()) //$NON-NLS-1$
 					.put("fromVersion", update.toUpdate.getVersion().toString()) //$NON-NLS-1$
 					.put("toVersion", update.replacement.getVersion().toString())); //$NON-NLS-1$
 			if (!unitIds.isEmpty() && !unitIds.contains(update.toUpdate.getId())) {
 				unexpected.add(update.toUpdate.getId());
 			}
 		}
+		CappedList capped = CappedList.cap(entries, maxResults);
+		JsonArray changes = capped.listed();
 		// last line of defence: never install something the caller did not name
 		if (!unexpected.isEmpty()) {
 			return McpToolResult.error(
@@ -135,7 +141,7 @@ public final class UpdateTool implements IMcpTool {
 		if (args.getBoolean("dryRun", true)) { //$NON-NLS-1$
 			Provisioning.Operation dry = Provisioning.record("update", "dryRun", //$NON-NLS-1$ //$NON-NLS-2$
 					"Nothing was changed. This is what would be updated; pass dryRun false to apply it. plan lists the other installed units it would replace, remove or add a second version beside.", //$NON-NLS-1$
-					changes);
+					changes, capped.total(), capped.truncated());
 			Provisioning.setPlan(dry, plan);
 			return McpToolResult.of(dry.toJson().toString());
 		}
@@ -149,7 +155,7 @@ public final class UpdateTool implements IMcpTool {
 			return McpToolResult.error("p2 produced no provisioning job for the resolved update."); //$NON-NLS-1$
 		}
 		Provisioning.Operation handle = Provisioning.start("update", tracked -> { //$NON-NLS-1$
-			Provisioning.setChanges(tracked, changes);
+			Provisioning.setChanges(tracked, changes, capped.total(), capped.truncated());
 			Provisioning.setPlan(tracked, plan);
 			return job;
 		});
