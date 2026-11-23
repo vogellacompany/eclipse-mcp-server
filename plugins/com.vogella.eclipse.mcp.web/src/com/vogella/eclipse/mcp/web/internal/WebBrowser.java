@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
+import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.json.Json;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 
@@ -24,8 +25,8 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
  * The one browser page the web tools drive: a Chromium the IDE started, or a tab opened in a browser that already
  * listens for DevTools connections.
  * <p>
- * All access goes through {@link #current()} and {@link #start}, which synchronize on the class, so two clients see
- * the same page one call after the other.
+ * There is one page per IDE; the tools run one at a time through {@link WebPage#exclusive}, so two clients take turns
+ * on it rather than acting on each other's element.
  */
 final class WebBrowser {
 
@@ -158,7 +159,8 @@ final class WebBrowser {
 	/** Chromium writes the port it picked into the profile, which is the only race-free way to learn it. */
 	private static int awaitPort(Process process, Path profile, Path log) throws IOException {
 		Path portFile = profile.resolve("DevToolsActivePort"); //$NON-NLS-1$
-		long deadline = System.nanoTime() + Duration.ofSeconds(20).toNanos();
+		long budget = launchBudgetMillis(20_000);
+		long deadline = System.nanoTime() + Duration.ofMillis(budget).toNanos();
 		while (System.nanoTime() < deadline) {
 			if (!process.isAlive()) {
 				throw new IOException("The browser exited with code " + process.exitValue() + " before it was ready: " //$NON-NLS-1$ //$NON-NLS-2$
@@ -172,7 +174,9 @@ final class WebBrowser {
 			}
 			sleep(50);
 		}
-		throw new IOException("The browser did not open its DevTools port within 20 seconds: " + tail(log)); //$NON-NLS-1$
+		throw new IOException("The browser did not open its DevTools port within " + budget / 1000 //$NON-NLS-1$
+				+ " seconds, which is what was left of this call. A first start on a busy machine can take that long; raise the tool call timeout in Preferences > General > MCP Server if it keeps happening. Output: " //$NON-NLS-1$
+				+ tail(log));
 	}
 
 	@SuppressWarnings("unchecked")
@@ -184,7 +188,7 @@ final class WebBrowser {
 			}
 			throw new IOException("The browser at " + endpoint + " did not open a new tab."); //$NON-NLS-1$ //$NON-NLS-2$
 		}
-		long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+		long deadline = System.nanoTime() + Duration.ofMillis(launchBudgetMillis(10_000)).toNanos();
 		while (true) {
 			if (Json.parse(http(endpoint + "/json/list", "GET")) instanceof List<?> targets) { //$NON-NLS-1$ //$NON-NLS-2$
 				for (Object target : targets) {
@@ -199,6 +203,11 @@ final class WebBrowser {
 			}
 			sleep(100);
 		}
+	}
+
+	/** At most {@code millis}, and never longer than what is left of the tool call, so a slow start answers in time. */
+	private static long launchBudgetMillis(long millis) {
+		return Math.max(1_000, Math.min(millis, CallBudget.leftMillis()));
 	}
 
 	private static String http(String url, String method) throws IOException {

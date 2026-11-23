@@ -35,6 +35,10 @@ public final class WebCloseTool implements IMcpTool {
 
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
+		return WebPage.exclusive(() -> run(arguments));
+	}
+
+	private static McpToolResult run(Map<String, Object> arguments) {
 		return McpToolResult.of(new JsonObject().put("closed", Boolean.valueOf(WebBrowser.shutdown())).toString()); //$NON-NLS-1$
 	}
 }

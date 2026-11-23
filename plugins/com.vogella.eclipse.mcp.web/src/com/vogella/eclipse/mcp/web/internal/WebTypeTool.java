@@ -46,6 +46,10 @@ public final class WebTypeTool implements IMcpTool {
 
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
+		return WebPage.exclusive(() -> run(arguments));
+	}
+
+	private static McpToolResult run(Map<String, Object> arguments) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String text = args.getText("text"); //$NON-NLS-1$
 		if (text == null) {
@@ -89,7 +93,7 @@ public final class WebTypeTool implements IMcpTool {
 				if (args.getBoolean("submit", false)) { //$NON-NLS-1$
 					UserInput.press(browser, "Enter", 13, "\r"); //$NON-NLS-1$ //$NON-NLS-2$
 				}
-				JsonObject answer = WebPage.settleAndDescribe(browser, WebPage.settleMillis(args, 10), before);
+				JsonObject answer = WebPage.settleAndDescribe(browser, args, 10, before);
 				answer.put("typedInto", target.tag()); //$NON-NLS-1$
 				if (target.matches() > 1) {
 					answer.put("matches", Integer.valueOf(target.matches())); //$NON-NLS-1$

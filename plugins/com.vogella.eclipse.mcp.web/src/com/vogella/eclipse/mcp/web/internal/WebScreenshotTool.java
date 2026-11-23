@@ -44,6 +44,10 @@ public final class WebScreenshotTool implements IMcpTool {
 
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
+		return WebPage.exclusive(() -> run(arguments));
+	}
+
+	private static McpToolResult run(Map<String, Object> arguments) {
 		ToolArguments args = ToolArguments.of(arguments);
 		WebBrowser browser = WebBrowser.current();
 		if (browser == null) {

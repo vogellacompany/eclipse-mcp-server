@@ -162,6 +162,20 @@ class WebToolsTest {
 	}
 
 	@Test
+	void keepsRefsAcrossSnapshotsAndRefusesOnesWhoseElementWentAway() throws Exception {
+		open("/");
+		String first = snapshot();
+		String greet = ref(first, "button \"Greet\"");
+		String ask = ref(first, "button \"Ask\"");
+		String second = snapshot();
+		assertEquals(greet, ref(second, "button \"Greet\""));
+		TestFixture.call("eclipse_web_type", Map.of("selector", "#name", "text", "x"));
+		TestFixture.callAndParse("eclipse_web_snapshot", Map.of("selector", "#out"));
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("ref", ask)), "take a new snapshot");
+		assertEquals(ask, ref(snapshot(), "button \"Ask\""));
+	}
+
+	@Test
 	void refusesACoveredElementAndStaleRefs() throws Exception {
 		open("/");
 		String greet = ref(snapshot(), "button \"Greet\"");
@@ -199,6 +213,9 @@ class WebToolsTest {
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_snapshot", Map.of()), "eclipse_web_open");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "a")), "eclipse_web_open");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_open", Map.of("url", "javascript:alert(1)")), "absolute");
+		TestFixture.assertRefused(
+				TestFixture.call("eclipse_web_open", Map.of("url", base + "/", "connectUrl", "ftp://localhost:9222")),
+				"DevTools endpoint");
 		assertEquals(Boolean.FALSE, TestFixture.callAndParse("eclipse_web_close", Map.of()).get("closed"));
 	}
 

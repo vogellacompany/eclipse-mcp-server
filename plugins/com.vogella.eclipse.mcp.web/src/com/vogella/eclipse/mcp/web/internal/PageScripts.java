@@ -5,8 +5,10 @@ import com.vogella.eclipse.mcp.core.json.Json;
 /**
  * The JavaScript the web tools run in the page.
  * <p>
- * The snapshot keeps the elements it numbered in {@code window.__mcpRefs}, a map from ref to element that lives as
- * long as the document, so the page's DOM is never changed and a new document drops the refs by itself.
+ * The snapshot keeps the elements it listed in {@code window.__mcpRefs}, a map from ref to element, and gives an
+ * element the same ref in every snapshot of a document through the weak map {@code window.__mcpIds}. A ref is never
+ * reused for another element, so a ref from an older snapshot either still names its element or is refused. The page's
+ * DOM is never changed, and a new document drops the refs by itself.
  */
 final class PageScripts {
 
@@ -17,7 +19,7 @@ final class PageScripts {
 			(rootSelector, maxNodes) => {
 			  const refs = new Map();
 			  window.__mcpRefs = refs;
-			  let counter = 0;
+			  const ids = window.__mcpIds || (window.__mcpIds = new WeakMap());
 			  const lines = [];
 			  let total = 0;
 			  const clean = s => (s || '').replace(/\\s+/g, ' ').trim();
@@ -78,7 +80,12 @@ final class PageScripts {
 			    return clean(el.getAttribute('placeholder')) || clean(el.getAttribute('title'));
 			  };
 			  const describe = (el, role, depth) => {
-			    const ref = 'e' + (++counter);
+			    let ref = ids.get(el);
+			    if (!ref) {
+			      window.__mcpNext = (window.__mcpNext || 0) + 1;
+			      ref = 'e' + window.__mcpNext;
+			      ids.set(el, ref);
+			    }
 			    refs.set(ref, el);
 			    let line = '  '.repeat(depth) + '- ' + role;
 			    const name = nameOf(el, role);
@@ -166,7 +173,7 @@ final class PageScripts {
 			  let el, matches = 1;
 			  if (ref) {
 			    el = window.__mcpRefs && window.__mcpRefs.get(ref);
-			    if (!el) return JSON.stringify({error: 'No element ' + ref + ' on this page. Refs belong to the last eclipse_web_snapshot of the current document; take a new snapshot.'});
+			    if (!el) return JSON.stringify({error: 'No element ' + ref + ' in the last eclipse_web_snapshot of this page: it is gone, hidden, or the page navigated since. Take a new snapshot.'});
 			    if (!el.isConnected) return JSON.stringify({error: 'Element ' + ref + ' was removed from the page since the snapshot; take a new snapshot.'});
 			  } else {
 			    const all = document.querySelectorAll(selector);

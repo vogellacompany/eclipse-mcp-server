@@ -46,6 +46,10 @@ public final class WebOpenTool implements IMcpTool {
 
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
+		return WebPage.exclusive(() -> run(arguments));
+	}
+
+	private static McpToolResult run(Map<String, Object> arguments) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String url = normalize(args.getString("url")); //$NON-NLS-1$
 		if (url == null) {
@@ -53,7 +57,13 @@ public final class WebOpenTool implements IMcpTool {
 		}
 		boolean headless = args.getBoolean("headless", true); //$NON-NLS-1$
 		try {
-			WebBrowser browser = WebBrowser.start(args.getString("browserPath"), headless, args.getString("connectUrl")); //$NON-NLS-1$ //$NON-NLS-2$
+			String connect = args.getString("connectUrl"); //$NON-NLS-1$
+			String connectUrl = connect == null ? null : endpoint(connect);
+			if (connect != null && connectUrl == null) {
+				return McpToolResult.error("connectUrl must be the http address of a DevTools endpoint, e.g. http://localhost:9222, not " //$NON-NLS-1$
+						+ connect + "."); //$NON-NLS-1$
+			}
+			WebBrowser browser = WebBrowser.start(args.getString("browserPath"), headless, connectUrl); //$NON-NLS-1$
 			String error = browser.navigate(url);
 			if (error != null) {
 				JsonObject answer = browser.describe();
@@ -61,7 +71,7 @@ public final class WebOpenTool implements IMcpTool {
 				return McpToolResult.error("The browser could not load " + url + ": " + error //$NON-NLS-1$ //$NON-NLS-2$
 						+ ". Check that the server is running and the address is right. " + answer); //$NON-NLS-1$
 			}
-			JsonObject answer = WebPage.settleAndDescribe(browser, WebPage.settleMillis(args, 15));
+			JsonObject answer = WebPage.settleAndDescribe(browser, args, 15, null);
 			Integer status = browser.documentStatus();
 			if (status != null) {
 				answer.put("status", status); //$NON-NLS-1$
@@ -73,6 +83,20 @@ public final class WebOpenTool implements IMcpTool {
 			return McpToolResult.of(answer.toString());
 		} catch (IOException e) {
 			return WebPage.failure(e);
+		}
+	}
+
+	/** A DevTools endpoint as http://host:port, with http:// added to a bare host:port, or null when it is not one. */
+	static String endpoint(String connect) {
+		String candidate = connect.contains("://") ? connect : "http://" + connect; //$NON-NLS-1$ //$NON-NLS-2$
+		try {
+			URI uri = new URI(candidate);
+			if (!"http".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) { //$NON-NLS-1$
+				return null;
+			}
+			return "http://" + uri.getHost() + (uri.getPort() < 0 ? "" : ":" + uri.getPort()); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		} catch (URISyntaxException e) {
+			return null;
 		}
 	}
 

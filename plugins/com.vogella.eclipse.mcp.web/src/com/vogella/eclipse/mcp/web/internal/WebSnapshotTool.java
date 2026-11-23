@@ -24,7 +24,7 @@ public final class WebSnapshotTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Reads the web page eclipse_web_open opened as an indented outline of what a user sees: one line per element with its role (button, link, textbox, heading, checkbox, combobox, list, ...), its accessible name in quotes, its state ([checked], [disabled], [expanded=...], [level=2]), a field's current value after a colon, a link's href after ->, and the visible text between them. Every element line carries [ref=eN]; pass that ref to eclipse_web_click, eclipse_web_type or eclipse_web_screenshot. Refs belong to this snapshot of this document: a new snapshot renumbers them and a navigation drops them, so take a snapshot again after the page changed. Hidden elements are left out, the contents of iframes too. Changes nothing. Cheaper and more exact than a screenshot for finding what to act on; use the screenshot to check layout."; //$NON-NLS-1$
+		return "Reads the web page eclipse_web_open opened as an indented outline of what a user sees: one line per element with its role (button, link, textbox, heading, checkbox, combobox, list, ...), its accessible name in quotes, its state ([checked], [disabled], [expanded=...], [level=2]), a field's current value after a colon, a link's href after ->, and the visible text between them. Every element line carries [ref=eN]; pass that ref to eclipse_web_click, eclipse_web_type or eclipse_web_screenshot. An element keeps its ref across snapshots of the same document and a ref is never reused, so an action on an element that disappeared is refused rather than landing elsewhere; a navigation drops all refs. Take a snapshot again after the page changed. Hidden elements are left out, the contents of iframes too. Changes nothing. Cheaper and more exact than a screenshot for finding what to act on; use the screenshot to check layout."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -42,6 +42,10 @@ public final class WebSnapshotTool implements IMcpTool {
 
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
+		return WebPage.exclusive(() -> run(arguments));
+	}
+
+	private static McpToolResult run(Map<String, Object> arguments) {
 		ToolArguments args = ToolArguments.of(arguments);
 		WebBrowser browser = WebBrowser.current();
 		if (browser == null) {

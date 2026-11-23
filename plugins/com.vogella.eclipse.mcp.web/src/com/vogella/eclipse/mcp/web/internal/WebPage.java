@@ -3,7 +3,9 @@ package com.vogella.eclipse.mcp.web.internal;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.vogella.eclipse.mcp.core.CallBudget;
 import com.vogella.eclipse.mcp.core.McpToolResult;
@@ -27,6 +29,8 @@ final class WebPage {
 	static final String TARGET_PROPERTIES = """
 			"ref":      {"type":"string","description":"The element's ref from the last eclipse_web_snapshot, e.g. 'e12'. Preferred: it names exactly what the snapshot showed."},
 			"selector": {"type":"string","description":"A CSS selector instead of ref, e.g. '#login' or 'form button[type=submit]'. The first match is used and 'matches' reports how many there were."}"""; //$NON-NLS-1$
+
+	private static final ReentrantLock CALLS = new ReentrantLock();
 
 	private WebPage() {
 	}
@@ -81,23 +85,16 @@ final class WebPage {
 		return value instanceof Number number ? number.doubleValue() : 0;
 	}
 
-	/** The settle timeout in milliseconds: the requested seconds capped by what is left of the call. */
-	static long settleMillis(ToolArguments args, int defaultSeconds) {
-		int requested = args.getInt("timeoutSeconds", defaultSeconds, 0, 120); //$NON-NLS-1$
-		return TimeUnit.SECONDS.toMillis(CallBudget.boundedWaitSeconds(requested));
-	}
-
 	/**
-	 * Waits for the page to settle and answers the page's address and title, whether it settled, and the dialogs it
-	 * raised, which every acting tool reports.
+	 * Waits for the page to settle, for {@code timeoutSeconds} or {@code defaultSeconds} capped by what is left of the
+	 * call, and answers the page's address and title, whether it settled and the dialogs it raised, which every acting
+	 * tool reports; with {@code urlBefore}, also whether the address changed.
 	 */
-	static JsonObject settleAndDescribe(WebBrowser browser, long timeoutMillis) throws IOException {
-		return settleAndDescribe(browser, timeoutMillis, null);
-	}
-
-	/** As {@link #settleAndDescribe(WebBrowser, long)}, and whether the address changed from {@code urlBefore}. */
-	static JsonObject settleAndDescribe(WebBrowser browser, long timeoutMillis, String urlBefore) throws IOException {
-		boolean settled = browser.settle(timeoutMillis, QUIET_MILLIS);
+	static JsonObject settleAndDescribe(WebBrowser browser, ToolArguments args, int defaultSeconds, String urlBefore)
+			throws IOException {
+		int requested = args.getInt("timeoutSeconds", defaultSeconds, 0, 120); //$NON-NLS-1$
+		int bounded = CallBudget.boundedWaitSeconds(requested);
+		boolean settled = browser.settle(TimeUnit.SECONDS.toMillis(bounded), QUIET_MILLIS);
 		JsonObject answer = new JsonObject();
 		String url = browser.location(answer);
 		if (urlBefore != null) {
@@ -108,6 +105,11 @@ final class WebPage {
 			answer.put("pendingRequests", Integer.valueOf(browser.pendingRequests())); //$NON-NLS-1$
 			answer.put("settleNote", //$NON-NLS-1$
 					"The page was still loading or had requests in flight when the wait ended. A page that polls never settles; take a snapshot to see where it is."); //$NON-NLS-1$
+			if (bounded < requested) {
+				answer.put("waitNote", "Waited %d of the %d seconds asked for, because the server aborts any call that outlasts its %d second tool call timeout, set in Preferences > General > MCP Server." //$NON-NLS-1$ //$NON-NLS-2$
+						.formatted(Integer.valueOf(bounded), Integer.valueOf(requested),
+								Integer.valueOf(CallBudget.callTimeoutSeconds())));
+			}
 		}
 		addDialogs(browser, answer);
 		return answer;
@@ -119,6 +121,31 @@ final class WebPage {
 			JsonArray list = new JsonArray();
 			dialogs.forEach(list::add);
 			answer.put("dialogs", list); //$NON-NLS-1$
+		}
+	}
+
+	/**
+	 * Runs one web tool call while no other one runs, because a call locates its element and acts on it in separate
+	 * steps and the page, its refs and its dialog policy are shared by every client.
+	 */
+	static McpToolResult exclusive(Callable<McpToolResult> call) {
+		try {
+			if (!CALLS.tryLock(Math.max(1, CallBudget.leftMillis()), TimeUnit.MILLISECONDS)) {
+				return McpToolResult.error(
+						"Another web tool call is still running on the page; call again once it answered."); //$NON-NLS-1$
+			}
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return McpToolResult.error("Interrupted while waiting for another web tool call."); //$NON-NLS-1$
+		}
+		try {
+			return call.call();
+		} catch (IOException e) {
+			return failure(e);
+		} catch (Exception e) {
+			return McpToolResult.error(e.getClass().getSimpleName() + ": " + e.getMessage()); //$NON-NLS-1$
+		} finally {
+			CALLS.unlock();
 		}
 	}
 

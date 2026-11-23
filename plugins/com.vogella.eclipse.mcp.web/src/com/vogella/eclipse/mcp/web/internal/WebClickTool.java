@@ -43,6 +43,10 @@ public final class WebClickTool implements IMcpTool {
 
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
+		return WebPage.exclusive(() -> run(arguments));
+	}
+
+	private static McpToolResult run(Map<String, Object> arguments) {
 		ToolArguments args = ToolArguments.of(arguments);
 		WebBrowser browser = WebBrowser.current();
 		if (browser == null) {
@@ -57,7 +61,7 @@ public final class WebClickTool implements IMcpTool {
 			browser.acceptConfirmations(args.getBoolean("acceptDialogs", false)); //$NON-NLS-1$
 			try {
 				UserInput.click(browser, target.x(), target.y(), args.getBoolean("doubleClick", false) ? 2 : 1); //$NON-NLS-1$
-				JsonObject answer = WebPage.settleAndDescribe(browser, WebPage.settleMillis(args, 10), before);
+				JsonObject answer = WebPage.settleAndDescribe(browser, args, 10, before);
 				answer.put("clicked", target.tag()); //$NON-NLS-1$
 				if (target.matches() > 1) {
 					answer.put("matches", Integer.valueOf(target.matches())); //$NON-NLS-1$
