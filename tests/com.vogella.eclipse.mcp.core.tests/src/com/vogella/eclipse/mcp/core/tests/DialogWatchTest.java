@@ -86,6 +86,17 @@ class DialogWatchTest {
 	}
 
 	@Test
+	void anUnmarkedWatchWaitsOutTheDeadlineWithoutProbing() throws Exception {
+		assertNull(new DialogWatch().await(new CompletableFuture<Void>(), System.currentTimeMillis() + 300));
+	}
+
+	@Test
+	void workThatFailedOpensNoDialog() throws Exception {
+		assertNull(new DialogWatch().await(CompletableFuture.failedFuture(new IllegalStateException()),
+				System.currentTimeMillis() + 1_000));
+	}
+
+	@Test
 	void workThatFinishedOpensNoDialog() throws Exception {
 		assertNull(new DialogWatch().await(CompletableFuture.completedFuture(null), System.currentTimeMillis() + 1_000));
 	}

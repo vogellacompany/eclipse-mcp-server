@@ -266,6 +266,7 @@ public final class KeyboardTools {
 			String waitState = wait == null ? null : wait.state().label();
 			Boolean clamped = budget == null ? null : Boolean.valueOf(budget.longValue() < waitMillis);
 			AtomicBoolean cancelledOnUi = new AtomicBoolean();
+			AtomicBoolean dialogAnswered = new AtomicBoolean();
 			DialogWatch watch = new DialogWatch();
 			AtomicReference<String> fellBackFrom = new AtomicReference<>();
 			UiThread.Outcome outcome = UiThread.run(UI_TIMEOUT_SECONDS, () -> {
@@ -312,7 +313,7 @@ public final class KeyboardTools {
 				JsonObject result = new JsonObject().put("key", key).put("count", Integer.valueOf(count)); //$NON-NLS-1$ //$NON-NLS-2$
 				fellBackFrom.set(osFailure);
 				watch.mark(display);
-				for (int i = 0; i < count && !target.isDisposed(); i++) {
+				for (int i = 0; i < count && !target.isDisposed() && !dialogAnswered.get(); i++) {
 					SyntheticInput.key(target, stroke.modifiers(), stroke.keyCode(), stroke.character(), result);
 				}
 				return result.put("delivery", "synthetic") //$NON-NLS-1$ //$NON-NLS-2$
@@ -325,7 +326,11 @@ public final class KeyboardTools {
 						.put("foregroundWaitState", waitState) //$NON-NLS-1$
 						.put("foregroundWaitClamped", clamped) //$NON-NLS-1$
 						.put("note", SyntheticInput.NOTE); //$NON-NLS-1$
-			}, watch, dialog -> dialogOpen(key, count, dialog, fellBackFrom.get()));
+			}, watch, dialog -> {
+				dialogAnswered.set(true);
+				return dialogOpen(key, count, dialog, fellBackFrom.get()).put("foregroundWaitMillis", waited) //$NON-NLS-1$
+						.put("foregroundWaitState", waitState).put("foregroundWaitClamped", clamped); //$NON-NLS-1$ //$NON-NLS-2$
+			});
 			if (cancelledOnUi.get()) {
 				return McpToolResult.error(CANCELLED);
 			}
@@ -341,7 +346,7 @@ public final class KeyboardTools {
 					.put("dialog", dialog.title()) //$NON-NLS-1$
 					.put("nativeDialog", Boolean.valueOf(dialog.nativeDialog())) //$NON-NLS-1$
 					.put("osFailure", osFailure) //$NON-NLS-1$
-					.put("note", "The dialog '%s' opened while the key's listener was running and the listener has not returned, so it is most likely waiting inside that dialog, and later repeats of count may not have been sent yet; a failure after the dialog closes goes to the Error Log. %s" //$NON-NLS-1$
+					.put("note", "The dialog '%s' opened while the key's listener was running and the listener has not returned, so it is most likely waiting inside that dialog, and the remaining repeats of count are skipped once it returns; a failure after the dialog closes goes to the Error Log. %s" //$NON-NLS-1$
 							.formatted(dialog.title(), dialog.nativeDialog()
 									? "It is a native dialog: eclipse_list_ui_targets reports its buttons under nativeDialogs, and eclipse_dismiss_dialog closes it or presses one." //$NON-NLS-1$
 									: "Read it with eclipse_get_widget_tree and shellTitle, answer it with eclipse_dismiss_dialog or by pressing its buttons.")); //$NON-NLS-1$

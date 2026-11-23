@@ -233,7 +233,9 @@ public final class CommandTools {
 			DialogWatch watch = new DialogWatch();
 			UiThread.exec(() -> {
 				try {
-					watch.mark(Workbenches.display());
+					if (returnOnDialog) {
+						watch.mark(Workbenches.display());
+					}
 					pending.complete(execute(wanted, parameters, dryRun, selection, recorder).toString());
 				} catch (Throwable e) {
 					// an Error must complete the future too, or the wait reports a dialog that is not there

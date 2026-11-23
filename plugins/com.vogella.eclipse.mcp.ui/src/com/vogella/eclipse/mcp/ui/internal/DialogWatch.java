@@ -69,7 +69,7 @@ public final class DialogWatch {
 						// a shell disposed mid-probe must not stall the watch or fail a delivered action
 						try {
 							next.complete(newDialog(on));
-						} catch (RuntimeException e) {
+						} catch (Throwable e) {
 							next.complete(null);
 						}
 					});
