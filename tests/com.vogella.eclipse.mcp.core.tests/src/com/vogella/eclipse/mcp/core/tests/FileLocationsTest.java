@@ -36,6 +36,11 @@ class FileLocationsTest {
 	}
 
 	@Test
+	void aUrlOfAnotherSchemeNamesNoPath() throws Exception {
+		assertNull(FileLocations.pathOf(java.net.URI.create("http://host/ws").toURL()));
+	}
+
+	@Test
 	void anEncodedSpaceIsDecoded() {
 		// an installation under "Program Files" is the ordinary case of this, and
 		// url.getPath() used to hand the %20 straight through into a path

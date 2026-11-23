@@ -80,7 +80,8 @@ public final class EndpointFile {
 		var location = Platform.getInstanceLocation();
 		URL url = location == null ? null : location.getURL();
 		Path path = FileLocations.pathOf(url);
-		return path == null ? null : path.toString();
+		// the same fallback as eclipse_restart's answer, so both name the workspace alike
+		return path != null ? path.toString() : url == null ? null : url.toString();
 	}
 
 }
