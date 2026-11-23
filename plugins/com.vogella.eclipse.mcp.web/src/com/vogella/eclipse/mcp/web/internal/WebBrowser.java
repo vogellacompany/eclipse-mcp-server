@@ -149,17 +149,22 @@ final class WebBrowser {
 		command.add("about:blank"); //$NON-NLS-1$
 		Path log = profile.resolve("browser.log"); //$NON-NLS-1$
 		Process process = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile()).start();
+		CdpConnection connection = null;
 		try {
 			String endpoint = "http://127.0.0.1:" + awaitPort(process, profile, log); //$NON-NLS-1$
 			Map<String, Object> target = pageTarget(endpoint, false);
+			connection = CdpConnection.open(URI.create(String.valueOf(target.get("webSocketDebuggerUrl"))), //$NON-NLS-1$
+					launchBudgetMillis(10_000));
 			WebBrowser browser = new WebBrowser(process, executable, profile, endpoint,
-					String.valueOf(target.get("id")), headless, //$NON-NLS-1$
-					CdpConnection.open(URI.create(String.valueOf(target.get("webSocketDebuggerUrl"))), launchBudgetMillis(10_000))); //$NON-NLS-1$
+					String.valueOf(target.get("id")), headless, connection); //$NON-NLS-1$
 			browser.attach();
 			browser.shutdownHook = new Thread(browser::killProcess, "mcp-web-browser-shutdown"); //$NON-NLS-1$
 			Runtime.getRuntime().addShutdownHook(browser.shutdownHook);
 			return browser;
 		} catch (IOException | RuntimeException e) {
+			if (connection != null) {
+				connection.close();
+			}
 			process.destroyForcibly();
 			deleteQuietly(profile);
 			throw e;
@@ -168,13 +173,18 @@ final class WebBrowser {
 
 	private static WebBrowser connect(String endpoint) throws IOException {
 		Map<String, Object> target = pageTarget(endpoint, true);
+		CdpConnection connection = null;
 		try {
+			connection = CdpConnection.open(URI.create(String.valueOf(target.get("webSocketDebuggerUrl"))), //$NON-NLS-1$
+					launchBudgetMillis(10_000));
 			WebBrowser browser = new WebBrowser(null, null, null, endpoint, String.valueOf(target.get("id")), false, //$NON-NLS-1$
-					CdpConnection.open(URI.create(String.valueOf(target.get("webSocketDebuggerUrl"))), //$NON-NLS-1$
-							launchBudgetMillis(10_000)));
+					connection);
 			browser.attach();
 			return browser;
 		} catch (IOException | RuntimeException e) {
+			if (connection != null) {
+				connection.close();
+			}
 			try {
 				http(endpoint + "/json/close/" + target.get("id"), "GET"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 			} catch (IOException closing) {

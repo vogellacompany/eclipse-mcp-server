@@ -58,7 +58,7 @@ class WebToolsTest {
 			customElements.define('shadow-greeter', class extends HTMLElement {
 			  connectedCallback() {
 			    const root = this.attachShadow({mode: 'open'});
-			    root.innerHTML = '<button>Shadow greet</button>';
+			    root.innerHTML = '<button>Shadow greet</button> <input aria-label="Shadow name">';
 			    root.querySelector('button').onclick = () => document.getElementById('out').textContent = 'From the shadow';
 			  }
 			});
@@ -161,6 +161,8 @@ class WebToolsTest {
 
 		TestFixture.callAndParse("eclipse_web_click", Map.of("ref", ref(snapshot(), "button \"Shadow greet\"")));
 		assertTrue(snapshot().contains("From the shadow"), snapshot());
+		assertEquals("inside", TestFixture.callAndParse("eclipse_web_type",
+				Map.of("ref", ref(snapshot(), "textbox \"Shadow name\""), "text", "inside")).get("value"));
 
 		// a page that has been quiet counts as settled even when the call leaves no time to wait
 		Thread.sleep(700);

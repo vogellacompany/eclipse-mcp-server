@@ -221,7 +221,9 @@ final class PageScripts {
 			  if (!editable) return JSON.stringify({error: 'The element is a ' + el.tagName.toLowerCase() + ', which does not take text.'});
 			  if (el.disabled) return JSON.stringify({error: 'The field is disabled, so a user cannot type into it.'});
 			  if (el.readOnly) return JSON.stringify({error: 'The field is read-only, so a user cannot type into it.'});
-			  if (document.activeElement !== el && !(el.contains && el.contains(document.activeElement)))
+			  // inside a shadow root the document's active element is the host, so ask the root the field lives in
+			  const active = el.getRootNode().activeElement;
+			  if (active !== el && !(el.contains && el.contains(active)))
 			    return JSON.stringify({error: 'The field did not take the focus, so typed text would go elsewhere.'});
 			  if (clear) {
 			    if (el.isContentEditable) { window.getSelection().selectAllChildren(el); }
@@ -236,7 +238,7 @@ final class PageScripts {
 			  } else if (!el.isContentEditable && typeof el.setSelectionRange === 'function') {
 			    try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* types without selection */ }
 			  }
-			  return JSON.stringify({focused: document.activeElement === el, hadValue: !!(el.value || el.textContent)});
+			  return JSON.stringify({focused: el.getRootNode().activeElement === el, hadValue: !!(el.value || el.textContent)});
 			})""";
 
 	/** Chooses the option of the located select whose label or value is the text, as a user picking it would. */
