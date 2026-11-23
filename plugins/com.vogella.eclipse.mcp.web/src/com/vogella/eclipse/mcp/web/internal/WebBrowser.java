@@ -11,7 +11,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -56,7 +56,8 @@ final class WebBrowser {
 	private final CdpConnection page;
 
 	private final Object state = new Object();
-	private final Set<String> inflight = new HashSet<>();
+	/** Requests in flight, by request id, with the loader id of the document that made them. */
+	private final Map<String, String> inflight = new HashMap<>();
 	private final List<JsonObject> dialogs = new ArrayList<>();
 	private final List<JsonObject> downloads = new ArrayList<>();
 	/** Dialogs answered beyond {@link #MAX_DIALOGS} since the last report, guarded by {@code state}. */
@@ -348,7 +349,7 @@ final class WebBrowser {
 		}
 		case "Network.requestWillBeSent" -> { //$NON-NLS-1$
 			if (!STREAMING_TYPES.contains(params.get("type"))) { //$NON-NLS-1$
-				inflight.add(String.valueOf(params.get("requestId"))); //$NON-NLS-1$
+				inflight.put(String.valueOf(params.get("requestId")), String.valueOf(params.get("loaderId"))); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 		}
 		case "Network.responseReceived" -> { //$NON-NLS-1$
@@ -356,6 +357,14 @@ final class WebBrowser {
 					&& params.get("response") instanceof Map<?, ?> response //$NON-NLS-1$
 					&& response.get("status") instanceof Number status) { //$NON-NLS-1$
 				documentStatus = Integer.valueOf(status.intValue());
+			}
+		}
+		case "Page.frameNavigated" -> { //$NON-NLS-1$
+			// a navigation another one overtook gets neither loadingFinished nor loadingFailed, so a new document
+			// drops what the documents before it left in flight
+			if (params.get("frame") instanceof Map<?, ?> frame && frame.get("parentId") == null //$NON-NLS-1$ //$NON-NLS-2$
+					&& isMainFrame(frame.get("id")) && frame.get("loaderId") instanceof String loader) { //$NON-NLS-1$ //$NON-NLS-2$
+				inflight.values().removeIf(other -> !other.equals(loader));
 			}
 		}
 		case "Network.loadingFinished", "Network.loadingFailed" -> //$NON-NLS-1$ //$NON-NLS-2$

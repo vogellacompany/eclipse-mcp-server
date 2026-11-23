@@ -252,17 +252,31 @@ final class PageScripts {
 			})()""";
 
 	/**
-	 * Waits until the running CSS animations and transitions that end by themselves have ended, such as a panel fading
-	 * in after a click, or %d milliseconds passed; answers whether they ended. Infinite ones, such as a spinner, are
-	 * not waited for.
+	 * Waits until the running CSS animations and transitions that end by themselves have ended and no inline style
+	 * changed for 200 milliseconds, which is how a script animation such as jQuery's fadeIn moves, or %d milliseconds
+	 * passed; answers whether the page came to rest. Infinite CSS animations, such as a spinner, are not waited for.
 	 */
 	static final String FINISH_ANIMATIONS = """
 			(() => {
+			  const until = Date.now() + %d;
 			  const finite = document.getAnimations().filter(a => a.playState === 'running'
 			      && Number.isFinite(a.effect?.getComputedTiming().endTime));
-			  if (!finite.length) return true;
-			  return Promise.race([Promise.all(finite.map(a => a.finished.catch(() => null))).then(() => true),
-			      new Promise(done => setTimeout(() => done(false), %d))]);
+			  const css = Promise.all(finite.map(a => a.finished.catch(() => null)));
+			  return new Promise(done => {
+			    let last = Date.now();
+			    const observer = new MutationObserver(() => last = Date.now());
+			    observer.observe(document.documentElement, {attributes: true, attributeFilter: ['style'], subtree: true});
+			    const finish = rested => { observer.disconnect(); done(rested); };
+			    css.then(() => {
+			      const check = () => {
+			        if (Date.now() - last >= 200) finish(true);
+			        else if (Date.now() >= until) finish(false);
+			        else setTimeout(check, 50);
+			      };
+			      check();
+			    });
+			    setTimeout(() => finish(false), Math.max(0, until - Date.now()));
+			  });
 			})()""";
 
 	/** Puts back what {@link #HIDE_OVERLAYS} hid. */
