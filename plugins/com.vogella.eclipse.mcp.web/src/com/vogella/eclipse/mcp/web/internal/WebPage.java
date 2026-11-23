@@ -71,6 +71,9 @@ final class WebPage {
 		if (width == 0 && height == 0) {
 			return failed("The " + tag + " has no size on the page, so it cannot be clicked or seen; it may be collapsed or off screen."); //$NON-NLS-1$ //$NON-NLS-2$
 		}
+		if (!force && Boolean.TRUE.equals(found.get("inert"))) { //$NON-NLS-1$
+			return failed("The " + tag + " is inside an inert part of the page, which takes no clicks or typing, usually because a modal dialog is open. Deal with the dialog first."); //$NON-NLS-1$ //$NON-NLS-2$
+		}
 		if (!force && found.get("coveredBy") instanceof String covered) { //$NON-NLS-1$
 			return failed("The " + tag + " is covered by " + covered //$NON-NLS-1$ //$NON-NLS-2$
 					+ ", which would receive a click instead and keeps a user from reaching it, often a dialog, banner or overlay. Deal with that first, or pass force: a click then goes to that point, where the covering element gets it, and typing goes into the field anyway."); //$NON-NLS-1$

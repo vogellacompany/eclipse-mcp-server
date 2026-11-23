@@ -24,7 +24,9 @@ final class UserInput {
 	private static JsonObject event(String type, double x, double y, int clickCount) {
 		JsonObject event = new JsonObject().put("type", type).put("x", Double.valueOf(x)).put("y", Double.valueOf(y)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		if (clickCount > 0) {
-			event.put("button", "left").put("buttons", Integer.valueOf(1)).put("clickCount", Integer.valueOf(clickCount)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+			// the button is held while pressed and no longer once released, as a page reading event.buttons expects
+			event.put("button", "left").put("buttons", Integer.valueOf("mousePressed".equals(type) ? 1 : 0)) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+					.put("clickCount", Integer.valueOf(clickCount)); //$NON-NLS-1$
 		}
 		return event;
 	}

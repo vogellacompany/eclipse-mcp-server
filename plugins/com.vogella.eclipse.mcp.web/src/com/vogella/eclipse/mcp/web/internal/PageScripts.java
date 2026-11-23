@@ -58,7 +58,10 @@ final class PageScripts {
 			  const hidden = el => {
 			    if (el.hidden || el.getAttribute('aria-hidden') === 'true') return true;
 			    const style = getComputedStyle(el);
-			    return style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse';
+			    if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return true;
+			    // also what is not rendered for a reason of an ancestor, such as the content of a closed <details>
+			    // or of content-visibility: hidden, which the element's own style does not show
+			    return typeof el.checkVisibility === 'function' && !el.checkVisibility() && style.display !== 'contents';
 			  };
 			  const textOf = el => clean(el.innerText !== undefined ? el.innerText : el.textContent);
 			  const nameOf = (el, role) => {
@@ -164,6 +167,7 @@ final class PageScripts {
 			  };
 			  const root = rootSelector ? document.querySelector(rootSelector) : document.body;
 			  if (!root) throw new Error('No element matches ' + rootSelector);
+			  if (root !== document.body && hidden(root)) throw new Error(rootSelector + ' is hidden, so a user sees nothing of it.');
 			  walk(root, 0);
 			  return JSON.stringify({snapshot: lines.join('\\n'), total, truncated: total > lines.length,
 			      nextRef: window.__mcpNext + 1});
@@ -202,6 +206,7 @@ final class PageScripts {
 			  return JSON.stringify({x, y, width: box.width, height: box.height, scrollX: window.scrollX,
 			      scrollY: window.scrollY, tag: el.tagName.toLowerCase(),
 			      disabled: !!el.disabled || (el.matches && el.matches(':disabled')), coveredBy: covered ? describe(top) : null,
+			      inert: !!(el.closest && el.closest('[inert]')),
 			      matches});
 			}""";
 

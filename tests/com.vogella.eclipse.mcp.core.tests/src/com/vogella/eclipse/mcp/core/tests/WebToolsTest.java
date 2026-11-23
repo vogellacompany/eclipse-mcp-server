@@ -50,6 +50,8 @@ class WebToolsTest {
 			<fieldset disabled><input id="fenced" aria-label="Fenced"></fieldset>
 			<p id="out">nothing yet</p>
 			<div hidden><button>Invisible</button></div>
+			<details><summary>More</summary><button>Folded</button></details>
+			<div inert><button id="behind">Behind</button></div>
 			<button type="button" onclick="this.remove()">Remove me</button>
 			<input id="age" type="number" value="41"> <input id="locked" value="fixed" readonly> <input id="off" disabled>
 			<a href="/second">Next page</a>
@@ -133,6 +135,8 @@ class WebToolsTest {
 		assertTrue(snapshot.contains("- combobox \"Color\""), snapshot);
 		assertTrue(snapshot.contains("- text: \"nothing yet\""), snapshot);
 		assertFalse(snapshot.contains("Invisible"), snapshot);
+		assertFalse(snapshot.contains("Folded"), snapshot);
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#behind")), "inert");
 
 		Map<String, Object> typed = TestFixture.callAndParse("eclipse_web_type",
 				Map.of("ref", ref(snapshot, "textbox \"Name\""), "text", "Lars"));

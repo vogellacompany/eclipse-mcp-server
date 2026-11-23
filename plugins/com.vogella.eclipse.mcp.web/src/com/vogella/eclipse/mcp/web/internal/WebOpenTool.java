@@ -34,7 +34,7 @@ public final class WebOpenTool implements IMcpTool {
 				  "type": "object",
 				  "properties": {
 				    "url":            {"type":"string","description":"The address to load, e.g. 'http://localhost:8080/login'. http, https, file and about URLs; a bare host such as 'localhost:3000' gets http://."},
-				    "headless":       {"type":"boolean","default":true,"description":"false shows the browser window, so the user can watch."},
+				    "headless":       {"type":"boolean","description":"false shows the browser window, so the user can watch. Applies when a browser is started, where it defaults to true; left out, a browser that is already open is kept as it is."},
 				    "browserPath":    {"type":"string","description":"The browser executable to start, when the one found is not the one wanted. The system property com.vogella.eclipse.mcp.web.browser sets it for every call."},
 				    "connectUrl":     {"type":"string","description":"The DevTools endpoint of a browser that is already running, e.g. 'http://localhost:9222'. A new tab is opened there instead of starting a browser."},
 				    "timeoutSeconds": {"type":"integer","default":15,"minimum":0,"maximum":120,"description":"How long to wait for the page to settle. The answer comes back when the time is up either way, with settled false."}
