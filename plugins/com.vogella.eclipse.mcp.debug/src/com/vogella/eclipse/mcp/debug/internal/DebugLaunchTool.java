@@ -59,7 +59,7 @@ public final class DebugLaunchTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Starts a debug session and returns its sessionId plus the state at the moment of answering. STARTS A PROCESS: this runs project code under the IDE's debugger, so anything main does, the debugged program does. Give either 'configuration', the name of an existing launch configuration, plus 'project' when several projects store a configuration of that name, or 'project' plus 'mainType'; the latter builds a transient configuration that never appears in the user's saved launches. With 'stopInMain' the program suspends at the first line of main; otherwise set breakpoints first through eclipse_set_breakpoint and wait for them through eclipse_debug_status with waitForSuspendSeconds. Sessions started here are terminated again when this plug-in stops or after autoTerminateAfterSeconds, whichever comes first. To run tests under the debugger use eclipse_run_tests with debug true instead. Pass flightRecording to profile the launched JVM, which the IDE's own recording tools cannot reach because they record the IDE's own process."; //$NON-NLS-1$
+		return "Starts a debug session and returns its sessionId plus the state at the moment of answering. STARTS A PROCESS: this runs project code under the IDE's debugger, so anything main does, the debugged program does. Give either 'configuration', the name of an existing launch configuration, plus 'project' when several projects store a configuration of that name, or 'project' plus 'mainType'; the latter builds a transient configuration that never appears in the user's saved launches. With 'stopInMain' the program suspends at the first line of main; otherwise set breakpoints first through eclipse_set_breakpoint and wait for them through eclipse_debug_status with waitForSuspendSeconds. A launch of a configuration that is still starting is refused. Sessions started here are terminated again when this plug-in stops or after autoTerminateAfterSeconds, whichever comes first. To run tests under the debugger use eclipse_run_tests with debug true instead. Pass flightRecording to profile the launched JVM, which the IDE's own recording tools cannot reach because they record the IDE's own process."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -105,10 +105,18 @@ public final class DebugLaunchTool implements IMcpTool {
 		try {
 			long started = System.nanoTime();
 			DebugSessionRegistry registry = DebugSessionRegistry.getInstance();
+			// refused before replaceExisting, which would otherwise end the running program for a call that fails
+			DebugSessionRegistry.Session blocking = registry.starting(configuration.getName());
+			if (blocking != null) {
+				return starting(configuration.getName(), blocking);
+			}
 			JsonObject replaced = args.getBoolean("replaceExisting", true) //$NON-NLS-1$
 					? replaceExisting(registry, configuration.getName())
 					: null;
 			DebugSessionRegistry.Session session = registry.prepare(configuration.getName());
+			if (session == null) {
+				return starting(configuration.getName(), registry.starting(configuration.getName()));
+			}
 			if (args.getBoolean("quiet", true)) { //$NON-NLS-1$
 				session.holdQuiet();
 			}
@@ -130,9 +138,13 @@ public final class DebugLaunchTool implements IMcpTool {
 						registry.attachLaunched(session, launched);
 					}
 				} catch (CoreException | RuntimeException e) {
-					session.failed(e.getMessage() == null ? String.valueOf(e) : e.getMessage());
+					registry.fail(session, e.getMessage() == null ? String.valueOf(e) : e.getMessage());
 				} finally {
 					CompileErrorPrompt.restore();
+					// an uncaught Error or a missing launch must not leave the name pending forever
+					if (!session.registered()) {
+						registry.fail(session, "The launch produced no debug session."); //$NON-NLS-1$
+					}
 				}
 				return org.eclipse.core.runtime.Status.OK_STATUS;
 			}).schedule();
@@ -143,7 +155,9 @@ public final class DebugLaunchTool implements IMcpTool {
 			if (!session.awaitRegistration(registrationWait)) {
 				return McpToolResult.error(("The JVM of session %s did not come up within %d seconds. %s")
 						.formatted(session.id(), Long.valueOf(registrationWait),
-								session.failure() == null ? "It may still be starting." : session.failure())); //$NON-NLS-1$
+								session.failure() == null
+										? "It may still be starting, and a second launch of this configuration is refused until it comes up or fails."
+										: session.failure())); //$NON-NLS-1$
 			}
 			if (session.failure() != null && session.launch() == null) {
 				return McpToolResult
@@ -236,6 +250,12 @@ public final class DebugLaunchTool implements IMcpTool {
 				LaunchRecording.appendTo(existing,
 						LaunchRecording.vmArgument(settings, file, seconds)));
 		return file;
+	}
+
+	private static McpToolResult starting(String name, DebugSessionRegistry.Session session) {
+		return McpToolResult.error(("A launch of '%s' started through MCP is still starting as session %s. " //$NON-NLS-1$
+				+ "Poll eclipse_debug_status with that sessionId, or launch again once it has come up or failed.") //$NON-NLS-1$
+				.formatted(name, session == null ? "(unknown)" : session.id())); //$NON-NLS-1$
 	}
 
 	/**

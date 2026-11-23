@@ -342,7 +342,7 @@ final class DebugSupport {
 		json.put("configuration", launchValue == null ? session.expectedConfigName() : configurationName(launchValue)); //$NON-NLS-1$
 		json.put("registered", Boolean.valueOf(session.registered())); //$NON-NLS-1$
 		json.put("pid", pid(launchValue)); //$NON-NLS-1$
-		if (!session.registered() && session.failure() != null) {
+		if (session.failure() != null) {
 			json.put("failure", session.failure()); //$NON-NLS-1$
 		}
 		JsonArray reported = new JsonArray();
