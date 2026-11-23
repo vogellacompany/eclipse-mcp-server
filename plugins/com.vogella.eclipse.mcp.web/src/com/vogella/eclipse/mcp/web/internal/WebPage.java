@@ -28,7 +28,7 @@ final class WebPage {
 	/** The schema members for addressing one element, shared by every tool that acts on one. */
 	static final String TARGET_PROPERTIES = """
 			"ref":      {"type":"string","description":"The element's ref from the last eclipse_web_snapshot, e.g. 'e12'. Preferred: it names exactly what the snapshot showed."},
-			"selector": {"type":"string","description":"A CSS selector instead of ref, e.g. '#login' or 'form button[type=submit]'. The first match is used and 'matches' reports how many there were."}"""; //$NON-NLS-1$
+			"selector": {"type":"string","description":"A CSS selector instead of ref, e.g. '#login' or 'form button[type=submit]'. The first match is used, and 'matches' in the answer says how many there were when more than one matched."}"""; //$NON-NLS-1$
 
 	private static final ReentrantLock CALLS = new ReentrantLock();
 

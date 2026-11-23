@@ -232,16 +232,24 @@ final class PageScripts {
 			    return JSON.stringify({error: 'The field did not take the focus, so typed text would go elsewhere.'});
 			  if (clear) {
 			    if (el.isContentEditable) { window.getSelection().selectAllChildren(el); }
-			    else {
-			      try { el.select(); }
-			      catch (e) {
-			        // number, date and similar inputs have no text selection; empty them as a user selecting all would
-			        el.value = '';
-			        el.dispatchEvent(new Event('input', {bubbles: true}));
-			      }
+			    else if (el.selectionStart === null) {
+			      // number, date and similar inputs have no text selection, and select() quietly does nothing for them;
+			      // empty them as a user selecting all and deleting would
+			      el.value = '';
+			      el.dispatchEvent(new Event('input', {bubbles: true}));
+			    } else {
+			      el.select();
 			    }
-			  } else if (!el.isContentEditable && typeof el.setSelectionRange === 'function') {
-			    try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* types without selection */ }
+			  } else if (el.isContentEditable) {
+			    // the caret after the content, so the text is appended
+			    const range = document.createRange();
+			    range.selectNodeContents(el);
+			    range.collapse(false);
+			    const selection = window.getSelection();
+			    selection.removeAllRanges();
+			    selection.addRange(range);
+			  } else if (el.selectionStart !== null) {
+			    el.setSelectionRange(el.value.length, el.value.length);
 			  }
 			  return JSON.stringify({focused: el.getRootNode().activeElement === el, hadValue: !!(el.value || el.textContent)});
 			})""";
@@ -252,7 +260,8 @@ final class PageScripts {
 			  const el = window.__mcpTarget;
 			  const wanted = text.trim();
 			  if (!wanted) return JSON.stringify({error: 'Pass the label or value of the option to pick; a select cannot be emptied by typing.'});
-			  let option = Array.from(el.options).find(o => o.label.trim() === wanted || o.value === wanted);
+			  let option = Array.from(el.options).find(o => o.label.trim() === wanted || o.value === wanted)
+			      || Array.from(el.options).find(o => o.label.trim().toLowerCase() === wanted.toLowerCase());
 			  if (!option) {
 			    const partial = Array.from(el.options).filter(o => o.label.trim().toLowerCase().includes(wanted.toLowerCase()));
 			    if (partial.length > 1) return JSON.stringify({error: JSON.stringify(wanted) + ' is part of several options, ' +

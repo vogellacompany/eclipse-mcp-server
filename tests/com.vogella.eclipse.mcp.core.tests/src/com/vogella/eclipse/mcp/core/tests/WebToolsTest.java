@@ -152,6 +152,7 @@ class WebToolsTest {
 		assertTrue(snapshot().contains("Submitted Eclipse"), snapshot());
 
 		assertEquals("42", TestFixture.callAndParse("eclipse_web_type", Map.of("selector", "#age", "text", "42")).get("value"));
+		assertEquals("", TestFixture.callAndParse("eclipse_web_type", Map.of("selector", "#age", "text", "")).get("value"));
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#locked", "text", "x")), "read-only");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#off", "text", "x")), "disabled");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#off")), "disabled");
@@ -160,6 +161,7 @@ class WebToolsTest {
 		Map<String, Object> chosen = TestFixture.callAndParse("eclipse_web_type",
 				Map.of("selector", "#color", "text", "Green"));
 		assertEquals("g", chosen.get("value"));
+		assertEquals("g", TestFixture.callAndParse("eclipse_web_type", Map.of("selector", "#color", "text", "green")).get("value"));
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#color", "text", "e")),
 				"several options");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#frozen", "text", "Only")),

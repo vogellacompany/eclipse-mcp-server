@@ -79,6 +79,9 @@ public final class WebScreenshotTool implements IMcpTool {
 				params.put("clip", clip(left, top, wide, captured)); //$NON-NLS-1$
 				params.put("captureBeyondViewport", Boolean.TRUE); //$NON-NLS-1$
 				answer.put("element", target.tag()); //$NON-NLS-1$
+				if (target.matches() > 1) {
+					answer.put("matches", Integer.valueOf(target.matches())); //$NON-NLS-1$
+				}
 				size(answer, wide, captured);
 				if (captured < target.height()) {
 					answer.put("cutAtHeight", Double.valueOf(captured)).put("elementHeight", Double.valueOf(target.height())); //$NON-NLS-1$ //$NON-NLS-2$
