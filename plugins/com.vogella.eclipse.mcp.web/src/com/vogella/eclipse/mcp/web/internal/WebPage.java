@@ -23,6 +23,9 @@ final class WebPage {
 	/** How long nothing may be loading before the page counts as settled. */
 	static final long QUIET_MILLIS = 500;
 
+	/** The longest wait for animations, so a page whose styles never stop changing does not hold every action. */
+	private static final long ANIMATION_MILLIS = 3_000;
+
 	static final String NO_PAGE = "No web page is open. Call eclipse_web_open with a url first."; //$NON-NLS-1$
 
 	/** The schema members for addressing one element, shared by every tool that acts on one. */
@@ -129,7 +132,7 @@ final class WebPage {
 			try {
 				// a panel that fades in after a click is captured half transparent otherwise
 				animating = Boolean.FALSE
-						.equals(browser.evaluate(PageScripts.FINISH_ANIMATIONS.formatted(Long.valueOf(left))));
+						.equals(browser.evaluate(PageScripts.FINISH_ANIMATIONS.formatted(Long.valueOf(Math.min(left, ANIMATION_MILLIS)))));
 			} catch (IOException e) {
 				// a page that navigated away meanwhile has no animations of its own left to wait for
 			}

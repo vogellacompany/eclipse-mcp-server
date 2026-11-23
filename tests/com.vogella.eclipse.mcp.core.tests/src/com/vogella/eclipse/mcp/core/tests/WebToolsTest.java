@@ -97,7 +97,11 @@ class WebToolsTest {
 			<style>@keyframes in { from { opacity: 0 } to { opacity: 1 } } .panel { animation: in 1.5s linear }</style>
 			</head><body style="margin:0;background:#fff">
 			<button id="show" onclick="const p = document.createElement('div'); p.id = 'panel'; p.className = 'panel';
-			  p.style.cssText = 'width:200px;height:200px;background:#f00'; document.body.append(p)">Show</button>
+			  p.style.cssText = 'width:200px;height:200px;background:#f00'; document.body.append(p);
+			  const q = document.createElement('div'); q.id = 'scripted'; q.style.cssText = 'width:200px;height:200px;background:#0f0;opacity:0';
+			  document.body.append(q); const start = performance.now();
+			  const step = now => { const t = Math.min(1, (now - start) / 1000); q.style.opacity = t; if (t < 1) requestAnimationFrame(step); };
+			  requestAnimationFrame(step)">Show</button>
 			</body></html>""";
 
 	private static final CountDownLatch RELEASE_SLOW = new CountDownLatch(1);
@@ -341,6 +345,10 @@ class WebToolsTest {
 		assertFalse(panel.isError(), panel.text());
 		BufferedImage image = ImageIO.read(new ByteArrayInputStream(panel.images().get(0).data()));
 		assertEquals(0xff0000, image.getRGB(100, 100) & 0xffffff, "The panel was captured while still fading in");
+		// a fade driven by a script, as jQuery's fadeIn is, which document.getAnimations() does not list
+		McpToolResult scripted = TestFixture.call("eclipse_web_screenshot", Map.of("selector", "#scripted"));
+		BufferedImage green = ImageIO.read(new ByteArrayInputStream(scripted.images().get(0).data()));
+		assertEquals(0x00ff00, green.getRGB(100, 100) & 0xffffff, "The scripted fade was captured halfway");
 	}
 
 	@Test
@@ -354,8 +362,11 @@ class WebToolsTest {
 		assertEquals(Boolean.TRUE, answer.get("navigationPending"), result.text());
 		assertEquals(Boolean.FALSE, answer.get("settled"), result.text());
 		assertTrue(seconds < 8, "Took " + seconds + " s for a 2 s timeout");
+		// the held navigation is overtaken before the server answers, so its request never finishes
+		Map<String, Object> next = open("/second");
 		RELEASE_SLOW.countDown();
-		assertEquals("Second", open("/second").get("title"));
+		assertEquals("Second", next.get("title"));
+		assertEquals(Boolean.TRUE, next.get("settled"), next.toString());
 	}
 
 	@Test
