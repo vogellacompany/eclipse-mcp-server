@@ -80,6 +80,9 @@ public final class OpenInEditorTool implements IMcpTool {
 				file = inWorkspace;
 			} else if (disk != null && java.nio.file.Files.isRegularFile(disk)) {
 				external = EFS.getLocalFileSystem().getStore(IPath.fromOSString(path));
+			} else if (disk == null) {
+				return McpToolResult.error(
+						"No file at the workspace path '%s', and it is not a valid file system path either.".formatted(path)); //$NON-NLS-1$
 			} else {
 				return McpToolResult.error(
 						"No file at the workspace path '%s', and no file at that path on disk either.".formatted(path)); //$NON-NLS-1$
@@ -94,7 +97,7 @@ public final class OpenInEditorTool implements IMcpTool {
 				() -> store == null ? open(workspaceFile, line, activate) : openExternal(store, line, activate));
 	}
 
-	/** The path parsed for the disk, or null when it is not a valid file system path. */
+	/** The path parsed for the disk, or null when the text is not a syntactically valid path. */
 	private static java.nio.file.Path diskPathAt(String path) {
 		try {
 			return java.nio.file.Path.of(path);
