@@ -53,7 +53,8 @@ public final class FileLocations {
 
 	/** The local path a {@code file:} URL names, or {@code null} when it names none. */
 	public static Path pathOf(URL url) {
-		return url == null ? null : pathOf(url.toString());
+		// a URL always has a scheme, so the plain path fallback of pathOf(String) would misread any other one
+		return url == null || !"file".equalsIgnoreCase(url.getProtocol()) ? null : pathOf(url.toString()); //$NON-NLS-1$
 	}
 
 	/**

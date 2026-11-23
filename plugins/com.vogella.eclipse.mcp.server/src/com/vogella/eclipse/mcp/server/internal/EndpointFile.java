@@ -1,8 +1,6 @@
 package com.vogella.eclipse.mcp.server.internal;
 
-import java.io.File;
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Path;
 
@@ -10,6 +8,7 @@ import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.Platform;
 import org.osgi.framework.FrameworkUtil;
 
+import com.vogella.eclipse.mcp.core.FileLocations;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
 import com.vogella.eclipse.mcp.server.McpEndpoint;
 
@@ -80,14 +79,9 @@ public final class EndpointFile {
 	static String workspace() {
 		var location = Platform.getInstanceLocation();
 		URL url = location == null ? null : location.getURL();
-		if (url == null) {
-			return null;
-		}
-		try {
-			return new File(url.toURI()).getAbsolutePath();
-		} catch (URISyntaxException | IllegalArgumentException e) {
-			return url.getPath();
-		}
+		Path path = FileLocations.pathOf(url);
+		// the same fallback as eclipse_restart's answer, so both name the workspace alike
+		return path != null ? path.toString() : url == null ? null : url.toString();
 	}
 
 }
