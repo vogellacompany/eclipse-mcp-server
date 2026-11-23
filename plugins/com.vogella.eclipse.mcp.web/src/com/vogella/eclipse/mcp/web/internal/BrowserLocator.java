@@ -83,6 +83,12 @@ final class BrowserLocator {
 		} else {
 			result.add(Path.of("/opt/google/chrome/chrome")); //$NON-NLS-1$
 			result.add(Path.of("/opt/microsoft/msedge/msedge")); //$NON-NLS-1$
+			// also without them on PATH, as in an IDE started from a desktop file or a container with a minimal PATH
+			for (String directory : List.of("/usr/bin", "/usr/local/bin", "/snap/bin")) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				for (String name : PATH_NAMES) {
+					result.add(Path.of(directory, name));
+				}
+			}
 		}
 		String path = System.getenv("PATH"); //$NON-NLS-1$
 		if (path != null) {
