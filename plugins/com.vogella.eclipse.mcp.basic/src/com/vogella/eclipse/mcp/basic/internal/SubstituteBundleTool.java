@@ -472,7 +472,9 @@ public final class SubstituteBundleTool implements IMcpTool {
 				// already restored, or updated since: writing a recorded original over it could bring back a packed jar
 				records.stream().filter(record -> record[0].equals(name)).forEach(kept::add);
 				missed.add(new JsonObject().put("bundle", name) //$NON-NLS-1$
-						.put("reason", "Its current line is not one a recorded substitution put there, so it is already restored or was updated since; it was left alone and its records kept.")); //$NON-NLS-1$ //$NON-NLS-2$
+						.put("reason", current.contains(JARS) //$NON-NLS-1$
+								? "Its line names a packed jar that no record leads back from, so it is still in force and the original is not known here; it was left alone and its records kept." //$NON-NLS-1$
+								: "Its current line is not one a recorded substitution put there, so it is already restored or was updated since; it was left alone and its records kept.")); //$NON-NLS-1$
 				continue;
 			}
 			String[] record = layers.getLast();
@@ -488,7 +490,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 					.put("layersUndone", Integer.valueOf(layers.size())) //$NON-NLS-1$
 					.put("restoredToSubstitutedJar", Boolean.valueOf(ontoSubstituted)) //$NON-NLS-1$
 					.put("restoredToNote", ontoSubstituted //$NON-NLS-1$
-							? "This puts back an EARLIER SUBSTITUTED jar, not the shipped one: no record leads back from that packed jar, so the line it replaced is not known here and the records of this bundle are gone after this call. Check action status." //$NON-NLS-1$
+							? "This puts back an EARLIER SUBSTITUTED jar, not the shipped one: no record leads back from that packed jar, so the line it replaced is not known here and the records of this bundle are dropped by a real restore. Check action status." //$NON-NLS-1$
 							: null));
 		}
 		JsonArray stillReferenced = new JsonArray();

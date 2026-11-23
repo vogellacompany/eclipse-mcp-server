@@ -185,6 +185,36 @@ class SubstituteBundleToolTest {
 		}
 	}
 
+	@Test
+	void restoringEverythingKeepsTheRecordsOfABundleItLeftAloneAndChangesNothingOnADryRun() throws Exception {
+		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
+		String shippedA = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
+		String shippedB = "b,1.0.0,plugins/b_1.0.0.jar,4,false";
+		String jarA = "a,1.0.0," + packed.resolve("a.jar").toUri() + ",4,false";
+		String jarB = "b,1.0.0," + packed.resolve("b.jar").toUri() + ",4,false";
+		String content = String.join("\n", "#version=1", jarA, shippedB) + "\n";
+		Path bundlesInfo = Files.writeString(configuration.resolve("bundles.info"), content);
+		String records = "a\t" + shippedA + "\t" + jarA + "\n" + "b\t" + shippedB + "\t" + jarB + "\n";
+		Files.writeString(packed.resolve("substitutions.txt"), records);
+		try {
+			SubstituteBundleTool.restore(configuration, bundlesInfo, true, null);
+			assertEquals(content, Files.readString(bundlesInfo), "a dry run wrote");
+			assertEquals(records, Files.readString(packed.resolve("substitutions.txt")));
+
+			SubstituteBundleTool.restore(configuration, bundlesInfo, false, null);
+			assertEquals(List.of("#version=1", shippedA, shippedB), Files.readAllLines(bundlesInfo));
+			assertEquals("b\t" + shippedB + "\t" + jarB + "\n", Files.readString(packed.resolve("substitutions.txt")),
+					"the record of the bundle that was left alone has to survive");
+		} finally {
+			try (var walk = Files.walk(configuration.getParent())) {
+				for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+					Files.deleteIfExists(path);
+				}
+			}
+		}
+	}
+
 	/** The form simpleconfigurator rewrites a file line into. */
 	private static String fiveSlash(Path path) {
 		String slashed = path.toString().replace(java.io.File.separatorChar, '/');
