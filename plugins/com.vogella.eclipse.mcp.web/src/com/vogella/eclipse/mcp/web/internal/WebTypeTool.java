@@ -35,7 +35,7 @@ public final class WebTypeTool implements IMcpTool {
 				%s,
 				    "text":           {"type":"string","description":"What to type, or the label or value of the option to pick. Empty with clear true empties the field."},
 				    "force":          {"type":"boolean","default":false,"description":"Type into the field even when another element, such as a modal, covers it, which a user could not."},
-				    "clear":          {"type":"boolean","default":true,"description":"Replace the field's content. false appends to it."},
+				    "clear":          {"type":"boolean","default":true,"description":"Replace the field's content. false appends to it, which number, date and similar fields refuse."},
 				    "submit":         {"type":"boolean","default":false,"description":"Press Enter after typing."},
 				    "acceptDialogs":  {"type":"boolean","default":false,"description":"Accept a confirm or prompt the submit raises instead of dismissing it."},
 				    "timeoutSeconds": {"type":"integer","default":10,"minimum":0,"maximum":120,"description":"How long to wait for the page to settle afterwards."}

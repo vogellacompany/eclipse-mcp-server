@@ -52,6 +52,7 @@ class WebToolsTest {
 			<div hidden><button>Invisible</button></div>
 			<details><summary>More</summary><button>Folded</button></details>
 			<input type="file" id="upload" aria-label="Upload">
+			<div><button id="ghost" style="pointer-events: none">Ghost</button></div>
 			<a id="away" href="/second" target="_blank">Elsewhere</a>
 			<div inert><button id="behind">Behind</button></div>
 			<button type="button" onclick="this.remove()">Remove me</button>
@@ -140,6 +141,7 @@ class WebToolsTest {
 		assertFalse(snapshot.contains("Folded"), snapshot);
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#behind")), "inert");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#upload")), "file chooser");
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#ghost")), "covered by div");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_click", Map.of("selector", "#away")), "new tab");
 
 		Map<String, Object> typed = TestFixture.callAndParse("eclipse_web_type",
@@ -156,6 +158,8 @@ class WebToolsTest {
 		assertTrue(snapshot().contains("Submitted Eclipse"), snapshot());
 
 		assertEquals("42", TestFixture.callAndParse("eclipse_web_type", Map.of("selector", "#age", "text", "42")).get("value"));
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_type",
+				Map.of("selector", "#age", "text", "1", "clear", Boolean.FALSE)), "cannot be appended");
 		assertEquals("", TestFixture.callAndParse("eclipse_web_type", Map.of("selector", "#age", "text", "")).get("value"));
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#locked", "text", "x")), "read-only");
 		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#off", "text", "x")), "disabled");
@@ -300,6 +304,8 @@ class WebToolsTest {
 			for (int i = 0; i < 200 && !(Files.isRegularFile(portFile) && Files.size(portFile) > 0); i++) {
 				Thread.sleep(50);
 			}
+			Assumptions.assumeTrue(Files.isRegularFile(portFile) && Files.size(portFile) > 0,
+					"The browser did not start here: " + (Files.exists(profile.resolve("log")) ? Files.readString(profile.resolve("log")) : ""));
 			String endpoint = "http://127.0.0.1:" + Files.readAllLines(portFile).get(0).trim();
 			Map<String, Object> opened = TestFixture.callAndParse("eclipse_web_open",
 					Map.of("url", base + "/", "connectUrl", endpoint + "/"));

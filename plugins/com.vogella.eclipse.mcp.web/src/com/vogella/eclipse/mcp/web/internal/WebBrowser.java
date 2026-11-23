@@ -581,10 +581,12 @@ final class WebBrowser {
 			return;
 		}
 		process.destroy();
+		// each wait within what is left of the call, so closing a hung browser never costs the call its answer
+		long wait = Math.max(100, Math.min(3_000, CallBudget.leftMillis() / 2));
 		try {
-			if (!process.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
+			if (!process.waitFor(wait, java.util.concurrent.TimeUnit.MILLISECONDS)) {
 				process.destroyForcibly();
-				process.waitFor(3, java.util.concurrent.TimeUnit.SECONDS);
+				process.waitFor(wait, java.util.concurrent.TimeUnit.MILLISECONDS);
 			}
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();

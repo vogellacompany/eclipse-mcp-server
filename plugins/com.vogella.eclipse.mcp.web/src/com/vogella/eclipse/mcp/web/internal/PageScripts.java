@@ -200,7 +200,9 @@ final class PageScripts {
 			  const top = (root.elementFromPoint ? root : document).elementFromPoint(x, y);
 			  const describe = e => e ? e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') +
 			      (e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\\s+/).join('.') : '') : null;
-			  const covered = top && top !== el && !el.contains(top) && !top.contains(el) &&
+			  // an ancestor there covers it too: the target is not hit there (pointer-events: none, clipped), so the
+			  // ancestor's handlers would run instead; only the target, its content and its labels take the click
+			  const covered = top && top !== el && !el.contains(top) &&
 			      !(el.labels && Array.from(el.labels).some(l => l.contains(top)));
 			  window.__mcpTarget = el;
 			  return JSON.stringify({x, y, width: box.width, height: box.height, scrollX: window.scrollX,
@@ -256,6 +258,9 @@ final class PageScripts {
 			    selection.addRange(range);
 			  } else if (el.selectionStart !== null) {
 			    el.setSelectionRange(el.value.length, el.value.length);
+			  } else if (el.value) {
+			    // without a text selection the caret cannot be put after the value, so the text would land before it
+			    return JSON.stringify({error: 'A ' + el.type + ' field cannot be appended to; pass clear true (the default) with the whole value.'});
 			  }
 			  return JSON.stringify({focused: el.getRootNode().activeElement === el, hadValue: !!(el.value || el.textContent)});
 			})""";
