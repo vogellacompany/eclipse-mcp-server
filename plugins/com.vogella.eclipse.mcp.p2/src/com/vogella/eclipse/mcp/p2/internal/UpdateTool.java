@@ -82,7 +82,8 @@ public final class UpdateTool implements IMcpTool {
 		if (locations != null && (possible == null || possible.length == 0)) {
 			// the scope was the repositories holding the installed version, and an
 			// update lives somewhere else by definition
-			Provisioning.widenToAllRepositories(agent, operation, monitor);
+			operation = Provisioning.widenToAllRepositories(agent, units, monitor);
+			resolution = operation.resolveModal(monitor);
 			possible = operation.getPossibleUpdates();
 		}
 		if (possible == null || possible.length == 0) {
