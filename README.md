@@ -225,6 +225,21 @@ Tools marked ✎ change something; the rest are read-only.
 | `eclipse_wait_until_settled` | Wait until the UI has stopped changing |
 | `eclipse_wait_for` | Wait until a shell, widget, selection, editor or job condition holds |
 
+**Web pages**
+
+| Tool | Purpose |
+|---|---|
+| ✎ `eclipse_web_open` | Load a URL in a browser the IDE drives, starting an installed Chrome, Chromium or Edge headless on first use, or a tab in one already running with `--remote-debugging-port` |
+| `eclipse_web_snapshot` | The page as an outline of roles, names, states and refs |
+| ✎ `eclipse_web_click`, `eclipse_web_type` | Click, type into a field or pick an option, then wait until the page settled |
+| `eclipse_web_screenshot` | PNG of the viewport, the whole page or one element |
+| ✎ `eclipse_web_close` | Close the page and the browser the IDE started |
+
+The web tools talk to the browser over the Chrome DevTools Protocol with the JDK's own HTTP client, so they add no library and download nothing.
+They look for Chrome, Chromium or Edge in the usual install locations, on `PATH` and in a Playwright browser cache; `-Dcom.vogella.eclipse.mcp.web.browser=<executable>` or the `browserPath` argument names another.
+A browser the IDE starts gets a fresh temporary profile, deleted when it closes or the IDE exits.
+In a container where Chromium cannot set up its sandbox, `-Dcom.vogella.eclipse.mcp.web.noSandbox=true` starts it without; as root that happens anyway.
+
 **Installation**
 
 | Tool | Purpose |
@@ -278,6 +293,7 @@ Contributed texts are appended to the default instructions, which describe the I
 | `com.vogella.eclipse.mcp.git` | EGit tools |
 | `com.vogella.eclipse.mcp.ide` | IDE-only tools: open in editor, compare, launch shortcuts, project import |
 | `com.vogella.eclipse.mcp.p2` | Provisioning tools |
+| `com.vogella.eclipse.mcp.web` | Web page tools over the Chrome DevTools Protocol; needs only core and an installed Chromium based browser |
 
 ## Commercial support
 

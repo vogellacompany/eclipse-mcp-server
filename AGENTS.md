@@ -32,6 +32,7 @@ plugins/com.vogella.eclipse.mcp.debug    breakpoint tools, debug session tools, 
 plugins/com.vogella.eclipse.mcp.git      EGit tools, checkout and pull request fetch
 plugins/com.vogella.eclipse.mcp.ide      IDE-only tools: open in editor, compare, launch shortcuts, project import
 plugins/com.vogella.eclipse.mcp.p2       provisioning tools, repositories, install, update, headless trust
+plugins/com.vogella.eclipse.mcp.web      web page tools: a Chromium driven over the DevTools Protocol
 features/com.vogella.eclipse.mcp.feature
 tests/com.vogella.eclipse.mcp.core.tests    the tools, headless
 tests/com.vogella.eclipse.mcp.server.tests  the HTTP endpoint, driven by a real MCP client
@@ -126,6 +127,18 @@ Build a lookup key in one helper, as `FindReferencesTool.locationOf` does; two s
 **"The most recent" is ambiguous with more than one client.**
 The build, test run, provisioning and command registries are per IDE, so those tools consult `ClientSessions` and refuse the implicit default when a second client is connected.
 `ActiveSessions` counts `Mcp-Session-Id` headers and drops a session on its DELETE; with no provider (headless, tests) the count is one.
+
+**The web bundle has no third party dependency.**
+`com.vogella.eclipse.mcp.web` speaks the Chrome DevTools Protocol over `java.net.http.WebSocket` and never downloads a browser; Playwright for Java would need a Node.js driver per platform inside the bundle and a browser download on first use.
+`CdpConnection.HTTP` bypasses any proxy, because the browser listens on loopback and an IDE's system proxy would not reach it.
+A started browser picks its own port (`--remote-debugging-port=0`) and writes it to `DevToolsActivePort` in its temporary profile, which is the only race-free way to learn it.
+Refs from `eclipse_web_snapshot` live in `window.__mcpRefs` in the page rather than in DOM attributes, so the page is never changed; `window.__mcpIds` keeps an element's ref across snapshots, and each snapshot starts numbering at a block `WebBrowser.reserveRefs` set aside beforehand for every element of the page and reports how far it went, so a ref is not reused, even after a navigation, a browser restart or a snapshot that never answered (unless the page grew by more than the 200 spare refs between the count and that snapshot), and an old one is refused rather than landing on another element.
+The started browser keeps Chromium's DevTools origin check (no `--remote-allow-origins`), since the JDK WebSocket sends no `Origin`; `--no-sandbox` is added only when running as root, where Chromium refuses to start otherwise.
+The tools run one at a time through `WebPage.exclusive`: a call locates its element and acts on it in separate commands, and the page, its refs and `acceptDialogs` are shared by every client.
+Starting a browser is bounded by `CallBudget` as well as the settle wait, so a slow first start answers before the call timeout.
+JavaScript dialogs block the page until answered, so `WebBrowser` answers each at once and the acting tool reports it under `dialogs`; a confirm or prompt is dismissed unless the call passes `acceptDialogs`, and a leave-page prompt is accepted, which the descriptions say because it discards unsaved input.
+Every DevTools command waits at most what is left of the call, and the settle wait leaves `ANSWER_SECONDS` for reading the page afterwards, so the answer is never what the call timeout kills.
+`WebToolsTest` drives a real headless browser and is skipped where none is installed or the one found cannot start; the surefire `argLine` sets `com.vogella.eclipse.mcp.web.noSandbox` because CI agents and containers often cannot set up Chromium's sandbox. Install Chrome or Chromium on the Jenkins agent, or the web tools go untested there.
 
 ## Tests and CI
 

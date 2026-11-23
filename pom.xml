@@ -88,7 +88,7 @@
           <!-- the token lives in user scope, shared by every Eclipse this user runs, so
                without this the tests replace the token of the developer's own IDE and
                orphan its clients -->
-          <argLine>-Xmx1g -Dcom.vogella.eclipse.mcp.tokenDirectory=${project.build.directory}/mcp-token</argLine>
+          <argLine>-Xmx1g -Dcom.vogella.eclipse.mcp.tokenDirectory=${project.build.directory}/mcp-token -Dcom.vogella.eclipse.mcp.web.noSandbox=true</argLine>
         </configuration>
       </plugin>
     </plugins>

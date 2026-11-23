@@ -1,0 +1,12 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Eclipse MCP Web Browser Tools
+Bundle-SymbolicName: com.vogella.eclipse.mcp.web;singleton:=true
+Bundle-Version: 5.0.0.qualifier
+Bundle-Vendor: vogella GmbH
+Bundle-RequiredExecutionEnvironment: JavaSE-25
+Automatic-Module-Name: com.vogella.eclipse.mcp.web
+Bundle-ActivationPolicy: lazy
+Require-Bundle: org.eclipse.core.runtime;bundle-version="3.31.0",
+ com.vogella.eclipse.mcp.core;bundle-version="1.0.0"
+Export-Package: com.vogella.eclipse.mcp.web.internal;x-friends:="com.vogella.eclipse.mcp.core.tests"
