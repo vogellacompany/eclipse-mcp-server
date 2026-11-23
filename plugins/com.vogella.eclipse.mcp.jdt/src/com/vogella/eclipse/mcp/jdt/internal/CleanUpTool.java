@@ -12,6 +12,7 @@ import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.IStatus;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IPackageFragment;
@@ -85,7 +86,7 @@ public final class CleanUpTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Applies JDT's own clean-ups, the transformations behind Source > Clean Up, so the result is what Eclipse itself would produce rather than a rewrite of its own. MODIFIES SOURCE FILES, and runs as a dry run unless dryRun is set to false, reporting the files and the number of edits per clean-up. Name the clean-ups by their JDT option key, for example cleanup.use_lambda; an unknown key is refused with the list of the ones offered. Each clean-up is a semantic transformation with conditions, so it changes only what it can prove safe and silently leaves the rest: a file reported with no edits is a file where the pattern did not apply, not a failure."; //$NON-NLS-1$
+		return "Applies JDT's own clean-ups, the transformations behind Source > Clean Up, so the result is what Eclipse itself would produce rather than a rewrite of its own. MODIFIES SOURCE FILES, and runs as a dry run unless dryRun is set to false, reporting the files and the number of edits per clean-up. Name the clean-ups by their JDT option key, for example cleanup.use_lambda; an unknown key is refused with the list of the ones offered. Each clean-up is a semantic transformation with conditions, so it changes only what it can prove safe and silently leaves the rest: a file reported with no edits is a file where the pattern did not apply, not a failure. A clean-up that threw is counted in failed, once per file and clean-up, and listed under failures with the file and the error."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -160,6 +161,9 @@ public final class CleanUpTool implements IMcpTool {
 		}
 
 		JsonArray files = new JsonArray();
+		// reported apart from files, which only lists files with edits, so a failure is never read as "did not apply"
+		JsonArray failures = new JsonArray();
+		int failed = 0;
 		int changedFiles = 0;
 		int totalEdits = 0;
 		for (ICompilationUnit unit : units) {
@@ -176,7 +180,13 @@ public final class CleanUpTool implements IMcpTool {
 						edits += count;
 					}
 				} catch (CoreException e) {
-					applied.add(new JsonObject().put("cleanUp", id).put("error", String.valueOf(e.getMessage()))); //$NON-NLS-1$ //$NON-NLS-2$
+					applied.add(new JsonObject().put("cleanUp", id).put("error", errorOf(e))); //$NON-NLS-1$ //$NON-NLS-2$
+					failed++;
+					if (failures.size() < maxResults) {
+						failures.add(new JsonObject()
+								.put("file", fileOf(unit)) //$NON-NLS-1$
+								.put("cleanUp", id).put("error", errorOf(e))); //$NON-NLS-1$ //$NON-NLS-2$
+					}
 				}
 			}
 			if (edits == 0) {
@@ -186,8 +196,7 @@ public final class CleanUpTool implements IMcpTool {
 			totalEdits += edits;
 			if (files.size() < maxResults) {
 				files.add(new JsonObject()
-						.put("file", unit.getResource() == null ? unit.getElementName() //$NON-NLS-1$
-								: unit.getResource().getFullPath().toString())
+						.put("file", fileOf(unit)) //$NON-NLS-1$
 						.put("edits", Integer.valueOf(edits)).put("cleanUps", applied)); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 		}
@@ -197,12 +206,34 @@ public final class CleanUpTool implements IMcpTool {
 				.put("filesConsidered", Integer.valueOf(units.size())) //$NON-NLS-1$
 				.put("filesChanged", Integer.valueOf(changedFiles)) //$NON-NLS-1$
 				.put("edits", Integer.valueOf(totalEdits)) //$NON-NLS-1$
-				.put("truncated", Boolean.valueOf(changedFiles > files.size())) //$NON-NLS-1$
+				.put("truncated", Boolean.valueOf(changedFiles > files.size() || failed > failures.size())) //$NON-NLS-1$
 				.put("files", files); //$NON-NLS-1$
+		if (failed > 0) {
+			result.put("failed", Integer.valueOf(failed)).put("failures", failures); //$NON-NLS-1$ //$NON-NLS-2$
+		}
 		if (dryRun) {
 			result.put("note", "Nothing was changed. Pass dryRun false to apply it."); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		return McpToolResult.of(result.toString());
+	}
+
+	/** The status message, or the first child's when a multi status leaves its own blank, or the exception itself. */
+	private static String errorOf(CoreException e) {
+		IStatus status = e.getStatus();
+		if (status.getMessage() != null && !status.getMessage().isBlank()) {
+			return status.getMessage();
+		}
+		for (IStatus child : status.getChildren()) {
+			if (child.getMessage() != null && !child.getMessage().isBlank()) {
+				return child.getMessage();
+			}
+		}
+		return e.toString();
+	}
+
+	/** The label of a unit in files and failures, which a client joins the two lists on. */
+	private static String fileOf(ICompilationUnit unit) {
+		return unit.getResource() == null ? unit.getElementName() : unit.getResource().getFullPath().toString();
 	}
 
 	/** Runs one clean-up over one unit, returning how many edits it produced. */
