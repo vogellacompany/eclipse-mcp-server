@@ -83,7 +83,7 @@ public final class ImportProjectTool implements IMcpTool {
 				    "location":   {"type":"string","description":"Absolute path of the directory to import from. Its subdirectories are searched at any depth."},
 				    "configure":  {"type":"boolean","default":false,"description":"Run the project configurators, which is what imports a module that has no .project yet. WRITES .project and .classpath for such a module. False imports only what is already an Eclipse project."},
 				    "dryRun":     {"type":"boolean","default":true,"description":"Report what would be imported and which configurator claimed each directory, and change nothing."},
-				    "maxResults": {"type":"integer","default":100,"minimum":1,"maximum":1000,"description":"How many projects to LIST. Every project found is still imported; 'found' is the true count and 'truncated' says the list was cut."},
+				    "maxResults": {"type":"integer","default":100,"minimum":1,"maximum":1000,"description":"How many projects to LIST. Every project found is still imported; 'total' is the true count, 'found' the same number kept for older clients, and 'truncated' says the list was cut."},
 				    "timeoutSeconds": {"type":"integer","default":25,"minimum":1,"maximum":3600,"description":"How long to wait for the import. Bounded by the server's own call timeout; the import continues past it either way."}
 				  },
 				  "required": ["location"],
@@ -276,6 +276,7 @@ public final class ImportProjectTool implements IMcpTool {
 
 		JsonObject answer = new JsonObject().put("dryRun", Boolean.valueOf(dryRun)) //$NON-NLS-1$
 				.put("found", Integer.valueOf(proposals.size())) //$NON-NLS-1$
+				.put("total", Integer.valueOf(proposals.size())) //$NON-NLS-1$
 				.put("imported", Integer.valueOf(importedNames.size())) //$NON-NLS-1$
 				.put("listed", Integer.valueOf(projects.size())) //$NON-NLS-1$
 				.put("truncated", Boolean.valueOf(projects.size() < proposals.size())) //$NON-NLS-1$
