@@ -56,6 +56,8 @@ final class WebBrowser {
 	private final List<JsonObject> dialogs = new ArrayList<>();
 	private String mainFrameId;
 	private boolean loading;
+	/** When the loading state or the requests in flight last changed, guarded by {@code state}. */
+	private long lastActivity = System.nanoTime();
 	private Integer documentStatus;
 	private boolean acceptConfirm;
 
@@ -308,6 +310,7 @@ final class WebBrowser {
 				// not needed to decide whether the page settled
 			}
 			}
+			lastActivity = System.nanoTime();
 			state.notifyAll();
 		}
 	}
@@ -418,7 +421,9 @@ final class WebBrowser {
 					quietSince = 0;
 				}
 				if (now >= deadline) {
-					return false;
+					// a wait too short to see quiet of its own still counts a page that has been quiet that long
+					return !loading && inflight.isEmpty()
+							&& now - lastActivity >= Duration.ofMillis(quietMillis).toNanos();
 				}
 				try {
 					state.wait(25);
@@ -460,12 +465,15 @@ final class WebBrowser {
 
 	/**
 	 * Evaluates a JavaScript expression in the page and answers its value, awaiting a promise.
+	 * <p>
+	 * Not marked as a user gesture: the tools act through real input events, and a page must not gain gesture-gated
+	 * powers, such as opening a popup, from a snapshot or a locate.
 	 *
 	 * @throws IOException when the script threw, with the page's message
 	 */
 	Object evaluate(String expression) throws IOException {
 		Map<String, Object> result = send("Runtime.evaluate", new JsonObject().put("expression", expression) //$NON-NLS-1$ //$NON-NLS-2$
-				.put("returnByValue", Boolean.TRUE).put("awaitPromise", Boolean.TRUE).put("userGesture", Boolean.TRUE)); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				.put("returnByValue", Boolean.TRUE).put("awaitPromise", Boolean.TRUE)); //$NON-NLS-1$ //$NON-NLS-2$
 		if (result.get("exceptionDetails") instanceof Map<?, ?> details) { //$NON-NLS-1$
 			Object message = details.get("exception") instanceof Map<?, ?> exception ? exception.get("description") //$NON-NLS-1$ //$NON-NLS-2$
 					: details.get("text"); //$NON-NLS-1$

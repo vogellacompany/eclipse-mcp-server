@@ -162,6 +162,11 @@ class WebToolsTest {
 		TestFixture.callAndParse("eclipse_web_click", Map.of("ref", ref(snapshot(), "button \"Shadow greet\"")));
 		assertTrue(snapshot().contains("From the shadow"), snapshot());
 
+		// a page that has been quiet counts as settled even when the call leaves no time to wait
+		Thread.sleep(700);
+		assertEquals(Boolean.TRUE, TestFixture.callAndParse("eclipse_web_click",
+				Map.of("selector", "#greet", "timeoutSeconds", Integer.valueOf(0))).get("settled"));
+
 		Map<String, Object> followed = TestFixture.callAndParse("eclipse_web_click",
 				Map.of("ref", ref(snapshot(), "link \"Next page\"")));
 		assertEquals(Boolean.TRUE, followed.get("navigated"));

@@ -8,8 +8,9 @@ import com.vogella.eclipse.mcp.core.json.Json;
  * The snapshot keeps every element it listed in {@code window.__mcpRefs}, a map from ref to element, and gives an
  * element the same ref in every snapshot of a document through the weak map {@code window.__mcpIds}. Numbering
  * starts at a number {@link WebBrowser#reserveRefs} set aside for the snapshot before it ran, enough for every element
- * of the page, so a ref is never reused for another element, not even after a navigation or a snapshot that failed
- * half way: an old ref either still names its element or is refused. The page's DOM
+ * of the page and 200 more, so a ref is not reused for another element, not even after a navigation or a snapshot
+ * that failed half way, unless the page grew by more than those 200 elements before that snapshot: an old ref either
+ * still names its element or is refused. The page's DOM
  * is never changed.
  */
 final class PageScripts {
