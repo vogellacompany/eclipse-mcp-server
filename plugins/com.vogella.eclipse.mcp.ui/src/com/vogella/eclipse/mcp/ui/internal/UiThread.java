@@ -5,8 +5,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.eclipse.core.runtime.ILog;
 import org.eclipse.swt.widgets.Display;
 
 import com.vogella.eclipse.mcp.core.CallBudget;
@@ -211,6 +213,15 @@ public final class UiThread {
 	 * to fold the failure into an answer somebody else is writing.
 	 */
 	static Outcome run(long timeoutSeconds, Supplier<JsonObject> work) {
+		return run(timeoutSeconds, work, null, null);
+	}
+
+	/**
+	 * The same, answering with what {@code onDialog} makes of a dialog the work opened and is
+	 * still running inside, since the work only returns once somebody closes it.
+	 */
+	static Outcome run(long timeoutSeconds, Supplier<JsonObject> work, DialogWatch watch,
+			Function<DialogWatch.Seen, JsonObject> onDialog) {
 		if (onUiThread()) {
 			return inline(work);
 		}
@@ -219,8 +230,20 @@ public final class UiThread {
 			return new Outcome(null, NO_WORKBENCH, null);
 		}
 		int wait = CallBudget.uiWaitSeconds(timeoutSeconds);
+		long deadline = System.currentTimeMillis() + wait * 1000L;
 		try {
-			return new Outcome(pending.get(wait, TimeUnit.SECONDS), null, null);
+			DialogWatch.Seen dialog = watch == null ? null : watch.await(pending, deadline);
+			if (dialog != null) {
+				pending.whenComplete((value, error) -> {
+					if (error != null) {
+						ILog.get().error("A UI request failed after its call had answered that the dialog '%s' was open." //$NON-NLS-1$
+								.formatted(dialog.title()), error);
+					}
+				});
+				return new Outcome(onDialog.apply(dialog), null, null);
+			}
+			return new Outcome(pending.get(Math.max(0, deadline - System.currentTimeMillis()), TimeUnit.MILLISECONDS),
+					null, null);
 		} catch (TimeoutException e) {
 			// cancelling is what makes the queued runnable skip the work, see completeFrom
 			pending.cancel(false);

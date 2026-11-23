@@ -9,6 +9,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -202,7 +203,7 @@ public final class KeyboardTools {
 
 		@Override
 		public String getDescription() {
-			return "Posts real key events through Display.post to whatever control has focus, for the cases the document API cannot reach: Ctrl+Space to open content assist, Escape to close a popup, Enter to accept a proposal, arrow keys to move the selection in a proposal table, Tab, Backspace. CHANGES WHAT THE IDE DOES, which is whatever that key does with the current focus. Take a key like 'Ctrl+Space', 'Escape', 'Down', 'Enter', 'Tab', 'BackSpace', or a single character. There is no Menu key: Shift+F10 opens the focused control's context menu instead, and on GTK it opens at the pointer rather than at the selected row, so put the pointer there first with eclipse_click and button none. Display.post goes to the window that has OS focus, so this refuses when the IDE is not the active window rather than sending the key somewhere else; it first waits up to waitForForegroundMillis (0 disables the wait) for focus that is merely late, and foregroundWaitMillis in the answer is the time waited, foregroundWaitState how the wait ended (foreground, timedOut, uiBusy or probeFailed) and foregroundWaitClamped whether what was left of the call cut it short, all null when no wait was made because waitForForegroundMillis is 0, the delivery is synthetic or the call runs on the UI thread; a call cancelled before the key is sent answers an error and sends no key. On Wayland Display.post is often ignored by the compositor; the answer reports whether the post was accepted and whether focus was inside the IDE, and for entering plain characters eclipse_type_text is the reliable path. On Cocoa a single character the keyboard layout types with Shift, such as an upper case letter or '!', gets Shift added (shiftAdded), since Display.post there would type the unshifted key; keyboardLayoutUnread true means the layout could not be read, so only upper case letters got Shift and a character like '!' may have arrived unshifted. count repeats the key. delivery synthetic, or auto when the post is refused or the IDE is inactive, sends the key at SWT level instead: Tab, Shift+Tab, Escape, Enter and Ctrl+PageUp/PageDown traverse as SWT would, other keys reach the KeyDown and KeyUp listeners of the focus control or of path; the answer says synthetic true."; //$NON-NLS-1$
+			return "Posts real key events through Display.post to whatever control has focus, for the cases the document API cannot reach: Ctrl+Space to open content assist, Escape to close a popup, Enter to accept a proposal, arrow keys to move the selection in a proposal table, Tab, Backspace. CHANGES WHAT THE IDE DOES, which is whatever that key does with the current focus. Take a key like 'Ctrl+Space', 'Escape', 'Down', 'Enter', 'Tab', 'BackSpace', or a single character. There is no Menu key: Shift+F10 opens the focused control's context menu instead, and on GTK it opens at the pointer rather than at the selected row, so put the pointer there first with eclipse_click and button none. Display.post goes to the window that has OS focus, so this refuses when the IDE is not the active window rather than sending the key somewhere else; it first waits up to waitForForegroundMillis (0 disables the wait) for focus that is merely late, and foregroundWaitMillis in the answer is the time waited, foregroundWaitState how the wait ended (foreground, timedOut, uiBusy or probeFailed) and foregroundWaitClamped whether what was left of the call cut it short, all null when no wait was made because waitForForegroundMillis is 0, the delivery is synthetic or the call runs on the UI thread; a call cancelled before the key is sent answers an error and sends no key. On Wayland Display.post is often ignored by the compositor; the answer reports whether the post was accepted and whether focus was inside the IDE, and for entering plain characters eclipse_type_text is the reliable path. On Cocoa a single character the keyboard layout types with Shift, such as an upper case letter or '!', gets Shift added (shiftAdded), since Display.post there would type the unshifted key; keyboardLayoutUnread true means the layout could not be read, so only upper case letters got Shift and a character like '!' may have arrived unshifted. count repeats the key. delivery synthetic, or auto when the post is refused or the IDE is inactive, sends the key at SWT level instead: Tab, Shift+Tab, Escape, Enter and Ctrl+PageUp/PageDown traverse as SWT would, other keys reach the KeyDown and KeyUp listeners of the focus control or of path; the answer says synthetic true. A synthetic key whose listener opens a dialog answers as soon as the dialog is open, with dialogOpen and its title, instead of waiting for somebody to close it."; //$NON-NLS-1$
 		}
 
 		@Override
@@ -265,6 +266,9 @@ public final class KeyboardTools {
 			String waitState = wait == null ? null : wait.state().label();
 			Boolean clamped = budget == null ? null : Boolean.valueOf(budget.longValue() < waitMillis);
 			AtomicBoolean cancelledOnUi = new AtomicBoolean();
+			AtomicBoolean dialogAnswered = new AtomicBoolean();
+			DialogWatch watch = new DialogWatch();
+			AtomicReference<String> fellBackFrom = new AtomicReference<>();
 			UiThread.Outcome outcome = UiThread.run(UI_TIMEOUT_SECONDS, () -> {
 				if (monitor != null && monitor.isCanceled()) {
 					cancelledOnUi.set(true);
@@ -307,7 +311,9 @@ public final class KeyboardTools {
 					throw new IllegalStateException("There is no focus control and no shell to send the key to; pass a path."); //$NON-NLS-1$
 				}
 				JsonObject result = new JsonObject().put("key", key).put("count", Integer.valueOf(count)); //$NON-NLS-1$ //$NON-NLS-2$
-				for (int i = 0; i < count && !target.isDisposed(); i++) {
+				fellBackFrom.set(osFailure);
+				watch.mark(display);
+				for (int i = 0; i < count && !target.isDisposed() && !dialogAnswered.get(); i++) {
 					SyntheticInput.key(target, stroke.modifiers(), stroke.keyCode(), stroke.character(), result);
 				}
 				return result.put("delivery", "synthetic") //$NON-NLS-1$ //$NON-NLS-2$
@@ -320,11 +326,30 @@ public final class KeyboardTools {
 						.put("foregroundWaitState", waitState) //$NON-NLS-1$
 						.put("foregroundWaitClamped", clamped) //$NON-NLS-1$
 						.put("note", SyntheticInput.NOTE); //$NON-NLS-1$
+			}, watch, dialog -> {
+				dialogAnswered.set(true);
+				return dialogOpen(key, count, dialog, fellBackFrom.get()).put("foregroundWaitMillis", waited) //$NON-NLS-1$
+						.put("foregroundWaitState", waitState).put("foregroundWaitClamped", clamped); //$NON-NLS-1$ //$NON-NLS-2$
 			});
 			if (cancelledOnUi.get()) {
 				return McpToolResult.error(CANCELLED);
 			}
 			return outcome.error() == null ? McpToolResult.of(outcome.value().toString()) : outcome.errorResult();
+		}
+
+		/** The answer for a synthetic key whose listener opened a dialog and is waiting inside it. */
+		private static JsonObject dialogOpen(String key, int count, DialogWatch.Seen dialog, String osFailure) {
+			return new JsonObject().put("key", key).put("count", Integer.valueOf(count)) //$NON-NLS-1$ //$NON-NLS-2$
+					.put("delivery", "synthetic") //$NON-NLS-1$ //$NON-NLS-2$
+					.put("synthetic", Boolean.TRUE) //$NON-NLS-1$
+					.put("dialogOpen", Boolean.TRUE) //$NON-NLS-1$
+					.put("dialog", dialog.title()) //$NON-NLS-1$
+					.put("nativeDialog", Boolean.valueOf(dialog.nativeDialog())) //$NON-NLS-1$
+					.put("osFailure", osFailure) //$NON-NLS-1$
+					.put("note", "The dialog '%s' opened while the key's listener was running and the listener has not returned, so it is most likely waiting inside that dialog, and the remaining repeats of count are skipped once it returns; a failure after the dialog closes goes to the Error Log. %s" //$NON-NLS-1$
+							.formatted(dialog.title(), dialog.nativeDialog()
+									? "It is a native dialog: eclipse_list_ui_targets reports its buttons under nativeDialogs, and eclipse_dismiss_dialog closes it or presses one." //$NON-NLS-1$
+									: "Read it with eclipse_get_widget_tree and shellTitle, answer it with eclipse_dismiss_dialog or by pressing its buttons.")); //$NON-NLS-1$
 		}
 
 		/** One short hop to the UI thread; a probe the UI does not answer in time is withdrawn and reads as unknown. */

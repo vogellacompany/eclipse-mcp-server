@@ -101,6 +101,7 @@ Every long running operation a client drives has a dialog on it somewhere: p2's 
 Do not let it be raised on a client path; answer it and report what was answered.
 Before adding a tool that runs project code or touches the installation, look for a prompting `IStatusHandler` on that path.
 `eclipse_run_workbench_command` probes the Display while it waits, which a modal dialog's nested event loop answers, and returns `dialogOpen` with the title once a new dialog (`Shells.newDialog`: modal, or a titled JFace window, which a product can block on without it being modal) other than a `ProgressMonitorDialog` shows on two probes in a row; otherwise it caps its wait and answers `timedOut`.
+That probe is `DialogWatch`, which `eclipse_press_key` shares for a synthetic key whose listener opens a dialog, so it answers `dialogOpen` too instead of timing out.
 Either way the future keeps running and a late result goes to the Error Log; its `IExecutionListener` is what makes `handlerFinished` trustworthy.
 
 **IDE-only tools live in `com.vogella.eclipse.mcp.ide`.**
