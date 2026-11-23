@@ -86,6 +86,10 @@ public final class UpdateTool implements IMcpTool {
 			resolution = operation.resolveModal(monitor);
 			possible = operation.getPossibleUpdates();
 		}
+		// a resolution that failed finds no updates either, and must not read as up to date
+		if ((possible == null || possible.length == 0) && resolution.getSeverity() == IStatus.ERROR) {
+			return McpToolResult.error(ResolutionStatuses.failure("The update could not be resolved", resolution)); //$NON-NLS-1$
+		}
 		if (possible == null || possible.length == 0) {
 			return McpToolResult.of(Provisioning
 					.record("update", "done", //$NON-NLS-1$ //$NON-NLS-2$
