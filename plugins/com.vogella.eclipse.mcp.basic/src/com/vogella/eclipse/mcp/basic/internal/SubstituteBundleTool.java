@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -74,7 +75,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 				{
 				  "type": "object",
 				  "properties": {
-				    "action":  {"type":"string","enum":["substitute","restore","status","cleanup","repair"],"default":"status","description":"'substitute' packs the project and points bundles.info at it, 'restore' puts the recorded original lines back, all of them or only the one named by 'bundle', 'status' only reports, 'cleanup' deletes the packed jars that nothing references any more, 'repair' points a line whose jar is missing back at the installed one, and drops a line naming a packed jar when a higher version of the same bundle is also listed, which is what an update leaves behind: the framework installs that copy, never resolves it, and -clean does not remove it."},
+				    "action":  {"type":"string","enum":["substitute","restore","status","cleanup","repair"],"default":"status","description":"'substitute' packs the project and points bundles.info at it, 'restore' puts the recorded original lines back, all of them or only the one named by 'bundle', following each bundle's substitutions back from its current line to the line before the first of them and dropping its records, 'status' only reports, 'cleanup' deletes the packed jars that nothing references any more, 'repair' points a line whose jar is missing back at the installed one, and drops a line naming a packed jar when a higher version of the same bundle is also listed, which is what an update leaves behind: the framework installs that copy, never resolves it, and -clean does not remove it."},
 				    "bundle":  {"type":"string","description":"For restore: put back only this bundle's original line, by symbolic name, and leave every other recorded substitution in place. Without it restore undoes EVERY recorded substitution of this installation, including one another session made, since the record is per installation and an installation is shared."},
 				    "jar":     {"type":"string","description":"Absolute path of a jar that is already built, used instead of 'project'. Its Bundle-SymbolicName and Bundle-Version are read from its own manifest rather than guessed from the file name, which for a Maven build matches neither. The jar is copied, so rebuilding it afterwards does not silently change what this IDE runs."},
 				    "project": {"type":"string","description":"Plug-in project to pack, for substitute. Its output folder and the bin.includes of build.properties are what goes into the jar. CHECK WHICH CLONE IT IS: the answer reports packedFrom, because a workspace project can point at one clone of a repository while the change being measured lives in another, and then this packs a tree without it."},
@@ -425,7 +426,11 @@ public final class SubstituteBundleTool implements IMcpTool {
 		return null;
 	}
 
-	private static McpToolResult restore(Path configuration, Path bundlesInfo, boolean dryRun, String bundle)
+	/**
+	 * Puts back the line each recorded bundle had before the substitutions that led to its current line.
+	 * Public for the test bundle, which cannot see a package-private method across bundles.
+	 */
+	public static McpToolResult restore(Path configuration, Path bundlesInfo, boolean dryRun, String bundle)
 			throws IOException {
 		List<String[]> all = records(configuration);
 		if (all.isEmpty()) {
@@ -444,38 +449,46 @@ public final class SubstituteBundleTool implements IMcpTool {
 			return McpToolResult.error("No substitution of '%s' is recorded; action status lists what is." //$NON-NLS-1$
 					.formatted(bundle));
 		}
+		Set<String> names = new LinkedHashSet<>();
+		for (String[] record : records) {
+			names.add(record[0]);
+		}
 		List<String> lines = new ArrayList<>(Files.readAllLines(bundlesInfo, StandardCharsets.UTF_8));
 		JsonArray done = new JsonArray();
 		JsonArray missed = new JsonArray();
-		for (String[] record : records) {
+		for (String name : names) {
 			// by bundle name, not by the whole line: simpleconfigurator rewrites
 			// the version and the path form at every start, so the line written
 			// here is not the line found later
-			int index = indexOf(lines, record[0]);
+			int index = indexOf(lines, name);
 			if (index < 0) {
-				missed.add(new JsonObject().put("bundle", record[0]) //$NON-NLS-1$
+				missed.add(new JsonObject().put("bundle", name) //$NON-NLS-1$
 						.put("reason", "bundles.info has no line for it at all.")); //$NON-NLS-1$ //$NON-NLS-2$
 				continue;
 			}
 			String current = lines.get(index);
-			if (current.equals(record[1])) {
-				missed.add(new JsonObject().put("bundle", record[0]) //$NON-NLS-1$
-						.put("reason", "It already holds the original line; nothing to undo.")); //$NON-NLS-1$ //$NON-NLS-2$
+			List<String[]> layers = layersUnder(configuration, records, name, current);
+			if (layers.isEmpty()) {
+				// already restored, or updated since: writing a recorded original over it could bring back a packed jar
+				records.stream().filter(record -> record[0].equals(name)).forEach(kept::add);
+				missed.add(new JsonObject().put("bundle", name) //$NON-NLS-1$
+						.put("reason", "Its current line is not one a recorded substitution put there, so it is already restored or was updated since; it was left alone and its records kept.")); //$NON-NLS-1$ //$NON-NLS-2$
 				continue;
 			}
+			String[] record = layers.getLast();
 			if (!dryRun) {
 				lines.set(index, record[1]);
 			}
-			// a substitution layered on another records the jar it replaced, which is
-			// itself a packed one, so restoring lands on that rather than on the
-			// shipped bundle. That is right, and invisible unless it is said
+			// an original that is itself a packed jar comes from a substitution the
+			// record does not know about, and is invisible unless it is said
 			boolean ontoSubstituted = record[1].contains(JARS);
-			done.add(new JsonObject().put("bundle", record[0]) //$NON-NLS-1$
+			done.add(new JsonObject().put("bundle", name) //$NON-NLS-1$
 					.put("was", current) //$NON-NLS-1$
 					.put("line", record[1]) //$NON-NLS-1$
+					.put("layersUndone", Integer.valueOf(layers.size())) //$NON-NLS-1$
 					.put("restoredToSubstitutedJar", Boolean.valueOf(ontoSubstituted)) //$NON-NLS-1$
 					.put("restoredToNote", ontoSubstituted //$NON-NLS-1$
-							? "This puts back an EARLIER SUBSTITUTED jar, not the shipped one: a substitution was layered on another, and this record's original is that other packed jar. Restore again to go one layer further back, and check action status." //$NON-NLS-1$
+							? "This puts back an EARLIER SUBSTITUTED jar, not the shipped one: no record leads back from that packed jar, so the line it replaced is not known here and the records of this bundle are gone after this call. Check action status." //$NON-NLS-1$
 							: null));
 		}
 		JsonArray stillReferenced = new JsonArray();
@@ -516,6 +529,38 @@ public final class SubstituteBundleTool implements IMcpTool {
 								? "The recorded lines are back, BUT bundles.info still points at a packed jar for something else, listed under stillReferenced. Do not delete anything under mcp-substituted until that is gone; action repair drops such a line when a higher version of the bundle is also listed." //$NON-NLS-1$
 								: "The installed bundles are back in bundles.info; restart with eclipse_restart for the IDE to run them. Delete the packed jars with action cleanup, which checks the file again first, rather than by hand: this file is written by simpleconfigurator and by other sessions, so what is unreferenced now may not be in a minute.") //$NON-NLS-1$
 				.toString());
+	}
+
+	/**
+	 * The records that lead to {@code current}, newest first: the one whose jar the line names,
+	 * then the one whose jar that record's original names, and so on. An update between two
+	 * substitutions breaks the chain, so the walk stops at the installed line rather than at
+	 * one whose jar the update removed.
+	 */
+	private static List<String[]> layersUnder(Path configuration, List<String[]> records, String name, String current) {
+		List<String[]> layers = new ArrayList<>();
+		String line = current;
+		while (true) {
+			Path jar = normalized(jarOf(configuration, line));
+			String[] hit = null;
+			for (int i = records.size() - 1; i >= 0 && jar != null; i--) {
+				String[] record = records.get(i);
+				if (record[0].equals(name) && !layers.contains(record)
+						&& jar.equals(normalized(jarOf(configuration, record[2])))) {
+					hit = record;
+					break;
+				}
+			}
+			if (hit == null) {
+				return layers;
+			}
+			layers.add(hit);
+			line = hit[1];
+		}
+	}
+
+	private static Path normalized(Path path) {
+		return path == null ? null : path.toAbsolutePath().normalize();
 	}
 
 	/**
