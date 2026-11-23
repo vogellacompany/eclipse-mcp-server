@@ -164,7 +164,8 @@ final class PageScripts {
 			  const root = rootSelector ? document.querySelector(rootSelector) : document.body;
 			  if (!root) throw new Error('No element matches ' + rootSelector);
 			  walk(root, 0);
-			  return JSON.stringify({snapshot: lines.join('\\n'), total, truncated: total > lines.length});
+			  return JSON.stringify({snapshot: lines.join('\\n'), total, truncated: total > lines.length,
+			      nextRef: window.__mcpNext + 1});
 			}""";
 
 	/**

@@ -203,15 +203,24 @@ final class WebBrowser {
 		}
 		long deadline = System.nanoTime() + Duration.ofMillis(launchBudgetMillis(10_000)).toNanos();
 		while (true) {
-			if (Json.parse(http(endpoint + "/json/list", "GET")) instanceof List<?> targets) { //$NON-NLS-1$ //$NON-NLS-2$
-				for (Object target : targets) {
-					if (target instanceof Map<?, ?> map && "page".equals(map.get("type")) //$NON-NLS-1$ //$NON-NLS-2$
-							&& map.get("webSocketDebuggerUrl") != null) { //$NON-NLS-1$
-						return (Map<String, Object>) map;
+			IOException refused = null;
+			try {
+				if (Json.parse(http(endpoint + "/json/list", "GET")) instanceof List<?> targets) { //$NON-NLS-1$ //$NON-NLS-2$
+					for (Object target : targets) {
+						if (target instanceof Map<?, ?> map && "page".equals(map.get("type")) //$NON-NLS-1$ //$NON-NLS-2$
+								&& map.get("webSocketDebuggerUrl") != null) { //$NON-NLS-1$
+							return (Map<String, Object>) map;
+						}
 					}
 				}
+			} catch (IOException e) {
+				// a browser that just wrote its port can still refuse the first request
+				refused = e;
 			}
 			if (System.nanoTime() > deadline) {
+				if (refused != null) {
+					throw refused;
+				}
 				throw new IOException("The browser at " + endpoint + " has no page to drive."); //$NON-NLS-1$ //$NON-NLS-2$
 			}
 			sleep(100);
@@ -224,7 +233,7 @@ final class WebBrowser {
 	}
 
 	private static String http(String url, String method) throws IOException {
-		HttpRequest request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofMillis(launchBudgetMillis(10_000)))
+		HttpRequest request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofMillis(launchBudgetMillis(5_000)))
 				.method(method, HttpRequest.BodyPublishers.noBody()).build();
 		try {
 			HttpResponse<String> response = CdpConnection.HTTP.send(request, HttpResponse.BodyHandlers.ofString());
@@ -413,6 +422,11 @@ final class WebBrowser {
 	 * Sets aside {@code count} ref numbers and answers the first, before a snapshot that may hand out that many runs, so
 	 * the numbers stay taken even when the snapshot never answers.
 	 */
+	/** Records that the page handed out refs below {@code next}, in case it went past its reserved block. */
+	static synchronized void refsUsedBelow(long next) {
+		nextRef = Math.max(nextRef, next);
+	}
+
 	static synchronized long reserveRefs(long count) {
 		long first = nextRef;
 		nextRef += Math.max(0, count) + 1;

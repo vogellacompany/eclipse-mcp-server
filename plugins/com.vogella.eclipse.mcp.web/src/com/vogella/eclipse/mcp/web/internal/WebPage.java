@@ -99,8 +99,15 @@ final class WebPage {
 		int bounded = Math.max(0, Math.min(requested, (int) (CallBudget.leftMillis() / 1000) - ANSWER_SECONDS));
 		boolean settled = browser.settle(TimeUnit.SECONDS.toMillis(bounded), QUIET_MILLIS);
 		JsonObject answer = new JsonObject();
-		String url = browser.location(answer);
-		if (urlBefore != null) {
+		String url;
+		try {
+			url = browser.location(answer);
+		} catch (IOException e) {
+			// the action happened; a page that went away with it only costs the answer its url and title
+			url = null;
+			answer.put("pageGone", e.getMessage()); //$NON-NLS-1$
+		}
+		if (urlBefore != null && url != null) {
 			answer.put("navigated", Boolean.valueOf(!urlBefore.equals(url))); //$NON-NLS-1$
 		}
 		answer.put("settled", Boolean.valueOf(settled)); //$NON-NLS-1$

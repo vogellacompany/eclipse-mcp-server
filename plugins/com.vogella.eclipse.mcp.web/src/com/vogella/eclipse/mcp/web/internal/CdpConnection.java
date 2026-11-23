@@ -74,11 +74,13 @@ final class CdpConnection implements AutoCloseable {
 		pending.put(Integer.valueOf(id), answer);
 		JsonObject message = new JsonObject().put("id", Integer.valueOf(id)).put("method", method) //$NON-NLS-1$ //$NON-NLS-2$
 				.put("params", params == null ? new JsonObject() : params); //$NON-NLS-1$
+		long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
 		try {
 			synchronized (socket) {
 				socket.sendText(Json.write(message), true).get(timeoutMillis, TimeUnit.MILLISECONDS);
 			}
-			return answer.get(Math.max(1, timeoutMillis), TimeUnit.MILLISECONDS);
+			// one deadline for sending and answering, so a command never waits twice what it was given
+			return answer.get(Math.max(1, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new IOException(method + " was interrupted", e); //$NON-NLS-1$

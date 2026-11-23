@@ -42,9 +42,16 @@ public final class WebSnapshotTool implements IMcpTool {
 
 	/** How many elements the page has, which bounds the refs one snapshot can hand out, shadow roots included. */
 	private static long elementCount(WebBrowser browser) throws IOException {
-		Object count = browser.evaluate(
+		Object count;
+		try {
+			count = browser.evaluate(
 				"(() => { let n = 0; const walk = root => { for (const el of root.querySelectorAll('*')) { n++; if (el.shadowRoot) walk(el.shadowRoot); } }; walk(document); return n; })()"); //$NON-NLS-1$
-		return count instanceof Number number ? number.longValue() : 100_000;
+		} catch (IOException e) {
+			return 100_000;
+		}
+		// some to spare for what the page renders between this count and the snapshot; a snapshot that answers
+		// reports how far it really went, so the margin only matters for one that never does
+		return count instanceof Number number ? number.longValue() + 200 : 100_000;
 	}
 
 	@Override
@@ -62,6 +69,9 @@ public final class WebSnapshotTool implements IMcpTool {
 		try {
 			Map<String, Object> result = WebPage
 					.parse(browser.evaluate(PageScripts.snapshot(args.getString("selector"), maxResults, WebBrowser.reserveRefs(elementCount(browser))))); //$NON-NLS-1$
+			if (result.get("nextRef") instanceof Number next) { //$NON-NLS-1$
+				WebBrowser.refsUsedBelow(next.longValue());
+			}
 			JsonObject answer = browser.describe();
 			answer.put("total", result.get("total")); //$NON-NLS-1$ //$NON-NLS-2$
 			answer.put("truncated", result.get("truncated")); //$NON-NLS-1$ //$NON-NLS-2$
