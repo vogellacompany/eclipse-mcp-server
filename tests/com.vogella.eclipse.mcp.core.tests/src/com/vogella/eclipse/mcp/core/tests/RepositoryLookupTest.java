@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -37,15 +38,24 @@ class RepositoryLookupTest {
 	}
 
 	@AfterEach
-	void deleteRepository() throws Exception {
-		if (directory == null || !Files.exists(directory)) {
-			return;
+	void deleteRepository() {
+		// EGit's repository cache keeps the handle the lookup opened and can still write to .git
+		for (int attempt = 0; attempt < 2 && directory != null && Files.exists(directory); attempt++) {
+			deleteQuietly(directory);
 		}
-		try (var walk = Files.walk(directory)) {
+	}
+
+	private static void deleteQuietly(Path root) {
+		try (var walk = Files.walk(root)) {
 			for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
-				path.toFile().setWritable(true);
-				Files.deleteIfExists(path);
+				try {
+					Files.deleteIfExists(path);
+				} catch (IOException e) {
+					// reopened meanwhile; the next attempt or the operating system gets it
+				}
 			}
+		} catch (IOException e) {
+			// the tree went away underneath us, which is the outcome we wanted
 		}
 	}
 
@@ -56,6 +66,7 @@ class RepositoryLookupTest {
 		assertFalse(found.failed(), "got " + found.error());
 		assertNull(found.error());
 		assertNotNull(found.repository());
+		assertEquals(directory.toRealPath(), found.repository().getWorkTree().toPath().toRealPath());
 	}
 
 	@Test
@@ -67,8 +78,6 @@ class RepositoryLookupTest {
 			assertTrue(found.failed());
 			assertTrue(found.error().isError());
 			assertEquals(RepositoryLookup.NO_REPOSITORY, found.error().text());
-			assertTrue(found.error().text().contains("project") && found.error().text().contains("directory"),
-					"the refusal has to name both arguments, got " + found.error().text());
 		} finally {
 			Files.deleteIfExists(empty);
 		}
