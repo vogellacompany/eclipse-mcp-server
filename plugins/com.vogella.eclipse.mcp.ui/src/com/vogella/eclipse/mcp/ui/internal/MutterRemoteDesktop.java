@@ -109,7 +109,7 @@ final class MutterRemoteDesktop {
 			if (next.pointer().equals(at)) {
 				// Wayland only reports the pointer over this IDE's windows, so the read is stale outside them
 				if (recentred) {
-					return new Arrival(at, null, "the pointer is outside this IDE's windows, where Wayland does not tell the IDE where it is, and moving it to the screen centre did not bring it over one; make the IDE window cover the centre of the screen, as when maximized. If it already does, the window may not be on screen at all, since a window the compositor never showed gets the pointer nowhere. eclipse_click with delivery synthetic reaches the widget without the pointer"); //$NON-NLS-1$
+					return new Arrival(at, null, "the pointer is outside this IDE's windows, where Wayland does not tell the IDE where it is, and moving it to the screen centre did not bring it over one; make the IDE window cover the centre of the screen, as when maximized. If it already does, the window may not be on screen at all, since a window the compositor never showed gets the pointer nowhere; eclipse_get_focus shows whether the IDE has an active shell. eclipse_click can still use delivery synthetic, which needs no pointer"); //$NON-NLS-1$
 				}
 				recentred = true;
 				failure = toScreenCentre();
