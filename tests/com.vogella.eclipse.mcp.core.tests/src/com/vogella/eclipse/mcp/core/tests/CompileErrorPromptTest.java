@@ -74,6 +74,17 @@ class CompileErrorPromptTest {
 	}
 
 	@Test
+	void theOriginalValueIsTheUsersWhileALaunchHoldsTheSuppression() {
+		assertEquals("prompt", CompileErrorPrompt.originalValue());
+		CompileErrorPrompt.suppress();
+		try {
+			assertEquals("prompt", CompileErrorPrompt.originalValue(), "a held suppression must not report always");
+		} finally {
+			CompileErrorPrompt.restore();
+		}
+	}
+
+	@Test
 	void twoOverlappingPairsRestoreTheOriginalWhenTheSecondEndsLast() {
 		String first = CompileErrorPrompt.suppress();
 		String second = CompileErrorPrompt.suppress();

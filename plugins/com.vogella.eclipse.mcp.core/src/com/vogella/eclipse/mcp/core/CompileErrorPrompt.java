@@ -35,9 +35,14 @@ public final class CompileErrorPrompt {
 	private CompileErrorPrompt() {
 	}
 
-	/** The value in effect before this server touched it, or {@code null}. */
+	/** The value the preference holds right now, or {@code null}. */
 	public static String effectiveValue() {
 		return InstanceScope.INSTANCE.getNode(DEBUG_UI).get(KEY, null);
+	}
+
+	/** The user's own value, the one saved while a launch holds the suppression, or {@code null}. */
+	public static synchronized String originalValue() {
+		return SUPPRESSED.get() > 0 ? previous : effectiveValue();
 	}
 
 	/**

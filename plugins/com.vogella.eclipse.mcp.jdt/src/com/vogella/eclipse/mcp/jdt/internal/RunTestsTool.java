@@ -165,7 +165,7 @@ public final class RunTestsTool implements IMcpTool {
 			boolean ui = args.getBoolean("ui", false); //$NON-NLS-1$
 			String launchedAs = launchedAs(project, args);
 			// this run answers the prompt itself and puts the setting back
-			String compileErrorPromptWas = CompileErrorPrompt.effectiveValue();
+			String compileErrorPromptWas = CompileErrorPrompt.originalValue();
 			TestRunRegistry.Run run = TestRunRegistry.getInstance()
 					.create(testClass == null ? projectName : testClass + (testMethod == null ? "" : "#" + testMethod)); //$NON-NLS-1$ //$NON-NLS-2$
 
