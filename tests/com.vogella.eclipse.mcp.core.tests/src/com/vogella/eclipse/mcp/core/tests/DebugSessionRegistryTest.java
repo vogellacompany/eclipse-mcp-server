@@ -2,6 +2,7 @@ package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,5 +60,16 @@ class DebugSessionRegistryTest {
 
 		registry.fail(first, "the VM was not found");
 		assertNotNull(prepare(name), "the name is free again once the first launch failed");
+	}
+
+	@Test
+	void theStartingSessionIsNamedUntilItResolves() {
+		String name = "mcp overlapping starting " + System.nanoTime();
+		DebugSessionRegistry.Session first = prepare(name);
+
+		assertSame(first, registry.starting(name), "the refusal names the session that blocks it");
+
+		registry.fail(first, "the VM was not found");
+		assertNull(registry.starting(name));
 	}
 }

@@ -45,6 +45,9 @@ public final class DebugSessionRegistry {
 	 */
 	static final long KEEP_TERMINATED_MILLIS = 5 * 60_000L;
 
+	/** How long a launch that has not registered blocks another launch of its configuration. */
+	static final long STARTING_MILLIS = 2 * 60_000L;
+
 	private static final int MAX_SESSIONS = 50;
 
 	private final AtomicLong ids = new AtomicLong();
@@ -86,6 +89,8 @@ public final class DebugSessionRegistry {
 		private final String expectedConfigName;
 
 		private final CountDownLatch registered = new CountDownLatch(1);
+
+		private final long preparedAt = System.nanoTime();
 
 		private volatile ILaunch launch;
 
@@ -268,19 +273,36 @@ public final class DebugSessionRegistry {
 	public synchronized Session prepare(String configName) {
 		listen();
 		prune();
+		if (starting(configName) != null) {
+			return null;
+		}
 		Session existing = pending.get(configName);
 		if (existing != null) {
-			if (!existing.registered()) {
-				return null;
-			}
-			// a resolved session should already be gone from pending; never let it block a launch
+			// resolved, or a launch that hung past STARTING_MILLIS; neither may block a new one
 			clearPending(existing);
+			if (!existing.registered()) {
+				existing.failed("Its launch did not register within %d seconds and was given up." //$NON-NLS-1$
+						.formatted(Long.valueOf(STARTING_MILLIS / 1000)));
+			}
 		}
 		String id = "debug-" + ids.incrementAndGet(); //$NON-NLS-1$
 		Session session = new Session(id, true, configName);
 		sessions.put(id, session);
 		pending.put(configName, session);
 		return session;
+	}
+
+	/**
+	 * The MCP launch of {@code configName} that has not registered yet, or {@code null}.
+	 * A launch held by a modal dialog never registers, so one older than {@link #STARTING_MILLIS} no longer counts.
+	 */
+	public synchronized Session starting(String configName) {
+		Session existing = pending.get(configName);
+		if (existing == null || existing.registered()
+				|| System.nanoTime() - existing.preparedAt > TimeUnit.MILLISECONDS.toNanos(STARTING_MILLIS)) {
+			return null;
+		}
+		return existing;
 	}
 
 	public synchronized Session find(String id) {

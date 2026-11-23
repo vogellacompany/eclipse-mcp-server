@@ -105,12 +105,17 @@ public final class DebugLaunchTool implements IMcpTool {
 		try {
 			long started = System.nanoTime();
 			DebugSessionRegistry registry = DebugSessionRegistry.getInstance();
+			// refused before replaceExisting, which would otherwise end the running program for a call that fails
+			DebugSessionRegistry.Session starting = registry.starting(configuration.getName());
+			if (starting != null) {
+				return starting(configuration.getName(), starting);
+			}
 			JsonObject replaced = args.getBoolean("replaceExisting", true) //$NON-NLS-1$
 					? replaceExisting(registry, configuration.getName())
 					: null;
 			DebugSessionRegistry.Session session = registry.prepare(configuration.getName());
 			if (session == null) {
-				return McpToolResult.error("A launch of '%s' started through MCP is still starting; wait for it or use its session id".formatted(configuration.getName())); //$NON-NLS-1$
+				return starting(configuration.getName(), registry.starting(configuration.getName()));
 			}
 			if (args.getBoolean("quiet", true)) { //$NON-NLS-1$
 				session.holdQuiet();
@@ -249,6 +254,12 @@ public final class DebugLaunchTool implements IMcpTool {
 	 * Two projects can each share a configuration of the same name, and the launch manager
 	 * lists them in no particular order, so taking the first one would start either.
 	 */
+	private static McpToolResult starting(String name, DebugSessionRegistry.Session session) {
+		return McpToolResult.error(("A launch of '%s' started through MCP is still starting as session %s. " //$NON-NLS-1$
+				+ "Poll eclipse_debug_status with that sessionId, or launch again once it has come up or failed.") //$NON-NLS-1$
+				.formatted(name, session == null ? "(unknown)" : session.id())); //$NON-NLS-1$
+	}
+
 	private static ILaunchConfiguration pick(String name, List<ILaunchConfiguration> matches, String projectName)
 			throws McpToolException {
 		if (matches.size() == 1) {
