@@ -156,13 +156,21 @@ final class Provisioning {
 	}
 
 	/** Records a finished operation that never needed a job, such as a failed resolve. */
-	static synchronized Operation record(String kind, String state, String message, JsonArray changes) {
+	static Operation record(String kind, String state, String message, JsonArray changes) {
+		return record(kind, state, message, changes, -1, false);
+	}
+
+	/** Records a finished operation with the count behind a {@code maxResults} cap, set before anyone can see it. */
+	static synchronized Operation record(String kind, String state, String message, JsonArray changes, int total,
+			boolean truncated) {
 		String id = "provisioning-" + IDS.incrementAndGet(); //$NON-NLS-1$
 		Operation operation = new Operation(id, kind);
 		operation.previousConfiguration = currentConfiguration();
 		operation.state = state;
 		operation.message = message;
 		operation.changes = changes == null ? new JsonArray() : changes;
+		operation.changesTotal = total;
+		operation.changesTruncated = truncated;
 		operation.running = false;
 		operation.endedAt = System.currentTimeMillis();
 		runCleanup(operation);

@@ -89,7 +89,7 @@ public final class UpdateTool implements IMcpTool {
 			return McpToolResult.of(Provisioning
 					.record("update", "done", //$NON-NLS-1$ //$NON-NLS-2$
 							"Nothing to update; everything installed is already current. Every enabled repository was searched, not only the one the installed version came from.", //$NON-NLS-1$
-							new JsonArray())
+							new JsonArray(), 0, false)
 					.toJson().toString());
 		}
 		if (!unitIds.isEmpty()) {
@@ -99,7 +99,7 @@ public final class UpdateTool implements IMcpTool {
 			List<Update> wanted = newestPerUnit(possible, unitIds);
 			if (wanted.isEmpty()) {
 				return McpToolResult.of(Provisioning.record("update", "done", //$NON-NLS-1$ //$NON-NLS-2$
-						"No update is available for %s.".formatted(unitIds), new JsonArray()).toJson().toString()); //$NON-NLS-1$
+						"No update is available for %s.".formatted(unitIds), new JsonArray(), 0, false).toJson().toString()); //$NON-NLS-1$
 			}
 			operation.setSelectedUpdates(wanted.toArray(Update[]::new));
 			resolution = operation.resolveModal(monitor);
@@ -141,8 +141,7 @@ public final class UpdateTool implements IMcpTool {
 		if (args.getBoolean("dryRun", true)) { //$NON-NLS-1$
 			Provisioning.Operation dry = Provisioning.record("update", "dryRun", //$NON-NLS-1$ //$NON-NLS-2$
 					"Nothing was changed. This is what would be updated; pass dryRun false to apply it. plan lists the other installed units it would replace, remove or add a second version beside.", //$NON-NLS-1$
-					changes);
-			Provisioning.setChanges(dry, changes, capped.total(), capped.truncated());
+					changes, capped.total(), capped.truncated());
 			Provisioning.setPlan(dry, plan);
 			return McpToolResult.of(dry.toJson().toString());
 		}
