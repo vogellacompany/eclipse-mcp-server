@@ -1,6 +1,5 @@
 package com.vogella.eclipse.mcp.git.internal;
 
-import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -56,16 +55,11 @@ public final class GetGitStatusTool implements IMcpTool {
 		}
 		ToolArguments args = ToolArguments.of(arguments);
 		int maxFiles = args.getInt("maxFiles", SAMPLE, 1, 500); //$NON-NLS-1$
-		Repository repository;
-		try {
-			repository = EGit.lookup(args.getString("project"), args.getString("directory")); //$NON-NLS-1$ //$NON-NLS-2$
-		} catch (IOException e) {
-			throw new McpToolException("Could not open the repository", e); //$NON-NLS-1$
+		RepositoryLookup.Result found = RepositoryLookup.find(args.getString("project"), args.getString("directory")); //$NON-NLS-1$ //$NON-NLS-2$
+		if (found.failed()) {
+			return found.error();
 		}
-		if (repository == null) {
-			return McpToolResult.error(
-					"No git repository found. Give 'project' for a project in the workspace, or 'directory' for a working tree on disk."); //$NON-NLS-1$
-		}
+		Repository repository = found.repository();
 		try (Git git = new Git(repository)) {
 			Status status = git.status().call();
 			ObjectId head = repository.resolve("HEAD"); //$NON-NLS-1$
