@@ -288,37 +288,45 @@ final class WebBrowser {
 
 	private void onEvent(String method, Map<String, Object> params) {
 		synchronized (state) {
-			switch (method) {
-			case "Page.frameStartedLoading" -> { //$NON-NLS-1$
-				if (isMainFrame(params.get("frameId"))) { //$NON-NLS-1$
-					loading = true;
-				}
+			try {
+				onEventLocked(method, params);
+			} finally {
+				// also after an odd event that broke the handler, so a settle wait never sleeps through a change
+				state.notifyAll();
 			}
-			case "Page.frameStoppedLoading" -> { //$NON-NLS-1$
-				if (isMainFrame(params.get("frameId"))) { //$NON-NLS-1$
-					loading = false;
-				}
+		}
+	}
+
+	private void onEventLocked(String method, Map<String, Object> params) {
+		switch (method) {
+		case "Page.frameStartedLoading" -> { //$NON-NLS-1$
+			if (isMainFrame(params.get("frameId"))) { //$NON-NLS-1$
+				loading = true;
 			}
-			case "Network.requestWillBeSent" -> { //$NON-NLS-1$
-				if (!STREAMING_TYPES.contains(params.get("type"))) { //$NON-NLS-1$
-					inflight.add(String.valueOf(params.get("requestId"))); //$NON-NLS-1$
-				}
+		}
+		case "Page.frameStoppedLoading" -> { //$NON-NLS-1$
+			if (isMainFrame(params.get("frameId"))) { //$NON-NLS-1$
+				loading = false;
 			}
-			case "Network.responseReceived" -> { //$NON-NLS-1$
-				if ("Document".equals(params.get("type")) && isMainFrame(params.get("frameId")) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-						&& params.get("response") instanceof Map<?, ?> response //$NON-NLS-1$
-						&& response.get("status") instanceof Number status) { //$NON-NLS-1$
-					documentStatus = Integer.valueOf(status.intValue());
-				}
+		}
+		case "Network.requestWillBeSent" -> { //$NON-NLS-1$
+			if (!STREAMING_TYPES.contains(params.get("type"))) { //$NON-NLS-1$
+				inflight.add(String.valueOf(params.get("requestId"))); //$NON-NLS-1$
 			}
-			case "Network.loadingFinished", "Network.loadingFailed" -> //$NON-NLS-1$ //$NON-NLS-2$
-				inflight.remove(String.valueOf(params.get("requestId"))); //$NON-NLS-1$
-			case "Page.javascriptDialogOpening" -> answerDialog(params); //$NON-NLS-1$
-			default -> {
-				// not needed to decide whether the page settled
+		}
+		case "Network.responseReceived" -> { //$NON-NLS-1$
+			if ("Document".equals(params.get("type")) && isMainFrame(params.get("frameId")) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+					&& params.get("response") instanceof Map<?, ?> response //$NON-NLS-1$
+					&& response.get("status") instanceof Number status) { //$NON-NLS-1$
+				documentStatus = Integer.valueOf(status.intValue());
 			}
-			}
-			state.notifyAll();
+		}
+		case "Network.loadingFinished", "Network.loadingFailed" -> //$NON-NLS-1$ //$NON-NLS-2$
+			inflight.remove(String.valueOf(params.get("requestId"))); //$NON-NLS-1$
+		case "Page.javascriptDialogOpening" -> answerDialog(params); //$NON-NLS-1$
+		default -> {
+			// not needed to decide whether the page settled
+		}
 		}
 	}
 
