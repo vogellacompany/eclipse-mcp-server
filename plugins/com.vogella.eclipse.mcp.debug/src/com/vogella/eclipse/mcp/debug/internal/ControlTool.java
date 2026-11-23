@@ -21,6 +21,9 @@ import com.vogella.eclipse.mcp.core.json.JsonObject;
  */
 public final class ControlTool implements IMcpTool {
 
+	/** Actions on the whole target, which need no suspended thread; suspend is asked of a running program. */
+	private static final Set<String> TARGET_ACTIONS = Set.of("terminate", "disconnect", "resumeAll", "suspend"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+
 	private static final Set<String> ACTIONS = Set.of("resume", "stepOver", "stepInto", "stepReturn", "suspend", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 			"terminate", "disconnect", "close", "resumeAll"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 
@@ -31,7 +34,7 @@ public final class ControlTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Drives a suspended or running debug session: resume, stepOver, stepInto, stepReturn, suspend, resumeAll, terminate, disconnect or close. SUSPEND STOPS EVERY THREAD, and resume then refuses because several are suspended; resumeAll is the way back. CHANGES THE STATE OF THE DEBUGGED PROGRAM, and terminate KILLS THE PROCESS: that is Process.destroy, SIGTERM on Linux, where Equinox's shutdown hook still runs, and an immediate kill on Windows, and in neither case does the workbench save its workspace. 'close' is the orderly alternative for a debugged application that HAS a workbench: it stops the UI thread at a breakpoint, which JDI requires before any method can be invoked in it, evaluates an asyncExec of IWorkbench.close and resumes so that thread runs it, which is a real shutdown with a workspace save, and it falls back to terminate only if that does not finish in time. The breakpoint it sets is its own and is removed again. The answer says which of the two actually happened, because a measurement taken afterwards depends on it. After a step or a resume it waits for the next suspend (waitForSuspendSeconds) and reports the new location in the same answer, so stepping costs one call; timedOut on resume normally just means the program kept running. Stepping needs a suspended thread: name one with 'thread' or leave it to the only suspended thread, which is refused when several are stopped. A session launched in run mode has no debug target, so terminate is the only action that works on it and the others say so. Use eclipse_debug_launch to start something first; a session the user started in the IDE is driven only when named by sessionId."; //$NON-NLS-1$
+		return "Drives a suspended or running debug session: resume, stepOver, stepInto, stepReturn, suspend, resumeAll, terminate, disconnect or close. SUSPEND STOPS EVERY THREAD, and resume then refuses because several are suspended; resumeAll is the way back. CHANGES THE STATE OF THE DEBUGGED PROGRAM, and terminate KILLS THE PROCESS: that is Process.destroy, SIGTERM on Linux, where Equinox's shutdown hook still runs, and an immediate kill on Windows, and in neither case does the workbench save its workspace. 'close' is the orderly alternative for a debugged application that HAS a workbench: it stops the UI thread at a breakpoint, which JDI requires before any method can be invoked in it, evaluates an asyncExec of IWorkbench.close and resumes so that thread runs it, which is a real shutdown with a workspace save, and it falls back to terminate only if that does not finish in time. The breakpoint it sets is its own and is removed again. The answer says which of the two actually happened, because a measurement taken afterwards depends on it. After a step, a resume or a suspend it waits for the next suspend (waitForSuspendSeconds) and answers in the same call, with the new location after a step or resume and each thread's location in threads after a suspend, so stepping costs one call; timedOut on resume normally just means the program kept running. Stepping needs a suspended thread: name one with 'thread' or leave it to the only suspended thread, which is refused when several are stopped. A session launched in run mode has no debug target, so terminate is the only action that works on it and the others say so. Use eclipse_debug_launch to start something first; a session the user started in the IDE is driven only when named by sessionId."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -47,8 +50,8 @@ public final class ControlTool implements IMcpTool {
 				    "fallbackToTerminate":  {"type":"boolean","default":true,"description":"For 'close': kill the process when it has not closed within closeWaitSeconds. False leaves it running and says so."},
 				    "breakpoint":           {"type":"string","description":"For 'close': typeName:line where the UI thread is stopped so that a method can be invoked in it, or 'none' to use a thread that is already stopped at one. The default is org.eclipse.ui.application.WorkbenchAdvisor:339, the display.sleep() of eventLoopIdle, whose own javadoc says calling IWorkbench.close() from there is allowed and which every workbench application reaches whenever its event loop goes idle. Name another one for an RCP application whose advisor does not call super, or when a platform version has moved the line. The breakpoint is removed again afterwards."},
 				    "breakpointWaitSeconds":{"type":"integer","default":60,"minimum":1,"maximum":300,"description":"For 'close': how long to wait for that breakpoint to be reached. A runtime workbench takes about fifty seconds to start, so the default allows for a launch that is still coming up."},
-				    "thread":               {"type":"string","description":"Thread to act on. Defaults to the single suspended thread for the stepping actions."},
-				    "waitForSuspendSeconds":{"type":"integer","default":20,"minimum":0,"maximum":25,"description":"How long to wait for the next suspend after resume and the steps. 0 answers immediately. The maximum is 25 seconds while a runtime workbench takes about fifty to start, so waiting for the first breakpoint of one regularly needs a second call; that is normal and not a failure."}
+				    "thread":               {"type":"string","description":"Thread to act on. Defaults to the single suspended thread for the stepping actions; ignored by the actions on the whole target (suspend, resumeAll, terminate, disconnect)."},
+				    "waitForSuspendSeconds":{"type":"integer","default":20,"minimum":0,"maximum":25,"description":"How long to wait for the next suspend after resume, suspend and the steps. 0 answers immediately. The maximum is 25 seconds while a runtime workbench takes about fifty to start, so waiting for the first breakpoint of one regularly needs a second call; that is normal and not a failure."}
 				  },
 				  "additionalProperties": false
 				}"""; //$NON-NLS-1$
@@ -62,7 +65,7 @@ public final class ControlTool implements IMcpTool {
 			return McpToolResult.error("'action' is one of %s%s.".formatted(String.join(", ", ACTIONS.stream().sorted().toList()), //$NON-NLS-1$ //$NON-NLS-2$
 					action == null ? "" : ", not '" + action + "'")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		}
-		boolean waitAfter = action.equals("resume") || action.startsWith("step"); //$NON-NLS-1$ //$NON-NLS-2$
+		boolean waitAfter = action.equals("resume") || action.equals("suspend") || action.startsWith("step"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		int waitSeconds = args.getInt("waitForSuspendSeconds", waitAfter ? 20 : 0, 0, 25); //$NON-NLS-1$
 
 		try {
@@ -83,7 +86,7 @@ public final class ControlTool implements IMcpTool {
 								args.getInt("breakpointWaitSeconds", 60, 1, 300)) //$NON-NLS-1$
 						.toString());
 			}
-			if (!action.equals("terminate") && !action.equals("disconnect") && !action.equals("resumeAll")) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			if (!TARGET_ACTIONS.contains(action)) {
 				thread = DebugSupport.requireThread(target, args.getString("thread")); //$NON-NLS-1$
 			}
 			DebugSessionRegistry.SuspendSignal signal = null;
@@ -101,10 +104,15 @@ public final class ControlTool implements IMcpTool {
 					json.put("timedOut", Boolean.TRUE).put("waitNote", //$NON-NLS-1$ //$NON-NLS-2$
 							action.equals("resume") //$NON-NLS-1$
 									? "No suspend within %d seconds; the program most likely kept running.".formatted(Integer.valueOf(waitSeconds)) //$NON-NLS-2$
-									: "No suspend within %d seconds.".formatted(Integer.valueOf(waitSeconds))); //$NON-NLS-1$
+									: action.equals("suspend") //$NON-NLS-1$
+											? "The suspend was requested, but the program did not report suspended within %d seconds.".formatted(Integer.valueOf(waitSeconds)) //$NON-NLS-1$
+											: "No suspend within %d seconds.".formatted(Integer.valueOf(waitSeconds))); //$NON-NLS-1$
 				} else {
 					json.put("timedOut", Boolean.FALSE); //$NON-NLS-1$
-					json.put("location", locationOf(session)); //$NON-NLS-1$
+					// after a suspend every thread is stopped, and threads already names each one's location
+					if (!action.equals("suspend")) { //$NON-NLS-1$
+						json.put("location", locationOf(session)); //$NON-NLS-1$
+					}
 				}
 			}
 			return McpToolResult.of(json.toString());
