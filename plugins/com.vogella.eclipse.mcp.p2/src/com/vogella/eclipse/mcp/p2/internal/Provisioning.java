@@ -358,20 +358,24 @@ final class Provisioning {
 	}
 
 	/**
-	 * Retries an operation against every enabled repository.
+	 * A new, unresolved update operation for {@code units} against every enabled repository.
 	 * <p>
 	 * A scope to the repositories supplying a unit finds where the INSTALLED version lives,
-	 * which with a composite whose child changes per release never holds a newer one.
+	 * which with a composite whose child changes per release never holds a newer one. The
+	 * operation is new because an {@code UpdateOperation} keeps each unit's updates from its
+	 * first resolution, so re-resolving the scoped one returns the same empty answer.
 	 */
-	static void widenToAllRepositories(IProvisioningAgent agent,
-			org.eclipse.equinox.p2.operations.ProfileChangeOperation operation, IProgressMonitor monitor) {
+	static org.eclipse.equinox.p2.operations.UpdateOperation widenToAllRepositories(IProvisioningAgent agent,
+			Collection<org.eclipse.equinox.p2.metadata.IInstallableUnit> units, IProgressMonitor monitor) {
 		// the metadata was refreshed for the scoped repositories only, so the enabled
 		// ones, the composite among them, are still whatever p2 had cached. Widening
 		// the scope without widening the refresh reads the same stale answer from a
 		// bigger set: the composite's child list is exactly what has changed
 		describeRepositories(agent, true, null, monitor);
+		var operation = new org.eclipse.equinox.p2.operations.UpdateOperation(
+				new org.eclipse.equinox.p2.operations.ProvisioningSession(agent), units);
 		operation.setProvisioningContext(new ProvisioningContext(agent));
-		operation.resolveModal(monitor);
+		return operation;
 	}
 
 	/**
