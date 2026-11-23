@@ -138,6 +138,16 @@ class GradleToolsTest {
 	}
 
 	@Test
+	void aRunThatEndsWithAnErrorDoesNotStayRunning() throws Exception {
+		GradleRuns.Run run = GradleRuns.getInstance().start("run", "p", List.of("build"), (handle, monitor) -> {
+			throw new AssertionError("boom");
+		});
+
+		assertTrue(run.await(10_000), "the run never finished");
+		assertEquals("failed", TestFixture.parse(run.describe(10).toString()).get("state"));
+	}
+
+	@Test
 	void anUnknownRunIdIsRefused() throws Exception {
 		GradleRuns.getInstance().start("run", "p", List.of(), (handle, monitor) -> true);
 		TestFixture.assertRefused(TestFixture.call("eclipse_get_gradle_run", Map.of("runId", "gradle-0")),

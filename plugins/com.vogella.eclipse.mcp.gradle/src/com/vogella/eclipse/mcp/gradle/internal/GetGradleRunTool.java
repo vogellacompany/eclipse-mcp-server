@@ -64,10 +64,12 @@ public final class GetGradleRunTool implements IMcpTool {
 		}
 		int requested = args.getInt("timeoutSeconds", 25, 1, 3600); //$NON-NLS-1$
 		int tail = args.getInt("tailLines", 200, 1, 2000); //$NON-NLS-1$
-		if (args.getBoolean("wait", false) || args.getBoolean("cancel", false)) { //$NON-NLS-1$ //$NON-NLS-2$
+		boolean wait = args.getBoolean("wait", false); //$NON-NLS-1$
+		int bounded = wait ? CallBudget.boundedWaitSeconds(requested) : requested;
+		if (wait || args.getBoolean("cancel", false)) { //$NON-NLS-1$
 			// a cancel is given a moment to take effect, so the answer says cancelled and not running
-			run.await(args.getBoolean("wait", false) ? CallBudget.boundedWaitSeconds(requested) * 1000L : 2000L); //$NON-NLS-1$
+			run.await(wait ? bounded * 1000L : 2000L);
 		}
-		return RunAnswers.describe(run, requested, tail);
+		return RunAnswers.describe(run, requested, bounded, tail);
 	}
 }

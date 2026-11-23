@@ -31,7 +31,7 @@ public final class RunGradleTasksTool implements IMcpTool {
 				{
 				  "type": "object",
 				  "properties": {
-				    "project": {"type":"string","description":"Name of the Gradle project, as listed by eclipse_list_projects. The tasks run in the project's own directory, so 'build' on a subproject builds that subproject."},
+				    "project": {"type":"string","description":"Name of the Gradle project, as listed by eclipse_list_projects. Selects the Buildship build; task names resolve against the build's root project, so name a subproject's task by its path, for example ':app:build'."},
 				    "tasks":   {"type":"array","minItems":1,"items":{"type":"string"},"description":"Task names with their task options, as after ./gradlew, for example [\\"build\\"], [\\"bootRun\\"] or [\\"test\\",\\"--tests\\",\\"com.acme.FooTest\\"]. eclipse_list_gradle_tasks names what exists."},
 				    "arguments": {"type":"array","items":{"type":"string"},"description":"Gradle options and properties that apply to the whole build, for example [\\"-x\\",\\"test\\"], [\\"--info\\"] or [\\"-Pprofile=ci\\"]."},
 				    "timeoutSeconds": {"type":"integer","default":25,"minimum":0,"maximum":3600,"description":"How long to wait for the run before answering with the handle; 0 answers at once. Bounded in practice by the server's own call timeout."}

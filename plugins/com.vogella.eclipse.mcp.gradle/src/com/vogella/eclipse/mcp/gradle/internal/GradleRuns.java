@@ -14,8 +14,11 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.jobs.IJobChangeEvent;
 import org.eclipse.core.runtime.jobs.Job;
+import org.eclipse.core.runtime.jobs.JobChangeAdapter;
 
 import com.vogella.eclipse.mcp.core.json.JsonArray;
 import com.vogella.eclipse.mcp.core.json.JsonObject;
@@ -131,7 +134,10 @@ public final class GradleRuns {
 			return new LineStream(this);
 		}
 
-		void finish(String outcome) {
+		synchronized void finish(String outcome) {
+			if (!isRunning()) {
+				return;
+			}
 			endedAt = System.currentTimeMillis();
 			state = outcome;
 			finished.countDown();
@@ -173,6 +179,13 @@ public final class GradleRuns {
 			return Status.OK_STATUS;
 		});
 		run.cancelAction = job::cancel;
+		// a job cancelled before it starts, or ended by an Error, never reaches the body's own finish
+		job.addJobChangeListener(new JobChangeAdapter() {
+			@Override
+			public void done(IJobChangeEvent event) {
+				run.finish(run.cancelRequested || event.getResult().matches(IStatus.CANCEL) ? "cancelled" : "failed"); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+		});
 		job.setPriority(Job.LONG);
 		job.schedule();
 		return run;
@@ -235,6 +248,13 @@ public final class GradleRuns {
 				emit();
 			} else {
 				line.write(b);
+			}
+		}
+
+		@Override
+		public synchronized void write(byte[] bytes, int offset, int length) {
+			for (int i = offset; i < offset + length; i++) {
+				write(bytes[i]);
 			}
 		}
 
