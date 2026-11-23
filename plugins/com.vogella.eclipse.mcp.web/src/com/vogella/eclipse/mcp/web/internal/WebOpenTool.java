@@ -68,6 +68,7 @@ public final class WebOpenTool implements IMcpTool {
 			if (error != null) {
 				JsonObject answer = browser.describe();
 				answer.put("error", error); //$NON-NLS-1$
+				WebPage.addDialogs(browser, answer);
 				return McpToolResult.error("The browser could not load " + url + ": " + error //$NON-NLS-1$ //$NON-NLS-2$
 						+ ". Check that the server is running and the address is right. " + answer); //$NON-NLS-1$
 			}

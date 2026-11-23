@@ -19,8 +19,16 @@ public final class WebScreenshotTool implements IMcpTool {
 	/** Chromium refuses captures much taller than this, and a model gains nothing from them. */
 	private static final double MAX_FULL_PAGE_HEIGHT = 16_384;
 
-	/** The widest capture, so a page or element of extreme width cannot fill the IDE's heap with one image. */
+	/** The widest capture. */
 	private static final double MAX_WIDTH = 8_192;
+
+	/** The most pixels of one capture, so a page both wide and long cannot fill the IDE's heap with one image. */
+	private static final double MAX_PIXELS = 8_192 * 4_096;
+
+	/** The tallest capture at that width: the height limit, lowered for a wide capture to stay within the pixels. */
+	private static double maxHeight(double width) {
+		return Math.min(MAX_FULL_PAGE_HEIGHT, Math.floor(MAX_PIXELS / Math.max(1, width)));
+	}
 
 	@Override
 	public String getName() {
@@ -66,8 +74,8 @@ public final class WebScreenshotTool implements IMcpTool {
 				}
 				double left = target.x() - target.width() / 2 + target.scrollX();
 				double top = target.y() - target.height() / 2 + target.scrollY();
-				double captured = Math.min(target.height(), MAX_FULL_PAGE_HEIGHT);
 				double wide = Math.min(target.width(), MAX_WIDTH);
+				double captured = Math.min(target.height(), maxHeight(wide));
 				params.put("clip", clip(left, top, wide, captured)); //$NON-NLS-1$
 				params.put("captureBeyondViewport", Boolean.TRUE); //$NON-NLS-1$
 				answer.put("element", target.tag()); //$NON-NLS-1$
@@ -83,8 +91,8 @@ public final class WebScreenshotTool implements IMcpTool {
 				Map<?, ?> content = metrics.get("cssContentSize") instanceof Map<?, ?> map ? map : Map.of(); //$NON-NLS-1$
 				double width = WebPage.number(content.get("width")); //$NON-NLS-1$
 				double height = WebPage.number(content.get("height")); //$NON-NLS-1$
-				double captured = Math.min(height, MAX_FULL_PAGE_HEIGHT);
 				double wide = Math.min(width, MAX_WIDTH);
+				double captured = Math.min(height, maxHeight(wide));
 				params.put("clip", clip(0, 0, wide, captured)); //$NON-NLS-1$
 				params.put("captureBeyondViewport", Boolean.TRUE); //$NON-NLS-1$
 				size(answer, wide, captured);

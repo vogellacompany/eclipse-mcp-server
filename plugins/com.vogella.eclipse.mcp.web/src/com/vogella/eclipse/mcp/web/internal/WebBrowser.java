@@ -204,7 +204,8 @@ final class WebBrowser {
 			}
 			if (Files.isRegularFile(portFile)) {
 				List<String> lines = Files.readAllLines(portFile, StandardCharsets.UTF_8);
-				if (!lines.isEmpty() && !lines.get(0).isBlank()) {
+				// the browser writes the port and then its own path; with the path there, the port is complete
+				if (lines.size() >= 2 && !lines.get(0).isBlank() && !lines.get(1).isBlank()) {
 					return Integer.parseInt(lines.get(0).trim());
 				}
 			}
