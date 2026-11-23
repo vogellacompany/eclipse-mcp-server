@@ -132,11 +132,12 @@ The build, test run and provisioning registries are per IDE, so those tools cons
 `com.vogella.eclipse.mcp.web` speaks the Chrome DevTools Protocol over `java.net.http.WebSocket` and never downloads a browser; Playwright for Java would need a Node.js driver per platform inside the bundle and a browser download on first use.
 `CdpConnection.HTTP` bypasses any proxy, because the browser listens on loopback and an IDE's system proxy would not reach it.
 A started browser picks its own port (`--remote-debugging-port=0`) and writes it to `DevToolsActivePort` in its temporary profile, which is the only race-free way to learn it.
-Refs from `eclipse_web_snapshot` live in `window.__mcpRefs` in the page rather than in DOM attributes, so the page is never changed; `window.__mcpIds` keeps an element's ref across snapshots, and numbering continues from `WebBrowser.nextRef` after a navigation or a browser restart, so a ref is never reused and an old one is refused rather than landing on another element.
+Refs from `eclipse_web_snapshot` live in `window.__mcpRefs` in the page rather than in DOM attributes, so the page is never changed; `window.__mcpIds` keeps an element's ref across snapshots, and each snapshot starts numbering at a block `WebBrowser.reserveRefs` set aside beforehand for every element of the page, so a ref is never reused, even after a navigation, a browser restart or a snapshot that never answered, and an old one is refused rather than landing on another element.
 The started browser keeps Chromium's DevTools origin check (no `--remote-allow-origins`), since the JDK WebSocket sends no `Origin`; `--no-sandbox` is added only when running as root, where Chromium refuses to start otherwise.
 The tools run one at a time through `WebPage.exclusive`: a call locates its element and acts on it in separate commands, and the page, its refs and `acceptDialogs` are shared by every client.
 Starting a browser is bounded by `CallBudget` as well as the settle wait, so a slow first start answers before the call timeout.
-JavaScript dialogs block the page until answered, so `WebBrowser` answers each at once and the acting tool reports it under `dialogs`; a confirm or prompt is dismissed unless the call passes `acceptDialogs`.
+JavaScript dialogs block the page until answered, so `WebBrowser` answers each at once and the acting tool reports it under `dialogs`; a confirm or prompt is dismissed unless the call passes `acceptDialogs`, and a leave-page prompt is accepted, which the descriptions say because it discards unsaved input.
+Every DevTools command waits at most what is left of the call, and the settle wait leaves `ANSWER_SECONDS` for reading the page afterwards, so the answer is never what the call timeout kills.
 `WebToolsTest` drives a real headless browser and is skipped where none is installed.
 
 ## Tests and CI

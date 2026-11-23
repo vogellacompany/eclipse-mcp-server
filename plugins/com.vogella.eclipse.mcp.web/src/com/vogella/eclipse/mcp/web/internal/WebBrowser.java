@@ -322,8 +322,9 @@ final class WebBrowser {
 		}
 	}
 
+	/** Sends a command, waiting at most what is left of the tool call, so a wedged page still gets an answer in time. */
 	Map<String, Object> send(String method, JsonObject params) throws IOException {
-		return page.send(method, params, COMMAND_MILLIS);
+		return page.send(method, params, Math.max(1_000, Math.min(COMMAND_MILLIS, CallBudget.leftMillis())));
 	}
 
 	/**
@@ -397,12 +398,14 @@ final class WebBrowser {
 	}
 
 	/** The first ref number a new document's snapshot hands out, so no ref is ever reused for another element. */
-	static synchronized long nextRef() {
-		return nextRef;
-	}
-
-	static synchronized void refsUsedUpTo(long next) {
-		nextRef = Math.max(nextRef, next);
+	/**
+	 * Sets aside {@code count} ref numbers and answers the first, before a snapshot that may hand out that many runs, so
+	 * the numbers stay taken even when the snapshot never answers.
+	 */
+	static synchronized long reserveRefs(long count) {
+		long first = nextRef;
+		nextRef += Math.max(0, count) + 1;
+		return first;
 	}
 
 	int pendingRequests() {

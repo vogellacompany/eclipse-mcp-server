@@ -7,8 +7,9 @@ import com.vogella.eclipse.mcp.core.json.Json;
  * <p>
  * The snapshot keeps every element it listed in {@code window.__mcpRefs}, a map from ref to element, and gives an
  * element the same ref in every snapshot of a document through the weak map {@code window.__mcpIds}. Numbering
- * continues from where the previous document stopped, which {@link WebBrowser} remembers, so a ref is never reused for
- * another element, not even after a navigation: an old ref either still names its element or is refused. The page's DOM
+ * starts at a number {@link WebBrowser#reserveRefs} set aside for the snapshot before it ran, enough for every element
+ * of the page, so a ref is never reused for another element, not even after a navigation or a snapshot that failed
+ * half way: an old ref either still names its element or is refused. The page's DOM
  * is never changed.
  */
 final class PageScripts {
@@ -19,7 +20,7 @@ final class PageScripts {
 	private static final String SNAPSHOT = """
 			(rootSelector, maxNodes, firstRef) => {
 			  const refs = window.__mcpRefs || (window.__mcpRefs = new Map());
-			  if (!window.__mcpNext) window.__mcpNext = firstRef - 1;
+			  window.__mcpNext = Math.max(window.__mcpNext || 0, firstRef - 1);
 			  const ids = window.__mcpIds || (window.__mcpIds = new WeakMap());
 			  const lines = [];
 			  let total = 0;
@@ -162,8 +163,7 @@ final class PageScripts {
 			  const root = rootSelector ? document.querySelector(rootSelector) : document.body;
 			  if (!root) throw new Error('No element matches ' + rootSelector);
 			  walk(root, 0);
-			  return JSON.stringify({snapshot: lines.join('\\n'), total, truncated: total > lines.length,
-			      nextRef: window.__mcpNext + 1});
+			  return JSON.stringify({snapshot: lines.join('\\n'), total, truncated: total > lines.length});
 			}""";
 
 	/**
@@ -204,6 +204,9 @@ final class PageScripts {
 			  const el = window.__mcpTarget;
 			  if (el.tagName === 'SELECT') return JSON.stringify({select: true});
 			  el.focus();
+			  const NOT_TEXT = ['button', 'submit', 'reset', 'image', 'checkbox', 'radio', 'file', 'range', 'color', 'hidden'];
+			  if (el.tagName === 'INPUT' && NOT_TEXT.includes(el.type))
+			    return JSON.stringify({error: 'The element is an input of type ' + el.type + ', which does not take typed text; use eclipse_web_click for it.'});
 			  const editable = el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA';
 			  if (!editable) return JSON.stringify({error: 'The element is a ' + el.tagName.toLowerCase() + ', which does not take text.'});
 			  if (clear) {

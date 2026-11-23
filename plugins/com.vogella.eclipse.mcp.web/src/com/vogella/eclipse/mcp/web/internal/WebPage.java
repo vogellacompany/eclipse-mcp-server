@@ -32,6 +32,8 @@ final class WebPage {
 
 	private static final ReentrantLock CALLS = new ReentrantLock();
 
+	private static final int ANSWER_SECONDS = 2;
+
 	private WebPage() {
 	}
 
@@ -93,7 +95,8 @@ final class WebPage {
 	static JsonObject settleAndDescribe(WebBrowser browser, ToolArguments args, int defaultSeconds, String urlBefore)
 			throws IOException {
 		int requested = args.getInt("timeoutSeconds", defaultSeconds, 0, 120); //$NON-NLS-1$
-		int bounded = CallBudget.boundedWaitSeconds(requested);
+		// leaves a couple of seconds of the call for reading the page afterwards, or the answer is what times out
+		int bounded = Math.max(0, Math.min(requested, (int) (CallBudget.leftMillis() / 1000) - ANSWER_SECONDS));
 		boolean settled = browser.settle(TimeUnit.SECONDS.toMillis(bounded), QUIET_MILLIS);
 		JsonObject answer = new JsonObject();
 		String url = browser.location(answer);
