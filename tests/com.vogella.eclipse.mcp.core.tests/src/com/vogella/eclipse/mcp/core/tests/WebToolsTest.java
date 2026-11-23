@@ -43,6 +43,7 @@ class WebToolsTest {
 			  <select id="color" onchange="document.getElementById('out').textContent = 'Color ' + this.value;">
 			    <option value="r">Red</option><option value="g">Green</option>
 			  </select>
+			  <select id="frozen" disabled><option>Only</option></select>
 			  <button type="button" id="greet" onclick="document.getElementById('out').textContent = 'Hello ' + document.getElementById('name').value;">Greet</button>
 			  <button type="button" id="ask" onclick="document.getElementById('out').textContent = confirm('Sure?') ? 'yes' : 'no';">Ask</button>
 			</form>
@@ -154,6 +155,8 @@ class WebToolsTest {
 		Map<String, Object> chosen = TestFixture.callAndParse("eclipse_web_type",
 				Map.of("selector", "#color", "text", "Green"));
 		assertEquals("g", chosen.get("value"));
+		TestFixture.assertRefused(TestFixture.call("eclipse_web_type", Map.of("selector", "#frozen", "text", "Only")),
+				"disabled");
 		assertTrue(snapshot().contains("Color g"), snapshot());
 
 		TestFixture.callAndParse("eclipse_web_click", Map.of("ref", ref(snapshot(), "button \"Shadow greet\"")));

@@ -208,7 +208,10 @@ final class PageScripts {
 	static final String FOCUS_TARGET = """
 			((clear) => {
 			  const el = window.__mcpTarget;
-			  if (el.tagName === 'SELECT') return JSON.stringify({select: true});
+			  if (el.tagName === 'SELECT') {
+			    if (el.disabled || el.matches(':disabled')) return JSON.stringify({error: 'The select is disabled, so a user cannot pick an option in it.'});
+			    return JSON.stringify({select: true});
+			  }
 			  el.focus();
 			  const NOT_TEXT = ['button', 'submit', 'reset', 'image', 'checkbox', 'radio', 'file', 'range', 'color', 'hidden'];
 			  if (el.tagName === 'INPUT' && NOT_TEXT.includes(el.type))
