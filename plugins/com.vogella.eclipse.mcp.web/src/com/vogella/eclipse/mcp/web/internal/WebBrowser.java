@@ -199,8 +199,13 @@ final class WebBrowser {
 		long deadline = System.nanoTime() + Duration.ofMillis(budget).toNanos();
 		while (System.nanoTime() < deadline) {
 			if (!process.isAlive()) {
-				throw new IOException("The browser exited with code " + process.exitValue() + " before it was ready: " //$NON-NLS-1$ //$NON-NLS-2$
-						+ tail(log));
+				String output = tail(log);
+				// in a container that runs as an ordinary user the sandbox is often what fails
+				String hint = isLinux() && !Boolean.getBoolean(NO_SANDBOX_PROPERTY) && output.toLowerCase(Locale.ROOT).contains("sandbox") //$NON-NLS-1$
+						? " The sandbox could not start; in a container, start the IDE with -D" + NO_SANDBOX_PROPERTY + "=true." //$NON-NLS-1$ //$NON-NLS-2$
+						: ""; //$NON-NLS-1$
+				throw new IOException("The browser exited with code " + process.exitValue() + " before it was ready." + hint //$NON-NLS-1$ //$NON-NLS-2$
+						+ " Output: " + output); //$NON-NLS-1$
 			}
 			if (Files.isRegularFile(portFile)) {
 				List<String> lines = Files.readAllLines(portFile, StandardCharsets.UTF_8);
