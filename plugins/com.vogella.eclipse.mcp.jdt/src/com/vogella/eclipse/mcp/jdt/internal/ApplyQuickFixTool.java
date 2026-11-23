@@ -231,6 +231,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 								: ".")); //$NON-NLS-1$
 			}
 		} catch (LinkageError e) {
+			// performing reports its own failures above, so this is before anything was written
+			disposeQuietly(change);
 			return failed("apply the quick fix", new IllegalStateException(QuickFixSupport.mismatch(e), e)); //$NON-NLS-1$
 		} catch (CoreException e) {
 			// performing reports its own failures above, so this is before anything was written
@@ -291,7 +293,8 @@ public final class ApplyQuickFixTool implements IMcpTool {
 		}
 		try {
 			change.dispose();
-		} catch (RuntimeException e) {
+		} catch (RuntimeException | LinkageError e) {
+			// a change built from JDT internals that failed to link can fail the same way when released
 			ILog.get().warn("Could not dispose a quick fix's change", e); //$NON-NLS-1$
 		}
 	}
