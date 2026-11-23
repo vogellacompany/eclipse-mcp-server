@@ -92,11 +92,12 @@ public final class CallBudget {
 	}
 
 	/**
-	 * A sentence for the answer when the wait was cut short, or {@code null} when it
-	 * was not, so that an early return is never mistaken for a finished job.
+	 * A sentence for the answer when the wait was cut short, or {@code null} when it was not,
+	 * so that an early return is never mistaken for a finished job. {@code bounded} is what
+	 * {@link #boundedWaitSeconds} granted before the wait: computed afterwards, it has shrunk
+	 * by the time waited.
 	 */
-	public static String clampNote(int requested, String handleName) {
-		int bounded = boundedWaitSeconds(requested);
+	public static String clampNote(int requested, int bounded, String handleName) {
 		if (bounded >= requested) {
 			return null;
 		}

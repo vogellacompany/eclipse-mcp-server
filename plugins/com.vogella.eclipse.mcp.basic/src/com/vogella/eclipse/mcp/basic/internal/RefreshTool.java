@@ -65,15 +65,16 @@ public final class RefreshTool implements IMcpTool {
 		// describe whatever the last build left behind and invite a wrong conclusion
 		BuildRegistry.Build build = BuildRegistry.getInstance()
 				.start(new BuildRegistry.Request(BuildRegistry.REFRESH, projects, false, true, false));
+		int bounded = CallBudget.boundedWaitSeconds(timeoutSeconds);
 		if (wait) {
 			try {
-				build.await(CallBudget.boundedWaitSeconds(timeoutSeconds), TimeUnit.SECONDS);
+				build.await(bounded, TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
 		}
 		JsonObject json = GetBuildStatusTool.toJson(build, false);
-		String clamped = wait ? CallBudget.clampNote(timeoutSeconds, "eclipse_get_build_status with this buildId") : null; //$NON-NLS-1$
+		String clamped = wait ? CallBudget.clampNote(timeoutSeconds, bounded, "eclipse_get_build_status with this buildId") : null; //$NON-NLS-1$
 		if (clamped != null && "running".equals(build.state())) { //$NON-NLS-1$
 			json.put("waitNote", clamped); //$NON-NLS-1$
 		}

@@ -97,10 +97,10 @@ public final class GetTargetPlatformTool implements IMcpTool {
 	}
 
 	/** What the wait came to, so the answer can say why it is reporting this state. */
-	private record Waited(boolean asked, boolean waited, boolean stillResolving, boolean interrupted) {
+	private record Waited(boolean asked, boolean waited, boolean stillResolving, boolean interrupted, int bounded) {
 
 		static Waited notAsked() {
-			return new Waited(false, false, false, false);
+			return new Waited(false, false, false, false, 0);
 		}
 
 		void reportInto(JsonObject result, int requested) {
@@ -117,7 +117,7 @@ public final class GetTargetPlatformTool implements IMcpTool {
 			}
 			// the resolve outlived what one call can wait for, which is the ordinary
 			// case for a cold target rather than a failure
-			String clamped = CallBudget.clampNote(requested, "eclipse_get_target_platform again"); //$NON-NLS-1$
+			String clamped = CallBudget.clampNote(requested, bounded, "eclipse_get_target_platform again"); //$NON-NLS-1$
 			result.put("stillResolving", Boolean.TRUE) //$NON-NLS-1$
 					.put("waitNote", clamped == null //$NON-NLS-1$
 							? "The resolve did not finish within the %d seconds asked for and is still running; call again." //$NON-NLS-1$
@@ -130,14 +130,15 @@ public final class GetTargetPlatformTool implements IMcpTool {
 	private static Waited awaitResolve(int requested) {
 		TargetLoad load = TargetLoad.current();
 		if (load == null || !load.isRunning()) {
-			return new Waited(true, false, false, false);
+			return new Waited(true, false, false, false, 0);
 		}
 		try {
-			boolean finished = load.await(CallBudget.boundedWaitSeconds(requested));
-			return new Waited(true, true, !finished, false);
+			int bounded = CallBudget.boundedWaitSeconds(requested);
+			boolean finished = load.await(bounded);
+			return new Waited(true, true, !finished, false, bounded);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-			return new Waited(true, true, load.isRunning(), true);
+			return new Waited(true, true, load.isRunning(), true, 0);
 		}
 	}
 

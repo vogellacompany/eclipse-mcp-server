@@ -78,12 +78,14 @@ public final class RunCommandTool implements IMcpTool {
 		CommandRegistry.Execution execution = CommandRegistry.getInstance().start(command, directory,
 				environment(arguments));
 		int requested = args.getInt("timeoutSeconds", 25, 1, 3600); //$NON-NLS-1$
-		if (args.getBoolean("wait", false)) { //$NON-NLS-1$
-			execution.await(CallBudget.boundedWaitSeconds(requested) * 1000L);
+		int bounded = CallBudget.boundedWaitSeconds(requested);
+		boolean wait = args.getBoolean("wait", false); //$NON-NLS-1$
+		if (wait) {
+			execution.await(bounded * 1000L);
 		}
 		JsonObject json = CommandOutput.describe(execution, 100);
 		if (execution.isRunning()) {
-			String clamped = CallBudget.clampNote(requested,
+			String clamped = !wait ? null : CallBudget.clampNote(requested, bounded,
 					"eclipse_get_command_output with this commandId"); //$NON-NLS-1$
 			json.put("note", clamped == null //$NON-NLS-1$
 					? "Still running. Poll eclipse_get_command_output with this commandId, and pass cancel to stop it." //$NON-NLS-1$
