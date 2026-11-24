@@ -478,6 +478,16 @@ public final class SubstituteBundleTool implements IMcpTool {
 				continue;
 			}
 			String[] record = layers.getLast();
+			Path originalJar = jarOf(configuration, record[1]);
+			if (originalJar != null && !Files.exists(originalJar)) {
+				// an update can remove the recorded original's jar; writing the line back would name a missing file
+				records.stream().filter(r -> r[0].equals(name)).forEach(kept::add);
+				missed.add(new JsonObject().put("bundle", name) //$NON-NLS-1$
+						.put("jarMissing", originalJar.toString()) //$NON-NLS-1$
+						.put("line", record[1]) //$NON-NLS-1$
+						.put("reason", "The jar its recorded original line names no longer exists, so the line was not written and its records were kept. Run action repair to point the bundle at an installed jar.")); //$NON-NLS-1$ //$NON-NLS-2$
+				continue;
+			}
 			if (!dryRun) {
 				lines.set(index, record[1]);
 			}

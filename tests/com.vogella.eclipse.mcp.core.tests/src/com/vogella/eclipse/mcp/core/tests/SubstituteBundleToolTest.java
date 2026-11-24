@@ -107,6 +107,7 @@ class SubstituteBundleToolTest {
 	@Test
 	void restoringASubstitutionLayeredOnAnotherPutsBackTheShippedLine() throws Exception {
 		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		installed(configuration, "a_1.0.0.jar", "a_2.0.0.jar", "b_1.0.0.jar");
 		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
 		String shipped = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
 		String first = "a,1.0.0," + packed.resolve("a_first.jar").toUri() + ",4,false";
@@ -136,6 +137,7 @@ class SubstituteBundleToolTest {
 	@Test
 	void restoringAfterAnUpdateBetweenTwoSubstitutionsStopsAtTheUpdatedLine() throws Exception {
 		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		installed(configuration, "a_1.0.0.jar", "a_2.0.0.jar", "b_1.0.0.jar");
 		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
 		String removedByUpdate = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
 		String updated = "a,2.0.0,plugins/a_2.0.0.jar,4,false";
@@ -163,6 +165,7 @@ class SubstituteBundleToolTest {
 	@Test
 	void restoringABundleThatIsAlreadyRestoredLeavesItAndItsRecordsAlone() throws Exception {
 		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		installed(configuration, "a_1.0.0.jar", "a_2.0.0.jar", "b_1.0.0.jar");
 		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
 		String shipped = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
 		String first = "a,1.0.0," + packed.resolve("a_first.jar").toUri() + ",4,false";
@@ -188,6 +191,7 @@ class SubstituteBundleToolTest {
 	@Test
 	void restoringEverythingKeepsTheRecordsOfABundleItLeftAloneAndChangesNothingOnADryRun() throws Exception {
 		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		installed(configuration, "a_1.0.0.jar", "a_2.0.0.jar", "b_1.0.0.jar");
 		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
 		String shippedA = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
 		String shippedB = "b,1.0.0,plugins/b_1.0.0.jar,4,false";
@@ -206,6 +210,39 @@ class SubstituteBundleToolTest {
 			assertEquals(List.of("#version=1", shippedA, shippedB), Files.readAllLines(bundlesInfo));
 			assertEquals("b\t" + shippedB + "\t" + jarB + "\n", Files.readString(packed.resolve("substitutions.txt")),
 					"the record of the bundle that was left alone has to survive");
+		} finally {
+			try (var walk = Files.walk(configuration.getParent())) {
+				for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+					Files.deleteIfExists(path);
+				}
+			}
+		}
+	}
+
+	private static void installed(Path configuration, String... jars) throws java.io.IOException {
+		Path plugins = Files.createDirectories(configuration.getParent().resolve("plugins"));
+		for (String jar : jars) {
+			Files.writeString(plugins.resolve(jar), "");
+		}
+	}
+
+	@Test
+	void restoringToAJarThatIsGoneWritesNothingAndKeepsTheRecords() throws Exception {
+		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
+		String shipped = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
+		String jar = "a,1.0.0," + packed.resolve("a.jar").toUri() + ",4,false";
+		String content = String.join("\n", "#version=1", jar) + "\n";
+		Path bundlesInfo = Files.writeString(configuration.resolve("bundles.info"), content);
+		String records = "a\t" + shipped + "\t" + jar + "\n";
+		Files.writeString(packed.resolve("substitutions.txt"), records);
+		try {
+			for (boolean dryRun : new boolean[] { true, false }) {
+				String text = SubstituteBundleTool.restore(configuration, bundlesInfo, dryRun, "a").text();
+				assertTrue(text.contains("jarMissing"), text);
+				assertEquals(content, Files.readString(bundlesInfo), "a line naming a missing jar was written");
+				assertEquals(records, Files.readString(packed.resolve("substitutions.txt")));
+			}
 		} finally {
 			try (var walk = Files.walk(configuration.getParent())) {
 				for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
