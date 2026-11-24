@@ -23,11 +23,15 @@ final class ProblemBaselines {
 
 	private static final AtomicLong IDS = new AtomicLong();
 
-	private static final Map<String, Set<String>> BASELINES = new LinkedHashMap<>() {
+	/** The problems a marker recorded and the build count when it was taken. */
+	record Baseline(Set<String> problems, long builds) {
+	}
+
+	private static final Map<String, Baseline> BASELINES = new LinkedHashMap<>() {
 		private static final long serialVersionUID = 1L;
 
 		@Override
-		protected boolean removeEldestEntry(Map.Entry<String, Set<String>> eldest) {
+		protected boolean removeEldestEntry(Map.Entry<String, Baseline> eldest) {
 			return size() > KEEP;
 		}
 	};
@@ -35,14 +39,14 @@ final class ProblemBaselines {
 	private ProblemBaselines() {
 	}
 
-	static synchronized String take(Set<String> problems) {
+	static synchronized String take(Set<String> problems, long builds) {
 		String id = "%s-%d".formatted(MARKER_PREFIX, Long.valueOf(IDS.incrementAndGet())); //$NON-NLS-1$
-		BASELINES.put(id, new LinkedHashSet<>(problems));
+		BASELINES.put(id, new Baseline(new LinkedHashSet<>(problems), builds));
 		return id;
 	}
 
 	/** The snapshot, or {@code null} when the marker is unknown or has aged out. */
-	static synchronized Set<String> of(String marker) {
+	static synchronized Baseline of(String marker) {
 		return BASELINES.get(marker);
 	}
 

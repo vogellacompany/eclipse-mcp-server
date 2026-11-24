@@ -49,7 +49,7 @@ public final class GetProblemsTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Returns compilation errors and warnings from the Eclipse workspace, as computed by the incremental builder. It refreshes from disk by default, scoped to the project when one is named, and WAITS for a build already running, reporting waitedForBuild so an answer taken while one was in flight is not mistaken for a settled one, but it NEVER STARTS ONE. Asking for markers used to start an incremental build that JDT turned into a batch compile of every open project, so reading them cost thirty seconds; starting a build is eclipse_build's job. With auto-build off the markers are therefore from the last build and upToDate says so. messageFilter narrows to problems whose message contains a substring, which is how to ask for deprecation warnings alone rather than pulling every warning and filtering them yourself. types and excludeTypes filter by marker type with subtypes included: markers from a builder that did not rerun can appear and disappear across rebuilds of an unchanged commit, so excluding that builder's type is how a before/after comparison stops reporting them as regressions. byType counts what came back, so which builders contribute is visible without asking twice."; //$NON-NLS-1$
+		return "Returns compilation errors and warnings from the Eclipse workspace, as computed by the incremental builder. It refreshes from disk by default, scoped to the project when one is named, and WAITS for a build already running, reporting waitedForBuild so an answer taken while one was in flight is not mistaken for a settled one, but it NEVER STARTS ONE. Asking for markers used to start an incremental build that JDT turned into a batch compile of every open project, so reading them cost thirty seconds; starting a build is eclipse_build's job. With auto-build off the markers are therefore from the last build and upToDate says so. messageFilter narrows to problems whose message contains a substring, which is how to ask for deprecation warnings alone rather than pulling every warning and filtering them yourself. types and excludeTypes filter by marker type with subtypes included: markers from a builder that did not rerun can appear and disappear across rebuilds of an unchanged commit, so excluding that builder's type is how a before/after comparison stops reporting them as regressions. byType counts what came back, so which builders contribute is visible without asking twice. With a marker from eclipse_mark_problems the answer is only what appeared and went away since, at every severity unless severity is given, and buildsSinceMarker counts the builds anywhere in the workspace in between: 0 means the change was not built yet and the answer is the marker's own state."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -58,7 +58,7 @@ public final class GetProblemsTool implements IMcpTool {
 				{
 				  "type": "object",
 				  "properties": {
-				    "severity":   {"type":"string","enum":["error","warning","info","all"],"default":"error","description":"Only return problems of exactly this severity. Use 'all' for every severity."},
+				    "severity":   {"type":"string","enum":["error","warning","info","all"],"description":"Only return problems of exactly this severity. Use 'all' for every severity. Defaults to 'error', or to 'all' with a marker, since a change usually breaks something as a warning first."},
 				    "project":    {"type":"string","description":"Restrict to this project name."},
 				    "pathPrefix": {"type":"string","description":"Restrict to workspace paths starting with this prefix."},
 				    "maxResults": {"type":"integer","default":200,"minimum":1,"maximum":2000},
@@ -75,7 +75,8 @@ public final class GetProblemsTool implements IMcpTool {
 	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
-		String severity = args.getString("severity", "error"); //$NON-NLS-1$ //$NON-NLS-2$
+		String problemMarker = args.getString("marker"); //$NON-NLS-1$
+		String severity = args.getString("severity", problemMarker == null ? "error" : "all"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		if (!SEVERITIES.contains(severity)) {
 			return McpToolResult.error("Unknown severity '%s', expected one of error, warning, info, all." //$NON-NLS-1$
 					.formatted(severity));
@@ -85,8 +86,7 @@ public final class GetProblemsTool implements IMcpTool {
 		int maxResults = args.getInt("maxResults", DEFAULT_MAX_RESULTS, 1, 2000); //$NON-NLS-1$
 		boolean refresh = args.getBoolean("refresh", true); //$NON-NLS-1$
 		String messageFilter = args.getString("messageFilter"); //$NON-NLS-1$
-		String problemMarker = args.getString("marker"); //$NON-NLS-1$
-		Set<String> baseline = null;
+		ProblemBaselines.Baseline baseline = null;
 		if (problemMarker != null) {
 			baseline = ProblemBaselines.of(problemMarker);
 			if (baseline == null) {
@@ -118,7 +118,9 @@ public final class GetProblemsTool implements IMcpTool {
 		// every open project, so a read took thirty seconds; starting a build is
 		// eclipse_build's job, where the caller asked for it. It comes before the read,
 		// or the markers would predate the build the answer claims to have waited for
-		boolean waited = WorkspaceSync.waitForBuild(monitor);
+		boolean waited = BuildCounter.waitForBuilds(monitor);
+		// read before the markers, so a build finishing during the read is not counted
+		long buildsNow = BuildCounter.finished();
 		boolean upToDate = refresh && waited && WorkspaceSync.isAutoBuilding();
 
 		IMarker[] markers;
@@ -150,7 +152,7 @@ public final class GetProblemsTool implements IMcpTool {
 		if (baseline != null) {
 			Set<String> now = new LinkedHashSet<>();
 			problems.forEach(problem -> now.add(key(problem)));
-			for (String gone : baseline) {
+			for (String gone : baseline.problems()) {
 				// the diff has to be taken over the scope the caller asked about, not
 				// over the whole workspace the marker recorded
 				if (!inScope(gone, projectName, pathPrefix, severity, messageFilter, types, excludeTypes)
@@ -162,7 +164,7 @@ public final class GetProblemsTool implements IMcpTool {
 					resolved.add(gone);
 				}
 			}
-			Set<String> was = baseline;
+			Set<String> was = baseline.problems();
 			problems.removeIf(problem -> was.contains(key(problem)));
 		}
 		problems.sort(Comparator.comparingInt(Problem::severity).reversed().thenComparing(Problem::path)
@@ -192,18 +194,31 @@ public final class GetProblemsTool implements IMcpTool {
 				.put("upToDate", upToDate) //$NON-NLS-1$
 				.put("autoBuild", WorkspaceSync.isAutoBuilding()) //$NON-NLS-1$
 				.put("problems", reported); //$NON-NLS-1$
+		List<String> staleness = new ArrayList<>();
 		if (!WorkspaceSync.isAutoBuilding()) {
-			result.put("staleness", //$NON-NLS-1$
+			staleness.add(
 					"Auto-build is off and this tool never starts a build, so these markers are from the last build and may predate recent edits. Run eclipse_build first when that matters."); //$NON-NLS-1$
 		}
-		if (problemMarker != null) {
+		if (baseline != null) {
 			result.put("marker", problemMarker) //$NON-NLS-1$
 					.put("sinceMarker", Boolean.TRUE) //$NON-NLS-1$
-					.put("resolvedCount", Integer.valueOf(resolvedTotal)) //$NON-NLS-1$
+					.put("severity", severity); //$NON-NLS-1$
+			if (buildsNow != BuildCounter.UNKNOWN && baseline.builds() != BuildCounter.UNKNOWN) {
+				long builds = buildsNow - baseline.builds();
+				result.put("buildsSinceMarker", Long.valueOf(builds)); //$NON-NLS-1$
+				if (builds == 0) {
+					staleness.add(
+							"Nothing was built anywhere in the workspace since the marker was taken, so this compares the marker with itself and cannot show what the change broke. Run eclipse_build after the change, then ask again."); //$NON-NLS-1$
+				}
+			}
+			result.put("resolvedCount", Integer.valueOf(resolvedTotal)) //$NON-NLS-1$
 					.put("resolvedTruncated", Boolean.valueOf(resolvedTotal > resolved.size())) //$NON-NLS-1$
 					.put("resolved", resolved) //$NON-NLS-1$
 					.put("note", //$NON-NLS-1$
 							"'problems' are the ones that appeared since the marker and 'resolved' the ones that went away. Everything unchanged is omitted, which is the point."); //$NON-NLS-1$
+		}
+		if (!staleness.isEmpty()) {
+			result.put("staleness", String.join(" ", staleness)); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		return McpToolResult.of(result.toString());
 	}
