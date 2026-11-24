@@ -223,6 +223,16 @@ final class WebPage {
 	}
 
 	static McpToolResult failure(IOException e) {
-		return McpToolResult.error(e.getMessage());
+		return refused(e.getMessage());
+	}
+
+	/** An error answer that also reports the dialogs and downloads the page raised meanwhile, so none is left for a later call. */
+	static McpToolResult refused(String message) {
+		WebBrowser browser = WebBrowser.current();
+		JsonObject events = new JsonObject();
+		if (browser != null) {
+			addDialogs(browser, events);
+		}
+		return McpToolResult.error(events.isEmpty() ? message : message + " " + events); //$NON-NLS-1$
 	}
 }

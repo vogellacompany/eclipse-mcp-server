@@ -54,6 +54,7 @@ class WebToolsTest {
 			  <button type="button" id="greet" onclick="document.getElementById('out').textContent = 'Hello ' + document.getElementById('name').value;">Greet</button>
 			  <button type="button" id="ask" onclick="document.getElementById('out').textContent = confirm('Sure?') ? 'yes' : 'no';">Ask</button>
 			</form>
+			<button type="button" id="later" onclick="setTimeout(() => alert('late'), 100)">Later</button>
 			<fieldset disabled><input id="fenced" aria-label="Fenced"></fieldset>
 			<input id="watched" aria-label="Watched" onchange="document.getElementById('out').textContent = 'Changed ' + this.value">
 			<p id="out">nothing yet</p>
@@ -270,6 +271,18 @@ class WebToolsTest {
 				Map.of("ref", ref(snapshot(), "button \"Ask\""), "acceptDialogs", Boolean.TRUE));
 		assertEquals("accepted", ((List<Map<String, Object>>) accepted.get("dialogs")).get(0).get("answered"));
 		assertTrue(snapshot().contains("text: \"yes\""), snapshot());
+	}
+
+	@Test
+	void reportsDialogsRaisedDuringARefusedCall() throws Exception {
+		open("/");
+		TestFixture.callAndParse("eclipse_web_click", Map.of("selector", "#later", "timeoutSeconds", Integer.valueOf(0)));
+		Thread.sleep(1_000);
+		McpToolResult refused = TestFixture.call("eclipse_web_click", Map.of("selector", "#off"));
+		TestFixture.assertRefused(refused, "disabled");
+		assertTrue(refused.text().contains("late"), refused.text());
+		assertFalse(TestFixture.callAndParse("eclipse_web_snapshot", Map.of()).containsKey("dialogs"),
+				"already reported with the refusal");
 	}
 
 	@Test

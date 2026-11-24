@@ -2,6 +2,7 @@ package com.vogella.eclipse.mcp.web.internal;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -9,6 +10,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Finds a Chromium based browser that is already installed, because this bundle never downloads one.
@@ -20,6 +23,9 @@ final class BrowserLocator {
 
 	private static final List<String> PATH_NAMES = List.of("google-chrome", "google-chrome-stable", "chromium", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 			"chromium-browser", "microsoft-edge", "microsoft-edge-stable", "chrome"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+
+	private static final Pattern BUNDLE_EXECUTABLE = Pattern
+			.compile("<key>CFBundleExecutable</key>\\s*<string>([^<]+)</string>"); //$NON-NLS-1$
 
 	private BrowserLocator() {
 	}
@@ -47,17 +53,35 @@ final class BrowserLocator {
 	private static Path executable(Path path, String source) throws IOException {
 		Path resolved = path;
 		if (Files.isDirectory(path) && path.toString().endsWith(".app")) { //$NON-NLS-1$
-			try (DirectoryStream<Path> stream = Files.newDirectoryStream(path.resolve("Contents/MacOS"))) { //$NON-NLS-1$
-				for (Path inner : stream) {
-					resolved = inner;
-					break;
-				}
-			}
+			resolved = bundleExecutable(path);
 		}
 		if (!Files.isRegularFile(resolved) || !Files.isExecutable(resolved)) {
 			throw new IOException(source + " names " + path + ", which is not an executable file."); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		return resolved;
+	}
+
+	/** The executable a macOS bundle names in its Info.plist, else the one called like the bundle, else the first one. */
+	private static Path bundleExecutable(Path app) throws IOException {
+		Path macOs = app.resolve("Contents/MacOS"); //$NON-NLS-1$
+		Path plist = app.resolve("Contents/Info.plist"); //$NON-NLS-1$
+		if (Files.isRegularFile(plist)) {
+			Matcher matcher = BUNDLE_EXECUTABLE.matcher(Files.readString(plist, StandardCharsets.ISO_8859_1));
+			if (matcher.find() && Files.isRegularFile(macOs.resolve(matcher.group(1).trim()))) {
+				return macOs.resolve(matcher.group(1).trim());
+			}
+		}
+		String name = app.getFileName().toString();
+		Path byName = macOs.resolve(name.substring(0, name.length() - ".app".length())); //$NON-NLS-1$
+		if (Files.isRegularFile(byName)) {
+			return byName;
+		}
+		try (DirectoryStream<Path> stream = Files.newDirectoryStream(macOs)) {
+			for (Path inner : stream) {
+				return inner;
+			}
+		}
+		return app;
 	}
 
 	/** Every place looked at, in order, for the error message and the tests. */
