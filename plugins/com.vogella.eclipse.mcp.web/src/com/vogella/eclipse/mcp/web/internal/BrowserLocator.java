@@ -66,7 +66,7 @@ final class BrowserLocator {
 		Path macOs = app.resolve("Contents/MacOS"); //$NON-NLS-1$
 		Path plist = app.resolve("Contents/Info.plist"); //$NON-NLS-1$
 		if (Files.isRegularFile(plist)) {
-			Matcher matcher = BUNDLE_EXECUTABLE.matcher(Files.readString(plist, StandardCharsets.ISO_8859_1));
+			Matcher matcher = BUNDLE_EXECUTABLE.matcher(Files.readString(plist, StandardCharsets.UTF_8));
 			if (matcher.find() && Files.isRegularFile(macOs.resolve(matcher.group(1).trim()))) {
 				return macOs.resolve(matcher.group(1).trim());
 			}
@@ -76,12 +76,14 @@ final class BrowserLocator {
 		if (Files.isRegularFile(byName)) {
 			return byName;
 		}
-		try (DirectoryStream<Path> stream = Files.newDirectoryStream(macOs)) {
-			for (Path inner : stream) {
-				return inner;
+		if (Files.isDirectory(macOs)) {
+			try (DirectoryStream<Path> stream = Files.newDirectoryStream(macOs)) {
+				for (Path inner : stream) {
+					return inner;
+				}
 			}
 		}
-		return app;
+		throw new IOException(app + " has no executable in Contents/MacOS."); //$NON-NLS-1$
 	}
 
 	/** Every place looked at, in order, for the error message and the tests. */

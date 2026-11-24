@@ -635,7 +635,7 @@ final class WebBrowser {
 		return endpoint;
 	}
 
-	private boolean isAlive() {
+	boolean isAlive() {
 		return page.isOpen() && (process == null || process.isAlive());
 	}
 

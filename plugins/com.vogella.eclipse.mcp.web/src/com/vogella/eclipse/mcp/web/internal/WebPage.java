@@ -162,6 +162,8 @@ final class WebPage {
 				note = "No time was left to wait for the page to settle, so whether the action started a load is not known yet; take a snapshot to see where the page is."; //$NON-NLS-1$
 			} else if (animating) {
 				note = "The page loaded, but an animation or transition was still running when the wait ended, so a screenshot may catch it halfway."; //$NON-NLS-1$
+			} else if (!browser.isAlive()) {
+				note = "The browser connection closed while waiting, so the page is gone; open a page again."; //$NON-NLS-1$
 			} else {
 				answer.put("pendingRequests", Integer.valueOf(browser.pendingRequests())); //$NON-NLS-1$
 				note = "The page was still loading or had requests in flight when the wait ended. A page that polls never settles; take a snapshot to see where it is."; //$NON-NLS-1$
@@ -216,7 +218,7 @@ final class WebPage {
 		} catch (IOException e) {
 			return failure(e);
 		} catch (Exception e) {
-			return McpToolResult.error(e.getClass().getSimpleName() + ": " + e.getMessage()); //$NON-NLS-1$
+			return refused(e.getClass().getSimpleName() + ": " + e.getMessage()); //$NON-NLS-1$
 		} finally {
 			CALLS.unlock();
 		}

@@ -54,7 +54,7 @@ class WebToolsTest {
 			  <button type="button" id="greet" onclick="document.getElementById('out').textContent = 'Hello ' + document.getElementById('name').value;">Greet</button>
 			  <button type="button" id="ask" onclick="document.getElementById('out').textContent = confirm('Sure?') ? 'yes' : 'no';">Ask</button>
 			</form>
-			<button type="button" id="later" onclick="setTimeout(() => alert('late'), 100)">Later</button>
+			<button type="button" id="later" onclick="setTimeout(() => alert('late'), 600)">Later</button>
 			<fieldset disabled><input id="fenced" aria-label="Fenced"></fieldset>
 			<input id="watched" aria-label="Watched" onchange="document.getElementById('out').textContent = 'Changed ' + this.value">
 			<p id="out">nothing yet</p>
@@ -277,12 +277,23 @@ class WebToolsTest {
 	void reportsDialogsRaisedDuringARefusedCall() throws Exception {
 		open("/");
 		TestFixture.callAndParse("eclipse_web_click", Map.of("selector", "#later", "timeoutSeconds", Integer.valueOf(0)));
-		Thread.sleep(1_000);
+		Thread.sleep(1_500);
 		McpToolResult refused = TestFixture.call("eclipse_web_click", Map.of("selector", "#off"));
 		TestFixture.assertRefused(refused, "disabled");
 		assertTrue(refused.text().contains("late"), refused.text());
 		assertFalse(TestFixture.callAndParse("eclipse_web_snapshot", Map.of()).containsKey("dialogs"),
 				"already reported with the refusal");
+	}
+
+	@Test
+	void namesAMacBundleWithoutAnExecutable() throws Exception {
+		Path bundle = Files.createTempDirectory("mcp-web-bundle-").resolve("Fake.app");
+		Files.createDirectories(bundle.resolve("Contents"));
+		Files.writeString(bundle.resolve("Contents/Info.plist"),
+				"<plist><dict><key>CFBundleExecutable</key><string>Fake</string></dict></plist>");
+		TestFixture.assertRefused(
+				TestFixture.call("eclipse_web_open", Map.of("url", base + "/", "browserPath", bundle.toString())),
+				"Fake.app has no executable");
 	}
 
 	@Test
