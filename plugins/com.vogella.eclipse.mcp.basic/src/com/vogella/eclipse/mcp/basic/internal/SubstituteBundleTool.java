@@ -66,7 +66,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Makes the IDE run a workspace project's bundle in place of the installed one at the next restart, by packing the project and pointing this installation's bundles.info line at the packed jar. CHANGES THE INSTALLATION, not the workspace, and runs as a dry run unless dryRun is set to false; the dry run shows the exact line before and after. THIS IS THE ONLY WAY IN FOR MOST OF THE SDK: a hot install through eclipse_install_bundle is invisible to anything that reads the registry once at startup, the theme engine among them, and the dropins directory cannot replace a bundle that belongs to an installed feature, because a feature demands its bundles at an exact version, which covers nearly everything in an SDK. THE RISK IS REAL: a bundles.info that names a jar which is not there leaves the bundles that need it unresolvable, and if that bundle is one the framework itself needs, the IDE does not start and no tool here can reach it; short of that the IDE still runs and action repair points such a line back at the installed jar. NEVER DELETE A PACKED JAR BY HAND: action cleanup does it and re-reads bundles.info first, because this file is rewritten at every start and by other sessions, so a jar that looks unreferenced can be the one the next start loads. The original line is recorded, so action restore needs nothing from the caller, and action status reports what is substituted right now, checked against bundles.info rather than believed from the record, including a substitution another session made and, under referencingSubstitutedJars, every line that points at a packed jar even when nothing here recorded it, which is what stops somebody debugging an IDE that is not running what its plugins directory holds. THE VERSION FIELD IS WHAT MAKES IT TAKE EFFECT: simpleconfigurator matches a bundle on symbolic name plus version, so a line that keeps the installed version and only changes the path is read as a bundle already installed and the path is never looked at, which is a substitution that does nothing while every check on the file says it is in force. The version of the substituted jar is therefore written into the line. IN A SHARED INSTALLATION the substitution is written to the user area, which simpleconfigurator ignores once the shared bundles.info has changed since the user area recorded it; substitute then records the shared file's current time when the two files are identical apart from the substituted lines, refuses otherwise unless acceptSharedChanges is set, and reports the state under sharedInstall, as status does. Ask action status for the 'running' field, which reports what the framework has actually loaded, its version, its state and the jar it came from, rather than what the file says, and believe that one. The line may also be rewritten at a restart, so everything here matches on the bundle name, the one stable field. Packing follows bin.includes, expands patterns such as *.so and always includes the manifest; entries that match nothing are listed under unmatchedIncludes, and a jar holding Git LFS pointers instead of the real files is refused."; //$NON-NLS-1$
+		return "Makes the IDE run a workspace project's bundle in place of the installed one at the next restart, by packing the project and pointing this installation's bundles.info line at the packed jar. CHANGES THE INSTALLATION, not the workspace, and runs as a dry run unless dryRun is set to false; the dry run shows the exact line before and after. THIS IS THE ONLY WAY IN FOR MOST OF THE SDK: a hot install through eclipse_install_bundle is invisible to anything that reads the registry once at startup, the theme engine among them, and the dropins directory cannot replace a bundle that belongs to an installed feature, because a feature demands its bundles at an exact version, which covers nearly everything in an SDK. THE RISK IS REAL: a bundles.info that names a jar which is not there leaves the bundles that need it unresolvable, and if that bundle is one the framework itself needs, the IDE does not start and no tool here can reach it; short of that the IDE still runs and action repair points such a line back at the installed jar. NEVER DELETE A PACKED JAR BY HAND: action cleanup does it and re-reads bundles.info first, because this file is rewritten at every start and by other sessions, so a jar that looks unreferenced can be the one the next start loads. The original line is recorded, so action restore needs nothing from the caller; when the jar that line names is gone, restore falls back to an installed jar of the same bundle and says so, and when there is none it refuses that bundle and lists it under notRestored, since writing the line would leave the IDE without the bundle, and a human has to fix that one; and action status reports what is substituted right now, checked against bundles.info rather than believed from the record, including a substitution another session made and, under referencingSubstitutedJars, every line that points at a packed jar even when nothing here recorded it, which is what stops somebody debugging an IDE that is not running what its plugins directory holds. THE VERSION FIELD IS WHAT MAKES IT TAKE EFFECT: simpleconfigurator matches a bundle on symbolic name plus version, so a line that keeps the installed version and only changes the path is read as a bundle already installed and the path is never looked at, which is a substitution that does nothing while every check on the file says it is in force. The version of the substituted jar is therefore written into the line. IN A SHARED INSTALLATION the substitution is written to the user area, which simpleconfigurator ignores once the shared bundles.info has changed since the user area recorded it; substitute then records the shared file's current time when the two files are identical apart from the substituted lines, refuses otherwise unless acceptSharedChanges is set, and reports the state under sharedInstall, as status does. Ask action status for the 'running' field, which reports what the framework has actually loaded, its version, its state and the jar it came from, rather than what the file says, and believe that one. The line may also be rewritten at a restart, so everything here matches on the bundle name, the one stable field. Packing follows bin.includes, expands patterns such as *.so and always includes the manifest; entries that match nothing are listed under unmatchedIncludes, and a jar holding Git LFS pointers instead of the real files is refused."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -113,7 +113,8 @@ public final class SubstituteBundleTool implements IMcpTool {
 		try {
 			McpToolResult result = switch (action) {
 			case "status" -> McpToolResult.of(status(configuration, bundlesInfo).toString()); //$NON-NLS-1$
-			case "restore" -> restore(configuration, bundlesInfo, args.getBoolean("dryRun", true), args.getString("bundle")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			case "restore" -> restore(configuration, bundlesInfo, args.getBoolean("dryRun", true), args.getString("bundle"), //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+					baseInstallation());
 			case "cleanup" -> cleanup(configuration, bundlesInfo, args.getBoolean("dryRun", true)); //$NON-NLS-1$ //$NON-NLS-2$
 			case "repair" -> repair(configuration, bundlesInfo, args.getBoolean("dryRun", true)); //$NON-NLS-1$ //$NON-NLS-2$
 			case "substitute" -> substitute(configuration, bundlesInfo, args, monitor);
@@ -432,6 +433,21 @@ public final class SubstituteBundleTool implements IMcpTool {
 	 */
 	public static McpToolResult restore(Path configuration, Path bundlesInfo, boolean dryRun, String bundle)
 			throws IOException {
+		return restore(configuration, bundlesInfo, dryRun, bundle, null);
+	}
+
+	/** The shared installation behind this user area, whose plugins directory relative lines may name. */
+	private static Path baseInstallation() {
+		Path base = SharedBase.baseBundlesInfo(BUNDLES_INFO);
+		return base == null ? null : base.getParent().getParent().getParent();
+	}
+
+	/**
+	 * As {@link #restore(Path, Path, boolean, String)}, resolving relative lines also against
+	 * {@code baseInstallation}, the shared installation, or null.
+	 */
+	public static McpToolResult restore(Path configuration, Path bundlesInfo, boolean dryRun, String bundle,
+			Path baseInstallation) throws IOException {
 		List<String[]> all = records(configuration);
 		if (all.isEmpty()) {
 			return McpToolResult.of(new JsonObject().put("restored", Integer.valueOf(0)) //$NON-NLS-1$
@@ -456,6 +472,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 		List<String> lines = new ArrayList<>(Files.readAllLines(bundlesInfo, StandardCharsets.UTF_8));
 		JsonArray done = new JsonArray();
 		JsonArray missed = new JsonArray();
+		List<String> jarGone = new ArrayList<>();
 		for (String name : names) {
 			// by bundle name, not by the whole line: simpleconfigurator rewrites
 			// the version and the path form at every start, so the line written
@@ -470,7 +487,7 @@ public final class SubstituteBundleTool implements IMcpTool {
 			List<String[]> layers = layersUnder(configuration, records, name, current);
 			if (layers.isEmpty()) {
 				// already restored, or updated since: writing a recorded original over it could bring back a packed jar
-				records.stream().filter(record -> record[0].equals(name)).forEach(kept::add);
+				keep(records, name, kept);
 				missed.add(new JsonObject().put("bundle", name) //$NON-NLS-1$
 						.put("reason", current.contains(JARS) //$NON-NLS-1$
 								? "Its line names a packed jar that no record leads back from, so it is still in force and the original is not known here; it was left alone and its records kept." //$NON-NLS-1$
@@ -478,25 +495,33 @@ public final class SubstituteBundleTool implements IMcpTool {
 				continue;
 			}
 			String[] record = layers.getLast();
-			Path originalJar = jarOf(configuration, record[1]);
+			String target = record[1];
+			String fellBackFrom = null;
+			Path originalJar = existingJar(configuration, baseInstallation, target);
 			if (originalJar != null && !Files.exists(originalJar)) {
 				// an update can remove the recorded original's jar; writing the line back would name a missing file
-				records.stream().filter(r -> r[0].equals(name)).forEach(kept::add);
-				missed.add(new JsonObject().put("bundle", name) //$NON-NLS-1$
-						.put("jarMissing", originalJar.toString()) //$NON-NLS-1$
-						.put("line", record[1]) //$NON-NLS-1$
-						.put("reason", "The jar its recorded original line names no longer exists, so the line was not written and its records were kept. Run action repair to point the bundle at an installed jar.")); //$NON-NLS-1$ //$NON-NLS-2$
-				continue;
+				fellBackFrom = originalJar.toString();
+				target = installedLine(configuration, baseInstallation, name, record[1]);
+				if (target == null) {
+					keep(records, name, kept);
+					jarGone.add(name);
+					missed.add(new JsonObject().put("bundle", name) //$NON-NLS-1$
+							.put("jarMissing", fellBackFrom) //$NON-NLS-1$
+							.put("line", record[1]) //$NON-NLS-1$
+							.put("reason", "The jar its recorded original line names no longer exists and no installed jar of the bundle was found, so nothing was written and its records were kept. bundles.info still names the substituted jar; this needs a human.")); //$NON-NLS-1$ //$NON-NLS-2$
+					continue;
+				}
 			}
 			if (!dryRun) {
-				lines.set(index, record[1]);
+				lines.set(index, target);
 			}
 			// an original that is itself a packed jar comes from a substitution the
 			// record does not know about, and is invisible unless it is said
-			boolean ontoSubstituted = record[1].contains(JARS);
+			boolean ontoSubstituted = target.contains(JARS);
 			done.add(new JsonObject().put("bundle", name) //$NON-NLS-1$
 					.put("was", current) //$NON-NLS-1$
-					.put("line", record[1]) //$NON-NLS-1$
+					.put("line", target) //$NON-NLS-1$
+					.put("originalJarMissing", fellBackFrom) //$NON-NLS-1$
 					.put("layersUndone", Integer.valueOf(layers.size())) //$NON-NLS-1$
 					.put("restoredToSubstitutedJar", Boolean.valueOf(ontoSubstituted)) //$NON-NLS-1$
 					.put("restoredToNote", ontoSubstituted //$NON-NLS-1$
@@ -532,15 +557,80 @@ public final class SubstituteBundleTool implements IMcpTool {
 			// the note, stops looking, and keeps an IDE that is not what it thinks
 			return McpToolResult.error(result
 					.put("note", //$NON-NLS-1$
-							"NOTHING WAS PUT BACK. Every recorded substitution is either already restored or has no line in bundles.info, so the file was not written. Check action status and the notRestored entries before assuming this IDE runs its installed bundles.") //$NON-NLS-1$
+							"NOTHING WAS PUT BACK, so the file was not written. The reason for each bundle is under notRestored: already restored, no line in bundles.info, or an original whose jar is gone. Check action status and those entries before assuming this IDE runs its installed bundles." //$NON-NLS-1$
+									+ (jarGone.isEmpty() ? "" //$NON-NLS-1$
+											: " bundles.info still names the substituted jar of " + jarGone + ", which needs a human.")) //$NON-NLS-1$ //$NON-NLS-2$
 					.toString());
 		}
 		return McpToolResult.of(result.put("restartRequired", Boolean.TRUE) //$NON-NLS-1$
 				.put("note", dryRun ? "Nothing was changed. Pass dryRun false to put these lines back." //$NON-NLS-1$
 						: stillReferenced.size() > 0
-								? "The recorded lines are back, BUT bundles.info still points at a packed jar for something else, listed under stillReferenced. Do not delete anything under mcp-substituted until that is gone; action repair drops such a line when a higher version of the bundle is also listed." //$NON-NLS-1$
+								? "The recorded lines are back, BUT bundles.info still points at a packed jar this call did not restore, listed under stillReferenced (notRestored says why). Do not delete anything under mcp-substituted until that is gone; action repair drops such a line when a higher version of the bundle is also listed, and a bundle whose original jar is gone needs a human." //$NON-NLS-1$
 								: "The installed bundles are back in bundles.info; restart with eclipse_restart for the IDE to run them. Delete the packed jars with action cleanup, which checks the file again first, rather than by hand: this file is written by simpleconfigurator and by other sessions, so what is unreferenced now may not be in a minute.") //$NON-NLS-1$
 				.toString());
+	}
+
+	private static void keep(List<String[]> records, String name, List<String[]> kept) {
+		records.stream().filter(r -> r[0].equals(name)).forEach(kept::add);
+	}
+
+	/** The jar a line names, looked for in the shared installation too when a relative path is not in the user area. */
+	private static Path existingJar(Path configuration, Path baseInstallation, String line) {
+		Path jar = jarOf(configuration, line);
+		String path = line.split(",")[2]; //$NON-NLS-1$
+		if (jar == null || Files.exists(jar) || baseInstallation == null || path.startsWith("file:")) { //$NON-NLS-1$
+			return jar;
+		}
+		Path inBase = baseInstallation.resolve(path);
+		return Files.exists(inBase) ? inBase : jar;
+	}
+
+	/**
+	 * A line for the installed copy of a bundle whose original jar is gone: the one at the
+	 * original's version when plugins holds it, else the highest installed version, or null.
+	 */
+	private static String installedLine(Path configuration, Path baseInstallation, String name, String original) {
+		String[] fields = original.split(","); //$NON-NLS-1$
+		if (fields.length < 5) {
+			return null;
+		}
+		String prefix = name + "_"; //$NON-NLS-1$
+		String bestEntry = null;
+		Version best = null;
+		for (Path root : Arrays.asList(configuration.getParent(), baseInstallation)) {
+			if (root == null || !Files.isDirectory(root.resolve("plugins"))) { //$NON-NLS-1$
+				continue;
+			}
+			try (var entries = Files.list(root.resolve("plugins"))) { //$NON-NLS-1$
+				for (Path entry : entries.toList()) {
+					String file = entry.getFileName().toString();
+					if (!file.startsWith(prefix)) {
+						continue;
+					}
+					String text = file.substring(prefix.length());
+					try {
+						Version version = Version.parseVersion(text.endsWith(".jar") ? text.substring(0, text.length() - 4) : text); //$NON-NLS-1$
+						boolean exact = version.equals(Version.parseVersion(fields[1]));
+						if (exact || best == null || version.compareTo(best) > 0) {
+							if (exact) {
+								return line(fields, version, file);
+							}
+							best = version;
+							bestEntry = file;
+						}
+					} catch (IllegalArgumentException e) {
+						// another bundle whose name merely starts with this one
+					}
+				}
+			} catch (IOException e) {
+				// an unreadable plugins directory offers no fallback
+			}
+		}
+		return best == null ? null : line(fields, best, bestEntry);
+	}
+
+	private static String line(String[] fields, Version version, String entry) {
+		return "%s,%s,plugins/%s,%s,%s".formatted(fields[0], version, entry, fields[3], fields[4]); //$NON-NLS-1$
 	}
 
 	/**
