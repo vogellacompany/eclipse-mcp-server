@@ -107,6 +107,7 @@ class SubstituteBundleToolTest {
 	@Test
 	void restoringASubstitutionLayeredOnAnotherPutsBackTheShippedLine() throws Exception {
 		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		installed(configuration, "a_1.0.0.jar", "a_2.0.0.jar", "b_1.0.0.jar");
 		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
 		String shipped = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
 		String first = "a,1.0.0," + packed.resolve("a_first.jar").toUri() + ",4,false";
@@ -136,6 +137,7 @@ class SubstituteBundleToolTest {
 	@Test
 	void restoringAfterAnUpdateBetweenTwoSubstitutionsStopsAtTheUpdatedLine() throws Exception {
 		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		installed(configuration, "a_1.0.0.jar", "a_2.0.0.jar", "b_1.0.0.jar");
 		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
 		String removedByUpdate = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
 		String updated = "a,2.0.0,plugins/a_2.0.0.jar,4,false";
@@ -163,6 +165,7 @@ class SubstituteBundleToolTest {
 	@Test
 	void restoringABundleThatIsAlreadyRestoredLeavesItAndItsRecordsAlone() throws Exception {
 		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		installed(configuration, "a_1.0.0.jar", "a_2.0.0.jar", "b_1.0.0.jar");
 		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
 		String shipped = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
 		String first = "a,1.0.0," + packed.resolve("a_first.jar").toUri() + ",4,false";
@@ -188,6 +191,7 @@ class SubstituteBundleToolTest {
 	@Test
 	void restoringEverythingKeepsTheRecordsOfABundleItLeftAloneAndChangesNothingOnADryRun() throws Exception {
 		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		installed(configuration, "a_1.0.0.jar", "a_2.0.0.jar", "b_1.0.0.jar");
 		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
 		String shippedA = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
 		String shippedB = "b,1.0.0,plugins/b_1.0.0.jar,4,false";
@@ -211,6 +215,117 @@ class SubstituteBundleToolTest {
 				for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
 					Files.deleteIfExists(path);
 				}
+			}
+		}
+	}
+
+	private static void installed(Path configuration, String... jars) throws java.io.IOException {
+		Path plugins = Files.createDirectories(configuration.getParent().resolve("plugins"));
+		for (String jar : jars) {
+			Files.writeString(plugins.resolve(jar), "");
+		}
+	}
+
+	@Test
+	void restoringToAJarThatIsGoneWritesNothingAndKeepsTheRecords() throws Exception {
+		Path configuration = Files.createTempDirectory("mcp-restore").resolve("configuration");
+		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
+		String shipped = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
+		String jar = "a,1.0.0," + packed.resolve("a.jar").toUri() + ",4,false";
+		String content = String.join("\n", "#version=1", jar) + "\n";
+		Path bundlesInfo = Files.writeString(configuration.resolve("bundles.info"), content);
+		String records = "a\t" + shipped + "\t" + jar + "\n";
+		Files.writeString(packed.resolve("substitutions.txt"), records);
+		try {
+			for (boolean dryRun : new boolean[] { true, false }) {
+				String text = SubstituteBundleTool.restore(configuration, bundlesInfo, dryRun, "a").text();
+				Map<String, Object> answer = TestFixture.parse(text);
+				assertEquals(0, ((Number) answer.get("restoredCount")).intValue(), text);
+				Map<?, ?> refused = (Map<?, ?>) ((List<?>) answer.get("notRestored")).get(0);
+				assertEquals("a", refused.get("bundle"), text);
+				assertEquals(shipped, refused.get("line"), text);
+				assertTrue(String.valueOf(refused.get("jarMissing")).endsWith("plugins/a_1.0.0.jar"), text);
+				assertTrue(String.valueOf(refused.get("reason")).contains("needs a human"), text);
+				assertEquals(content, Files.readString(bundlesInfo), "a line naming a missing jar was written");
+				assertEquals(records, Files.readString(packed.resolve("substitutions.txt")));
+			}
+		} finally {
+			try (var walk = Files.walk(configuration.getParent())) {
+				for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+					Files.deleteIfExists(path);
+				}
+			}
+		}
+	}
+
+	@Test
+	void restoringToAJarThatIsGoneFallsBackToTheHighestInstalledOne() throws Exception {
+		Path root = Files.createTempDirectory("mcp-fallback");
+		Path configuration = root.resolve("configuration");
+		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
+		String shipped = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
+		String jar = "a,1.0.0," + packed.resolve("a.jar").toUri() + ",4,false";
+		Path bundlesInfo = Files.writeString(configuration.resolve("bundles.info"), "#version=1\n" + jar + "\n");
+		Files.writeString(packed.resolve("substitutions.txt"), "a\t" + shipped + "\t" + jar + "\n");
+		installed(configuration, "a_1.1.0.jar", "a_1.2.0.jar", "a_b_9.0.0.jar");
+		try {
+			String text = SubstituteBundleTool.restore(configuration, bundlesInfo, false, "a").text();
+			assertTrue(text.contains("originalJarMissing"), text);
+			assertEquals("#version=1\na,1.2.0,plugins/a_1.2.0.jar,4,false\n", Files.readString(bundlesInfo), text);
+			assertTrue(Files.notExists(packed.resolve("substitutions.txt")));
+		} finally {
+			deleteTree(root);
+		}
+	}
+
+	@Test
+	void aMixedRestoreWritesTheRestoredBundleAndKeepsTheRefusedRecords() throws Exception {
+		Path root = Files.createTempDirectory("mcp-mixed");
+		Path configuration = root.resolve("configuration");
+		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
+		String shippedA = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
+		String jarA = "a,1.0.0," + packed.resolve("a.jar").toUri() + ",4,false";
+		String shippedB = "b,1.0.0,plugins/b_1.0.0.jar,4,false";
+		String jarB = "b,1.0.0," + packed.resolve("b.jar").toUri() + ",4,false";
+		Path bundlesInfo = Files.writeString(configuration.resolve("bundles.info"),
+				"#version=1\n" + jarA + "\n" + jarB + "\n");
+		String recordA = "a\t" + shippedA + "\t" + jarA + "\n";
+		Files.writeString(packed.resolve("substitutions.txt"), recordA + "b\t" + shippedB + "\t" + jarB + "\n");
+		installed(configuration, "b_1.0.0.jar");
+		try {
+			String text = SubstituteBundleTool.restore(configuration, bundlesInfo, false, null).text();
+			assertTrue(text.contains("notRestored"), text);
+			assertEquals("#version=1\n" + jarA + "\n" + shippedB + "\n", Files.readString(bundlesInfo), text);
+			assertEquals(recordA, Files.readString(packed.resolve("substitutions.txt")));
+		} finally {
+			deleteTree(root);
+		}
+	}
+
+	@Test
+	void aRelativeOriginalInTheSharedInstallationCountsAsPresent() throws Exception {
+		Path root = Files.createTempDirectory("mcp-shared");
+		Path configuration = root.resolve("user/configuration");
+		Path packed = Files.createDirectories(configuration.resolve("mcp-substituted"));
+		Path base = Files.createDirectories(root.resolve("base"));
+		Files.writeString(Files.createDirectories(base.resolve("plugins")).resolve("a_1.0.0.jar"), "");
+		String shipped = "a,1.0.0,plugins/a_1.0.0.jar,4,false";
+		String jar = "a,1.0.0," + packed.resolve("a.jar").toUri() + ",4,false";
+		Path bundlesInfo = Files.writeString(configuration.resolve("bundles.info"), "#version=1\n" + jar + "\n");
+		Files.writeString(packed.resolve("substitutions.txt"), "a\t" + shipped + "\t" + jar + "\n");
+		try {
+			String text = SubstituteBundleTool.restore(configuration, bundlesInfo, false, "a", base).text();
+			assertEquals("#version=1\n" + shipped + "\n", Files.readString(bundlesInfo), text);
+			assertTrue(!text.contains("originalJarMissing\":\""), text);
+		} finally {
+			deleteTree(root);
+		}
+	}
+
+	private static void deleteTree(Path root) throws java.io.IOException {
+		try (var walk = Files.walk(root)) {
+			for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+				Files.deleteIfExists(path);
 			}
 		}
 	}
