@@ -55,18 +55,18 @@ public final class WebClickTool implements IMcpTool {
 		try {
 			WebPage.Target target = WebPage.locate(browser, args, args.getBoolean("force", false)); //$NON-NLS-1$
 			if (target.error() != null) {
-				return McpToolResult.error(target.error());
+				return WebPage.refused(target.error());
 			}
 			if (target.disabled()) {
-				return McpToolResult.error("The " + target.tag() //$NON-NLS-1$
+				return WebPage.refused("The " + target.tag() //$NON-NLS-1$
 						+ " is disabled, so the browser would not deliver a click to it; the page usually enables it once a form is complete."); //$NON-NLS-1$
 			}
 			if (target.fileInput()) {
-				return McpToolResult.error(
+				return WebPage.refused(
 						"The element is a file input or a label for one. A click opens the system's file chooser, which these tools cannot see or answer, so it is refused; choosing files for an upload is not supported."); //$NON-NLS-1$
 			}
 			if (target.newTab() != null && !args.getBoolean("force", false)) { //$NON-NLS-1$
-				return McpToolResult.error("The link opens " + target.newTab() //$NON-NLS-1$
+				return WebPage.refused("The link opens " + target.newTab() //$NON-NLS-1$
 						+ " in a new tab, which these tools do not follow, and it would push this page into the background. Call eclipse_web_open with that url to go there, or pass force to click anyway."); //$NON-NLS-1$
 			}
 			String before = String.valueOf(browser.evaluate("location.href")); //$NON-NLS-1$

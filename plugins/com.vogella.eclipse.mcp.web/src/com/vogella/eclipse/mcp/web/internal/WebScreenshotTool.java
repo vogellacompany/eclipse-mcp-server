@@ -71,7 +71,7 @@ public final class WebScreenshotTool implements IMcpTool {
 			if (element) {
 				WebPage.Target target = WebPage.locate(browser, args, true);
 				if (target.error() != null) {
-					return McpToolResult.error(target.error());
+					return WebPage.refused(target.error());
 				}
 				double left = target.x() - target.width() / 2 + target.scrollX();
 				double top = target.y() - target.height() / 2 + target.scrollY();
@@ -96,7 +96,7 @@ public final class WebScreenshotTool implements IMcpTool {
 				Map<?, ?> content = metrics.get("cssContentSize") instanceof Map<?, ?> map ? map //$NON-NLS-1$
 						: metrics.get("contentSize") instanceof Map<?, ?> old ? old : Map.of(); //$NON-NLS-1$
 				if (content.isEmpty()) {
-					return McpToolResult.error("The browser did not report the size of the page, so a full-page capture is not possible; capture the viewport instead."); //$NON-NLS-1$
+					return WebPage.refused("The browser did not report the size of the page, so a full-page capture is not possible; capture the viewport instead."); //$NON-NLS-1$
 				}
 				double width = WebPage.number(content.get("width")); //$NON-NLS-1$
 				double height = WebPage.number(content.get("height")); //$NON-NLS-1$
@@ -138,7 +138,7 @@ public final class WebScreenshotTool implements IMcpTool {
 				}
 			}
 			if (!(shot.get("data") instanceof String data)) { //$NON-NLS-1$
-				return McpToolResult.error("The browser answered no image."); //$NON-NLS-1$
+				return WebPage.refused("The browser answered no image."); //$NON-NLS-1$
 			}
 			WebPage.addDialogs(browser, answer);
 			return McpToolResult.of(answer.toString()).withImage(Base64.getDecoder().decode(data), "image/png"); //$NON-NLS-1$

@@ -227,6 +227,7 @@ final class WebBrowser {
 	private static int awaitPort(Process process, Path profile, Path log) throws IOException {
 		Path portFile = profile.resolve("DevToolsActivePort"); //$NON-NLS-1$
 		long budget = launchBudgetMillis(20_000);
+		boolean limitedByCall = budget < 20_000;
 		long deadline = System.nanoTime() + Duration.ofMillis(budget).toNanos();
 		while (System.nanoTime() < deadline) {
 			if (!process.isAlive()) {
@@ -252,7 +253,9 @@ final class WebBrowser {
 			sleep(50);
 		}
 		throw new IOException("The browser did not open its DevTools port within " + budget / 1000 //$NON-NLS-1$
-				+ " seconds, which is what was left of this call. A first start on a busy machine can take that long; raise the tool call timeout in Preferences > General > MCP Server if it keeps happening. Output: " //$NON-NLS-1$
+				+ (limitedByCall
+						? " seconds, which is what was left of this call. A first start on a busy machine can take that long; raise the tool call timeout in Preferences > General > MCP Server if it keeps happening. Output: " //$NON-NLS-1$
+						: " seconds, the limit for starting a browser. Output: ") //$NON-NLS-1$
 				+ tail(log));
 	}
 
@@ -529,6 +532,10 @@ final class WebBrowser {
 		long quietSince = 0;
 		synchronized (state) {
 			while (true) {
+				if (!isAlive()) {
+					// a browser or connection that is gone never finishes loading; the next step reports the page as gone
+					return false;
+				}
 				long now = System.nanoTime();
 				if (!loading && inflight.isEmpty()) {
 					if (quietSince == 0) {
@@ -628,7 +635,7 @@ final class WebBrowser {
 		return endpoint;
 	}
 
-	private boolean isAlive() {
+	boolean isAlive() {
 		return page.isOpen() && (process == null || process.isAlive());
 	}
 

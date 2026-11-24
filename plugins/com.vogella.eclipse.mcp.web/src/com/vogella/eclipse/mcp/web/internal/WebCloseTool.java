@@ -39,6 +39,12 @@ public final class WebCloseTool implements IMcpTool {
 	}
 
 	private static McpToolResult run(Map<String, Object> arguments) {
-		return McpToolResult.of(new JsonObject().put("closed", Boolean.valueOf(WebBrowser.shutdown())).toString()); //$NON-NLS-1$
+		JsonObject answer = new JsonObject();
+		WebBrowser open = WebBrowser.current();
+		if (open != null) {
+			WebPage.addDialogs(open, answer);
+		}
+		answer.put("closed", Boolean.valueOf(WebBrowser.shutdown())); //$NON-NLS-1$
+		return McpToolResult.of(answer.toString());
 	}
 }

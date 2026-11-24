@@ -64,13 +64,13 @@ public final class WebTypeTool implements IMcpTool {
 		try {
 			WebPage.Target target = WebPage.locate(browser, args, args.getBoolean("force", false)); //$NON-NLS-1$
 			if (target.error() != null) {
-				return McpToolResult.error(target.error());
+				return WebPage.refused(target.error());
 			}
 			String before = String.valueOf(browser.evaluate("location.href")); //$NON-NLS-1$
 			Map<String, Object> focus = WebPage
 					.parse(browser.evaluate(PageScripts.call(PageScripts.FOCUS_TARGET, String.valueOf(clear))));
 			if (focus.get("error") instanceof String error) { //$NON-NLS-1$
-				return McpToolResult.error(error);
+				return WebPage.refused(error);
 			}
 			browser.acceptConfirmations(args.getBoolean("acceptDialogs", false)); //$NON-NLS-1$
 			try {
@@ -79,7 +79,7 @@ public final class WebTypeTool implements IMcpTool {
 					Map<String, Object> chosen = WebPage
 							.parse(browser.evaluate(PageScripts.call(PageScripts.CHOOSE_OPTION, Json.write(text))));
 					if (chosen.get("error") instanceof String error) { //$NON-NLS-1$
-						return McpToolResult.error(error);
+						return WebPage.refused(error);
 					}
 					typed.put("chosen", chosen.get("chosen")).put("value", chosen.get("value")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 				} else {

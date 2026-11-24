@@ -41,17 +41,15 @@ public final class WebSnapshotTool implements IMcpTool {
 	}
 
 	/** How many elements the page has, which bounds the refs one snapshot can hand out, shadow roots included. */
-	private static long elementCount(WebBrowser browser) {
-		Object count;
-		try {
-			count = browser.evaluate(
+	private static long elementCount(WebBrowser browser) throws IOException {
+		Object count = browser.evaluate(
 				"(() => { let n = 0; const walk = root => { for (const el of root.querySelectorAll('*')) { n++; if (el.shadowRoot) walk(el.shadowRoot); } }; walk(document); return n; })()"); //$NON-NLS-1$
-		} catch (IOException e) {
-			return 100_000;
-		}
 		// some to spare for what the page renders between this count and the snapshot; a snapshot that answers
 		// reports how far it really went, so the margin only matters for one that never does
-		return count instanceof Number number ? number.longValue() + 200 : 100_000;
+		if (count instanceof Number number) {
+			return number.longValue() + 200;
+		}
+		throw new IOException("The page did not count its elements, so no refs were handed out."); //$NON-NLS-1$
 	}
 
 	@Override
