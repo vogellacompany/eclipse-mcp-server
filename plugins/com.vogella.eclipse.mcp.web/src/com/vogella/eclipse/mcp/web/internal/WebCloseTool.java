@@ -34,6 +34,22 @@ public final class WebCloseTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "dialogs":            {"type":"array","items":{"type":"object"}},
+				    "downloads":          {"type":"array","items":{"type":"object"}},
+				    "downloadsTotal":     {"type":"integer"},
+				    "downloadsTruncated": {"type":"boolean"},
+				    "closed":             {"type":"boolean"}
+				  },
+				  "required": ["closed"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		return WebPage.exclusive(() -> run(arguments));
 	}

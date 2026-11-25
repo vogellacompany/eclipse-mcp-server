@@ -54,6 +54,35 @@ public final class WebScreenshotTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "url":                {"type":["string","null"]},
+				    "title":              {"type":["string","null"]},
+				    "element":            {"type":"string"},
+				    "matches":            {"type":"integer"},
+				    "width":              {"type":"integer"},
+				    "height":             {"type":"integer"},
+				    "cutAtHeight":        {"type":"number"},
+				    "elementHeight":      {"type":"number"},
+				    "cutAtWidth":         {"type":"number"},
+				    "elementWidth":       {"type":"number"},
+				    "pageHeight":         {"type":"number"},
+				    "pageWidth":          {"type":"number"},
+				    "hiddenOverlays":     {"type":"integer"},
+				    "overlaysRestored":   {"type":"boolean"},
+				    "dialogs":            {"type":"array","items":{"type":"object"}},
+				    "downloads":          {"type":"array","items":{"type":"object"}},
+				    "downloadsTotal":     {"type":"integer"},
+				    "downloadsTruncated": {"type":"boolean"}
+				  },
+				  "required": ["width","height"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		return WebPage.exclusive(() -> run(arguments));
 	}

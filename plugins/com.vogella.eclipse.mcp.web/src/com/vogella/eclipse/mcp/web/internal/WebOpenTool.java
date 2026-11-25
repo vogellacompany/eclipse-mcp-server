@@ -45,6 +45,33 @@ public final class WebOpenTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "url":                {"type":["string","null"]},
+				    "title":              {"type":["string","null"]},
+				    "animating":          {"type":"boolean"},
+				    "pageGone":           {"type":["string","null"]},
+				    "settled":            {"type":"boolean"},
+				    "settleNote":         {"type":"string"},
+				    "pendingRequests":    {"type":"integer"},
+				    "waitNote":           {"type":"string"},
+				    "dialogs":            {"type":"array","items":{"type":"object"}},
+				    "downloads":          {"type":"array","items":{"type":"object"}},
+				    "downloadsTotal":     {"type":"integer"},
+				    "downloadsTruncated": {"type":"boolean"},
+				    "navigationPending":  {"type":"boolean"},
+				    "navigationNote":     {"type":"string"},
+				    "status":             {"type":"integer"},
+				    "browser":            {"type":"object","properties":{"mode":{"type":"string"},"headless":{"type":"boolean"},"endpoint":{"type":["string","null"]}}}
+				  },
+				  "required": ["settled"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		return WebPage.exclusive(() -> run(arguments));
 	}

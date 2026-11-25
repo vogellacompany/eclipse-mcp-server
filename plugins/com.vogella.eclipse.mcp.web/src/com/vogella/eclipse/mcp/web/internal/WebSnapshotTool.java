@@ -40,6 +40,25 @@ public final class WebSnapshotTool implements IMcpTool {
 				}"""; //$NON-NLS-1$
 	}
 
+	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "url":                {"type":["string","null"]},
+				    "title":              {"type":["string","null"]},
+				    "total":              {"type":"number"},
+				    "truncated":          {"type":"boolean"},
+				    "dialogs":            {"type":"array","items":{"type":"object"}},
+				    "downloads":          {"type":"array","items":{"type":"object"}},
+				    "downloadsTotal":     {"type":"integer"},
+				    "downloadsTruncated": {"type":"boolean"},
+				    "snapshot":           {"type":["string","null"]}
+				  }
+				}"""; //$NON-NLS-1$
+	}
+
 	/** How many elements the page has, which bounds the refs one snapshot can hand out, shadow roots included. */
 	private static long elementCount(WebBrowser browser) throws IOException {
 		Object count = browser.evaluate(
