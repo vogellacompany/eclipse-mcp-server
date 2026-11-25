@@ -44,6 +44,23 @@ class JsonTest {
 	}
 
 	@Test
+	void aJavaListIsWrittenAsAnArray() throws Exception {
+		String written = new JsonObject().put("notes", List.of("a", "b"))
+				.put("rules", List.of(new JsonObject().put("selector", "Label"))).toString();
+
+		Map<String, Object> parsed = TestFixture.parse(written);
+		assertEquals(List.of("a", "b"), parsed.get("notes"), written);
+		assertEquals(List.of(Map.of("selector", "Label")), parsed.get("rules"), written);
+	}
+
+	@Test
+	void aJavaMapIsWrittenAsAnObject() throws Exception {
+		String written = new JsonObject().put("counts", Map.of("errors", 2)).toString();
+
+		assertEquals(Map.of("errors", 2), TestFixture.parse(written).get("counts"), written);
+	}
+
+	@Test
 	void exactNumbersTooLargeForADoubleStayThemselves() throws Exception {
 		// the non finite check asks the value for its double, and a BigInteger past
 		// the double range answers Infinity while still being a number JSON can spell

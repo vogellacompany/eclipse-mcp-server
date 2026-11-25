@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.core.json;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,7 +16,7 @@ public final class Json {
 
 	/**
 	 * Serializes {@link JsonObject}, {@link JsonArray}, {@link JsonRaw}, {@link String},
-	 * {@link Number}, {@link Boolean} and {@code null} as indented JSON.
+	 * {@link Number}, {@link Boolean}, {@code null} and a {@link Collection} or {@link Map} of these as indented JSON.
 	 */
 	public static String write(Object value) {
 		StringBuilder out = new StringBuilder();
@@ -216,6 +217,12 @@ public final class Json {
 		case String string -> writeString(string, out);
 		case Boolean bool -> out.append(bool.booleanValue());
 		case Number number -> writeNumber(number, out);
+		case Collection<?> collection -> writeArray(new ArrayList<>(collection), out, indent);
+		case Map<?, ?> map -> {
+			Map<String, Object> entries = new LinkedHashMap<>();
+			map.forEach((key, entry) -> entries.put(String.valueOf(key), entry));
+			writeObject(entries, out, indent);
+		}
 		default -> writeString(String.valueOf(value), out);
 		}
 	}
