@@ -59,6 +59,41 @@ public final class LayoutTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "changed":              {"type":"boolean"},
+					    "reason":               {"type":"string"},
+					    "title":                {"type":["string","null"]},
+					    "previousBounds":       {"type":"string"},
+					    "previousMaximized":    {"type":"boolean"},
+					    "previousMinimized":    {"type":"boolean"},
+					    "bounds":               {"type":"string"},
+					    "maximized":            {"type":"boolean"},
+					    "minimized":            {"type":"boolean"},
+					    "minimizedSource":      {"type":"string"},
+					    "minimizeIgnored":      {"type":"boolean"},
+					    "restoreIgnored":       {"type":"boolean"},
+					    "shellClosed":          {"type":"boolean"},
+					    "requestedMonitor":     {"type":"integer"},
+					    "requestedMonitorZoom": {"type":"integer"},
+					    "placement":            {"type":["string","null"]},
+					    "onRequestedMonitor":   {"type":["boolean","null"]},
+					    "windowScaleFactor":    {"type":"integer"},
+					    "deviceZoom":           {"type":"integer"},
+					    "verifiedBy":           {"type":"string"},
+					    "waylandNote":          {"type":"string"},
+					    "previousMonitor":      {"type":"integer"},
+					    "monitor":              {"type":"integer"},
+					    "note":                 {"type":"string"}
+					  },
+					  "required": ["changed"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			String shellTitle = args.getString("shellTitle"); //$NON-NLS-1$
@@ -236,6 +271,25 @@ public final class LayoutTools {
 					  },
 					  "required": ["part"],
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "changed":       {"type":"boolean"},
+					    "reason":        {"type":"string"},
+					    "part":          {"type":"string"},
+					    "requested":     {"type":"string"},
+					    "previousState": {"type":"string"},
+					    "focusGiven":    {"type":"boolean"},
+					    "state":         {"type":"string"},
+					    "note":          {"type":"string"}
+					  },
+					  "required": ["changed"]
 					}"""; //$NON-NLS-1$
 		}
 

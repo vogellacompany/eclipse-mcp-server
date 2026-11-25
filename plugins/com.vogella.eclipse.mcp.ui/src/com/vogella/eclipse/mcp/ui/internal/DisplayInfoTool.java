@@ -49,6 +49,29 @@ public final class DisplayInfoTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "deviceZoom":              {"type":["integer","null"]},
+				    "nativeDeviceZoom":        {"type":["integer","null"]},
+				    "effectiveAutoScaleValue": {"type":["string","null"]},
+				    "customAutoScale":         {"type":["boolean","null"]},
+				    "dpi":                     {"type":"object","properties":{"x":{"type":"integer"},"y":{"type":"integer"}}},
+				    "monitors":                {"type":"array","items":{"type":"object","properties":{"index":{"type":"integer"},"bounds":{"type":"string"},"clientArea":{"type":"string"},"zoom":{"type":"integer"},"primary":{"type":"boolean"}}}},
+				    "platform":                {"type":"string"},
+				    "swtVersion":              {"type":"integer"},
+				    "gtkVersion":              {"type":["string","null"]},
+				    "environment":             {"type":"object"},
+				    "systemProperties":        {"type":"object"},
+				    "scalingNote":             {"type":"string"}
+				  },
+				  "required": ["deviceZoom", "nativeDeviceZoom", "effectiveAutoScaleValue", "customAutoScale", "dpi", "monitors", "platform", "swtVersion", "gtkVersion", "environment", "systemProperties"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (!Workbenches.running()) {
 			return McpToolResult.error("There is no running workbench."); //$NON-NLS-1$

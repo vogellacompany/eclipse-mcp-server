@@ -65,6 +65,32 @@ public final class SetWidgetTextTool implements IMcpTool {
 				}"""; //$NON-NLS-1$
 	}
 
+	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "changed":                   {"type":"boolean"},
+				    "reason":                    {"type":"string"},
+				    "items":                     {"type":"array","items":{"type":"string"}},
+				    "widget":                    {"type":"string"},
+				    "previousText":              {"type":"string"},
+				    "focused":                   {"type":"boolean"},
+				    "selectedIndex":             {"type":"integer"},
+				    "selectedItem":              {"type":"string"},
+				    "charactersVetoedByKeyDown": {"type":"integer"},
+				    "widgetDisposed":            {"type":"boolean"},
+				    "text":                      {"type":"string"},
+				    "caret":                     {"type":"integer"},
+				    "enterPressed":              {"type":"boolean"},
+				    "events":                    {"type":"object","properties":{"verify":{"type":"integer"},"verifyVetoed":{"type":"integer"},"modify":{"type":"integer"},"selection":{"type":"integer"},"defaultSelection":{"type":"integer"},"keyDown":{"type":"integer"}}},
+				    "note":                      {"type":"string"}
+				  },
+				  "required": ["changed"]
+				}"""; //$NON-NLS-1$
+	}
+
 	private record Request(String partId, String shell, String path, String text, boolean replace,
 			boolean perCharacter, boolean pressEnter, String item, Integer itemIndex, boolean focus) {
 	}

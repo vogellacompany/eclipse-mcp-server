@@ -53,6 +53,22 @@ public final class PerspectiveTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "active":       {"type":["object","null"]},
+					    "open":         {"type":"array","items":{"type":"string"}},
+					    "perspectives": {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"},"open":{"type":"boolean"},"active":{"type":"boolean"}}}},
+					    "total":        {"type":"integer"},
+					    "truncated":    {"type":"boolean"}
+					  },
+					  "required": ["active", "open", "perspectives", "total", "truncated"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			String filter = args.getString("filter"); //$NON-NLS-1$
@@ -118,6 +134,26 @@ public final class PerspectiveTools {
 					    "reset":       {"type":"boolean","default":false,"description":"Reset it to its registered layout after switching, discarding views the user moved, opened or closed in it."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "switched":            {"type":"boolean"},
+					    "reason":              {"type":"string"},
+					    "note":                {"type":"string"},
+					    "candidates":          {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"}}}},
+					    "id":                  {"type":"string"},
+					    "label":               {"type":"string"},
+					    "wasAlreadyActive":    {"type":"boolean"},
+					    "reset":               {"type":"boolean"},
+					    "previousPerspective": {"type":["object","null"]}
+					  },
+					  "required": ["switched"]
 					}"""; //$NON-NLS-1$
 		}
 
@@ -192,6 +228,20 @@ public final class PerspectiveTools {
 					    "confirm": {"type":"boolean","default":false,"description":"Required to be true. Resetting cannot be undone, so it does not happen by accident."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "reset":       {"type":"boolean"},
+					    "reason":      {"type":"string"},
+					    "perspective": {"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"}}}
+					  },
+					  "required": ["reset"]
 					}"""; //$NON-NLS-1$
 		}
 

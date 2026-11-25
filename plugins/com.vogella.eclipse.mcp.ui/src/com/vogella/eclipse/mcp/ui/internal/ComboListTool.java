@@ -52,6 +52,26 @@ public final class ComboListTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "found":             {"type":"boolean"},
+				    "reason":            {"type":"string"},
+				    "dropDown":          {"type":"boolean"},
+				    "listVisible":       {"type":"boolean"},
+				    "refused":           {"type":"string"},
+				    "nativeListNote":    {"type":"string"},
+				    "nativeList":        {"type":"object"},
+				    "nativeListFailure": {"type":"string"},
+				    "captureFailure":    {"type":"string"}
+				  },
+				  "required": ["found"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$

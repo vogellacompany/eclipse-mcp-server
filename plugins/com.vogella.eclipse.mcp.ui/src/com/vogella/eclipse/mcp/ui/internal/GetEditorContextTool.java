@@ -45,6 +45,28 @@ public final class GetEditorContextTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "hasActiveEditor":       {"type":"boolean"},
+				    "title":                 {"type":["string","null"]},
+				    "path":                  {"type":["string","null"]},
+				    "project":               {"type":["string","null"]},
+				    "dirty":                 {"type":"boolean"},
+				    "cursorLine":            {"type":"integer"},
+				    "cursorOffset":          {"type":"integer"},
+				    "selectionLength":       {"type":"integer"},
+				    "selectedText":          {"type":"string"},
+				    "selectedTextTruncated": {"type":"boolean"},
+				    "openEditors":           {"type":"array","items":{"type":"object","properties":{"title":{"type":["string","null"]},"path":{"type":["string","null"]},"dirty":{"type":"boolean"}}}}
+				  },
+				  "required": ["hasActiveEditor"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (!PlatformUI.isWorkbenchRunning()) {
 			return McpToolResult.of(noEditor().toString());

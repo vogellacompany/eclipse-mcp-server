@@ -49,6 +49,21 @@ public final class ThemeTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "themes":    {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":["string","null"]},"active":{"type":"boolean"}}}},
+					    "total":     {"type":"integer"},
+					    "truncated": {"type":"boolean"},
+					    "reason":    {"type":"string"}
+					  },
+					  "required": ["themes", "total", "truncated"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			int maxResults = args.getInt("maxResults", 200, 1, 1000); //$NON-NLS-1$
@@ -80,6 +95,26 @@ public final class ThemeTools {
 					    "persist": {"type":"boolean","default":true,"description":"Remember the choice across restarts. False switches this session only."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "switched":        {"type":"boolean"},
+					    "reason":          {"type":"string"},
+					    "candidates":      {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":["string","null"]}}}},
+					    "theme":           {"type":"string"},
+					    "label":           {"type":["string","null"]},
+					    "previousThemeId": {"type":["string","null"]},
+					    "persist":         {"type":"boolean"},
+					    "timedOut":        {"type":"boolean"},
+					    "note":            {"type":"string"}
+					  },
+					  "required": ["switched"]
 					}"""; //$NON-NLS-1$
 		}
 
@@ -133,6 +168,23 @@ public final class ThemeTools {
 					    "css":   {"type":"string","description":"Stylesheet as a file path or file: URI. Read by the engine on every activation, never copied."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "registered": {"type":"boolean"},
+					    "reason":     {"type":"string"},
+					    "id":         {"type":"string"},
+					    "label":      {"type":"string"},
+					    "stylesheet": {"type":"string"},
+					    "note":       {"type":"string"}
+					  },
+					  "required": ["registered"]
 					}"""; //$NON-NLS-1$
 		}
 

@@ -101,6 +101,37 @@ public final class RestartTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "inMillis":              {"type":"integer"},
+				    "cleared":               {"type":["object","null"]},
+				    "discarded":             {"type":["object","null"]},
+				    "splashSuppressed":      {"type":"boolean"},
+				    "clean":                 {"type":"boolean"},
+				    "cleanReason":           {"type":["string","null"]},
+				    "workspace":             {"type":["string","null"]},
+				    "previousWorkspace":     {"type":["string","null"]},
+				    "workspaceChanged":      {"type":"boolean"},
+				    "server":                {"type":["object","null"]},
+				    "endpointFile":          {"type":"string"},
+				    "savedEditors":          {"type":"boolean"},
+				    "verifyRestartWith":     {"type":"string"},
+				    "note":                  {"type":"string"},
+				    "vmArguments":           {},
+				    "jvmCheck":              {},
+				    "flightRecording":       {},
+				    "vmArgumentsScope":      {"type":"string"},
+				    "previousRestartFailed": {"type":"object"},
+				    "previousRestartNote":   {"type":"string"}
+				  },
+				  "required": ["inMillis", "workspaceChanged", "endpointFile", "savedEditors", "note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (!PlatformUI.isWorkbenchRunning()) {
 			return McpToolResult.error(Workbenches.noIde());

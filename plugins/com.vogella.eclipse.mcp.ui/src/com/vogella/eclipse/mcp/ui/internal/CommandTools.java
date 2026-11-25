@@ -83,6 +83,22 @@ public final class CommandTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "commands":  {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"category":{"type":["string","null"]},"description":{"type":["string","null"]},"handled":{"type":"boolean"},"enabled":{"type":"boolean"},"keybinding":{"type":["string","null"]},"parameters":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":["string","null"]},"optional":{"type":"boolean"}}}}}}},
+					    "total":     {"type":"integer"},
+					    "truncated": {"type":"boolean"},
+					    "timedOut":  {"type":"boolean"},
+					    "note":      {"type":"string"}
+					  },
+					  "required": ["commands", "total", "truncated"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			String filter = args.getString("filter"); //$NON-NLS-1$
@@ -198,6 +214,37 @@ public final class CommandTools {
 					    "returnOnDialog": {"type":"boolean","default":true,"description":"Answer as soon as the handler has a new dialog open, modal or a titled JFace window, with dialogOpen and its title, instead of waiting out timeoutSeconds. A progress dialog does not count."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "executed":        {"type":"boolean"},
+					    "id":              {"type":["string","null"]},
+					    "name":            {"type":["string","null"]},
+					    "handled":         {"type":"boolean"},
+					    "enabled":         {"type":"boolean"},
+					    "elapsedMillis":   {"type":"integer"},
+					    "parameters":      {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":["string","null"]},"optional":{"type":"boolean"}}}},
+					    "reason":          {"type":"string"},
+					    "candidates":      {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":["string","null"]}}}},
+					    "forSelection":    {"type":"object"},
+					    "dryRun":          {"type":"boolean"},
+					    "note":            {"type":"string"},
+					    "returnValue":     {"type":"string"},
+					    "timedOut":        {"type":"boolean"},
+					    "dialogOpen":      {"type":"boolean"},
+					    "dialog":          {"type":["string","null"]},
+					    "nativeDialog":    {"type":"boolean"},
+					    "waitedMillis":    {"type":"integer"},
+					    "handlerFinished": {"type":"boolean"},
+					    "outcome":         {"type":["string","null"]}
+					  },
+					  "required": ["executed", "handlerFinished"]
 					}"""; //$NON-NLS-1$
 		}
 

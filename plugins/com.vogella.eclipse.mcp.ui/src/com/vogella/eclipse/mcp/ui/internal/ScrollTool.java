@@ -64,6 +64,31 @@ public final class ScrollTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "scrolled":        {"type":"boolean"},
+				    "reason":          {"type":"string"},
+				    "target":          {"type":"string"},
+				    "boundsInDisplay": {"type":"string"},
+				    "scrolledWidget":  {"type":"string"},
+				    "before":          {"type":["object","null"]},
+				    "after":           {"type":["object","null"]},
+				    "method":          {"type":"string"},
+				    "note":            {"type":"string"},
+				    "notchesSent":     {"type":"integer"},
+				    "afterNote":       {"type":"string"},
+				    "afterError":      {"type":"string"},
+				    "widgetDisposed":  {"type":"boolean"},
+				    "changed":         {"type":"boolean"}
+				  },
+				  "required": ["scrolled"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		int notches = args.getInt("notches", 0, -50, 50); //$NON-NLS-1$

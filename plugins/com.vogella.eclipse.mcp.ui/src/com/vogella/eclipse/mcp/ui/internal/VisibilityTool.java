@@ -60,6 +60,21 @@ public final class VisibilityTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "visible": {"type":"boolean"},
+				    "mode":    {"type":["string","null"]},
+				    "windows": {"type":"array","items":{"type":"object","properties":{"title":{"type":["string","null"]},"wasVisible":{"type":"boolean"},"wasMinimized":{"type":"boolean"},"visible":{"type":"boolean"},"minimized":{"type":"boolean"},"foreground":{"type":"boolean"},"foregroundMethod":{"type":"string"},"foregroundNote":{"type":"string"}}}},
+				    "note":    {"type":"string"}
+				  },
+				  "required": ["visible", "mode", "windows"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		if (arguments == null || !arguments.containsKey("visible")) { //$NON-NLS-1$

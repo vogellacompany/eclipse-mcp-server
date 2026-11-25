@@ -42,6 +42,22 @@ public final class FocusTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "focusControl": {"type":["object","null"]},
+				    "activeShell":  {"type":["object","null"]},
+				    "foreground":   {"type":"boolean"},
+				    "appKit":       {"type":["object","null"]},
+				    "focusCues":    {"type":["boolean","null"]}
+				  },
+				  "required": ["focusControl", "activeShell", "foreground", "appKit", "focusCues"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (!Workbenches.running()) {
 			return McpToolResult.error("There is no running workbench."); //$NON-NLS-1$

@@ -338,6 +338,23 @@ public final class WidgetTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "found":     {"type":"boolean"},
+					    "reason":    {"type":"string"},
+					    "root":      {"type":"string"},
+					    "total":     {"type":"integer"},
+					    "truncated": {"type":"boolean"},
+					    "widgets":   {"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"kind":{"type":"string"},"class":{"type":"string"},"text":{"type":["string","null"]},"toolTip":{"type":["string","null"]},"bounds":{"type":["string","null"]},"visible":{"type":["boolean","null"]},"cssId":{"type":["string","null"]},"cssClass":{"type":["string","null"]},"cssElement":{"type":["string","null"]},"cssNote":{"type":"string"},"accessibleName":{"type":["string","null"]},"boundsInShell":{"type":"string"},"boundsInDisplay":{"type":"string"},"metrics":{"type":"object"},"selected":{"type":"boolean"},"cells":{"type":"array","items":{"type":"string"}},"childCount":{"type":"integer"},"expanded":{"type":"boolean"},"collapsedNote":{"type":"string"}}}}
+					  },
+					  "required": ["found"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			String partId = args.getString("part"); //$NON-NLS-1$
@@ -578,6 +595,25 @@ public final class WidgetTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "expanded":         {"type":"boolean"},
+					    "reason":           {"type":"string"},
+					    "path":             {"type":"string"},
+					    "text":             {"type":["string","null"]},
+					    "childCountBefore": {"type":"integer"},
+					    "childCount":       {"type":"integer"},
+					    "rowsOpened":       {"type":"integer"},
+					    "note":             {"type":"string"}
+					  },
+					  "required": ["expanded"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			String partId = args.getString("part"); //$NON-NLS-1$
@@ -690,6 +726,26 @@ public final class WidgetTools {
 					    "notify":      {"type":"boolean","default":true,"description":"Also fire the selection event. Without it the tab looks selected while the editor never builds the page, which is the usual reason a screenshot then shows nothing."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "selected":          {"type":"boolean"},
+					    "reason":            {"type":"string"},
+					    "previousIndex":     {"type":"integer"},
+					    "index":             {"type":"integer"},
+					    "text":              {"type":["string","null"]},
+					    "listenersNotified": {"type":"boolean"},
+					    "listenerFailure":   {"type":"string"},
+					    "folderDisposed":    {"type":"boolean"},
+					    "note":              {"type":"string"}
+					  },
+					  "required": ["selected"]
 					}"""; //$NON-NLS-1$
 		}
 
@@ -842,6 +898,40 @@ public final class WidgetTools {
 					  },
 					  "additionalProperties": false
 					}""".formatted(SyntheticInput.SCHEMA); //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "clicked":             {"type":"boolean"},
+					    "reason":              {"type":"string"},
+					    "moved":               {"type":"boolean"},
+					    "target":              {"type":"string"},
+					    "boundsInDisplay":     {"type":"string"},
+					    "point":               {"type":"string"},
+					    "previousPointer":     {"type":"string"},
+					    "pointer":             {"type":"string"},
+					    "controlUnderPointer": {"type":["string","null"]},
+					    "onTarget":            {"type":"boolean"},
+					    "coveredBy":           {"type":"string"},
+					    "method":              {"type":"string"},
+					    "delivery":            {"type":"string"},
+					    "synthetic":           {"type":"boolean"},
+					    "button":              {"type":"string"},
+					    "pointerDisturbed":    {"type":"boolean"},
+					    "pointerAfterPress":   {"type":"string"},
+					    "pointerWaitMillis":   {"type":"integer"},
+					    "pointerWaitSkipped":  {"type":"boolean"},
+					    "osFailure":           {"type":["string","null"]},
+					    "focused":             {"type":"boolean"},
+					    "widgetDisposed":      {"type":"boolean"},
+					    "menuDetectDoit":      {"type":"boolean"},
+					    "note":                {"type":"string"}
+					  }
+					}"""; //$NON-NLS-1$
 		}
 
 		@Override
@@ -1286,6 +1376,41 @@ public final class WidgetTools {
 				    "includeToolbar": {"type":"boolean","default":false,"description":"Start from the surrounding part stack rather than the part. A view's toolbar is built in the stack's CTabFolder, not in the part, so it is in no plain part tree at all; this is how to reach it."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "found":               {"type":"boolean"},
+					    "reason":              {"type":"string"},
+					    "cssId":               {"type":["string","null"]},
+					    "cssClass":            {"type":["string","null"]},
+					    "cssElement":          {"type":["string","null"]},
+					    "cssNote":             {"type":"string"},
+					    "path":                {"type":"string"},
+					    "kind":                {"type":"string"},
+					    "class":               {"type":"string"},
+					    "style":               {"type":"array","items":{"type":"string"}},
+					    "styleBits":           {"type":"string"},
+					    "accessibleName":      {"type":["string","null"]},
+					    "bounds":              {"type":["string","null"]},
+					    "visible":             {"type":["boolean","null"]},
+					    "pseudo":              {"type":["string","null"]},
+					    "computedNote":        {"type":"string"},
+					    "computed":            {"type":"object"},
+					    "declared":            {"type":"object"},
+					    "origin":              {"type":"object"},
+					    "cssDeclaration":      {"type":["string","null"]},
+					    "backgroundImage":     {"type":"boolean"},
+					    "backgroundImageNote": {"type":"string"},
+					    "ancestors":           {"type":"array","items":{"type":"object"}},
+					    "matchedRulesNote":    {"type":"string"}
+					  },
+					  "required": ["found"]
 					}"""; //$NON-NLS-1$
 		}
 

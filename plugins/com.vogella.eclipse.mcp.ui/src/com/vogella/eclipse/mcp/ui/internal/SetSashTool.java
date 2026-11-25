@@ -53,6 +53,31 @@ public final class SetSashTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "changed":           {"type":"boolean"},
+				    "reason":            {"type":"string"},
+				    "orientation":       {"type":"string"},
+				    "sashIndex":         {"type":"integer"},
+				    "requestedPosition": {"type":"integer"},
+				    "previousPosition":  {"type":"integer"},
+				    "weightsBefore":     {"type":"array","items":{"type":"integer"}},
+				    "sashFormDisposed":  {"type":"boolean"},
+				    "position":          {"type":"integer"},
+				    "clamped":           {"type":"boolean"},
+				    "weightsAfter":      {"type":"array","items":{"type":"integer"}},
+				    "children":          {"type":"array","items":{"type":"object","properties":{"index":{"type":"integer"},"path":{"type":"string"},"type":{"type":"string"},"visible":{"type":"boolean"},"bounds":{"type":"object"},"boundsInShell":{"type":"object"},"boundsInDisplay":{"type":"object"}}}},
+				    "sashFormPath":      {"type":"string"},
+				    "note":              {"type":"string"}
+				  },
+				  "required": ["changed"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$

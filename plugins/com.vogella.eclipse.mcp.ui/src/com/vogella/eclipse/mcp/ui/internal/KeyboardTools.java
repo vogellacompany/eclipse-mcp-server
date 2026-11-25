@@ -108,6 +108,27 @@ public final class KeyboardTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "editor":            {"type":["string","null"]},
+					    "widget":            {"type":"string"},
+					    "shell":             {"type":["string","null"]},
+					    "intoEditor":        {"type":"boolean"},
+					    "inserted":          {"type":"integer"},
+					    "replacedSelection": {"type":"integer"},
+					    "caretOffset":       {"type":"integer"},
+					    "caretLine":         {"type":"integer"},
+					    "dirty":             {"type":"boolean"},
+					    "note":              {"type":"string"}
+					  },
+					  "required": ["intoEditor", "inserted", "caretOffset", "note"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			String text = args.getText("text"); //$NON-NLS-1$
@@ -225,6 +246,39 @@ public final class KeyboardTools {
 					  "additionalProperties": false
 					}""".formatted(Integer.valueOf(ForegroundWait.DEFAULT_MILLIS), Integer.valueOf(ForegroundWait.MAX_MILLIS),
 					SyntheticInput.SCHEMA); //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "key":                   {"type":"string"},
+					    "count":                 {"type":"integer"},
+					    "posted":                {"type":"boolean"},
+					    "focusControl":          {"type":["string","null"]},
+					    "focusInsideIde":        {"type":"boolean"},
+					    "shiftAdded":            {"type":["boolean","null"]},
+					    "keyboardLayoutUnread":  {"type":["boolean","null"]},
+					    "delivery":              {"type":"string"},
+					    "synthetic":             {"type":"boolean"},
+					    "traversed":             {"type":["boolean","null"]},
+					    "target":                {"type":["string","null"]},
+					    "targetPath":            {"type":["string","null"]},
+					    "targetDisposed":        {"type":"boolean"},
+					    "osFailure":             {"type":["string","null"]},
+					    "foregroundWaitMillis":  {"type":["integer","null"]},
+					    "foregroundWaitState":   {"type":["string","null"]},
+					    "foregroundWaitClamped": {"type":["boolean","null"]},
+					    "dialogOpen":            {"type":"boolean"},
+					    "dialog":                {"type":["string","null"]},
+					    "nativeDialog":          {"type":"boolean"},
+					    "note":                  {"type":"string"},
+					    "waylandWarning":        {"type":"string"}
+					  },
+					  "required": ["key", "count", "delivery", "synthetic"]
+					}"""; //$NON-NLS-1$
 		}
 
 		@Override

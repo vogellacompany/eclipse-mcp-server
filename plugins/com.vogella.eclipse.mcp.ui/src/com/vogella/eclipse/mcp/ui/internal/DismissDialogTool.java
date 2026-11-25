@@ -52,6 +52,27 @@ public final class DismissDialogTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "dismissed":   {"type":"boolean"},
+				    "reason":      {"type":"string"},
+				    "title":       {"type":["string","null"]},
+				    "native":      {"type":"boolean"},
+				    "modal":       {"type":"boolean"},
+				    "kind":        {"type":"string"},
+				    "buttons":     {"type":"array"},
+				    "action":      {"type":"string"},
+				    "shellClosed": {"type":"boolean"},
+				    "note":        {"type":"string"}
+				  },
+				  "required": ["dismissed"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (!Workbenches.running()) {
 			return McpToolResult.error("There is no running workbench."); //$NON-NLS-1$

@@ -61,6 +61,26 @@ public final class ViewTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "shown":          {"type":"boolean"},
+					    "reason":         {"type":"string"},
+					    "candidates":     {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"},"category":{"type":["string","null"]}}}},
+					    "id":             {"type":"string"},
+					    "title":          {"type":["string","null"]},
+					    "secondaryId":    {"type":["string","null"]},
+					    "wasAlreadyOpen": {"type":"boolean"},
+					    "activated":      {"type":"boolean"},
+					    "perspective":    {"type":["string","null"]}
+					  },
+					  "required": ["shown"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			String wanted = args.getString("view"); //$NON-NLS-1$
@@ -133,6 +153,25 @@ public final class ViewTools {
 					    "secondaryId": {"type":"string","description":"Secondary id, when the view is open more than once."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "hidden":      {"type":"boolean"},
+					    "reason":      {"type":"string"},
+					    "openViews":   {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"title":{"type":["string","null"]},"secondaryId":{"type":["string","null"]}}}},
+					    "candidates":  {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"secondaryId":{"type":["string","null"]}}}},
+					    "id":          {"type":"string"},
+					    "title":       {"type":["string","null"]},
+					    "secondaryId": {"type":["string","null"]},
+					    "perspective": {"type":["string","null"]}
+					  },
+					  "required": ["hidden"]
 					}"""; //$NON-NLS-1$
 		}
 

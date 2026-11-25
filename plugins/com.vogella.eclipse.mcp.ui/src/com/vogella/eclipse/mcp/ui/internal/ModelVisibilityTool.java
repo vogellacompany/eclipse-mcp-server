@@ -62,6 +62,23 @@ public final class ModelVisibilityTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "elementId": {"type":"string"},
+				    "matched":   {"type":"integer"},
+				    "changed":   {"type":"integer"},
+				    "truncated": {"type":"boolean"},
+				    "elements":  {"type":"array","items":{"type":"object","properties":{"id":{"type":["string","null"]},"type":{"type":"string"},"wasVisible":{"type":"boolean"},"wasToBeRendered":{"type":"boolean"},"part":{"type":"string"},"changed":{"type":"boolean"},"refusedBecause":{"type":"string"},"visible":{"type":"boolean"},"toBeRendered":{"type":"boolean"}}}},
+				    "note":      {"type":"string"}
+				  },
+				  "required": ["elementId", "matched", "changed", "truncated", "elements", "note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (!PlatformUI.isWorkbenchRunning()) {
 			return McpToolResult.error(Workbenches.noIde());

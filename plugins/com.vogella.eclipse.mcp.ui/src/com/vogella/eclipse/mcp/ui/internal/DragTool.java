@@ -95,6 +95,35 @@ public final class DragTool implements IMcpTool {
 				}""".formatted(point, point, point); //$NON-NLS-1$
 	}
 
+	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "method":               {"type":"string"},
+				    "releasedStuckButton":  {"type":"boolean"},
+				    "from":                 {"type":"object"},
+				    "dragged":              {"type":"boolean"},
+				    "reason":               {"type":"string"},
+				    "pointer":              {"type":"string"},
+				    "onTarget":             {"type":"boolean"},
+				    "releasedAt":           {"type":"string"},
+				    "releaseFailure":       {"type":"string"},
+				    "pointerAfterRelease":  {"type":"string"},
+				    "pointerDisturbed":     {"type":["boolean","null"]},
+				    "pointerDisturbedAt":   {"type":"array","items":{"type":"object","properties":{"at":{"type":"string"},"pointer":{"type":"string"}}}},
+				    "pointerDisturbedNote": {"type":"string"},
+				    "button":               {"type":"string"},
+				    "waypoints":            {"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"point":{"type":"string"}}}},
+				    "dragDetected":         {"type":"boolean"},
+				    "dragDetectedOn":       {"type":["string","null"]},
+				    "note":                 {"type":"string"}
+				  },
+				  "required": ["method", "from", "dragged"]
+				}"""; //$NON-NLS-1$
+	}
+
 	/** One point of the gesture as the caller addressed it. */
 	record Target(String part, String shell, boolean includeToolbar, String path, Integer x, Integer y, Point display,
 			int dwellMillis) {

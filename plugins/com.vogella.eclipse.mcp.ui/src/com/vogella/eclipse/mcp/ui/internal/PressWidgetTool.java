@@ -65,6 +65,40 @@ public final class PressWidgetTool implements IMcpTool {
 				}"""; //$NON-NLS-1$
 	}
 
+	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "pressed":             {"type":"boolean"},
+				    "reason":              {"type":"string"},
+				    "widget":              {"type":"string"},
+				    "label":               {"type":"string"},
+				    "selectedItem":        {"type":"string"},
+				    "selectionListeners":  {"type":"integer"},
+				    "focusControlBefore":  {"type":["object","null"]},
+				    "focusControlAfter":   {"type":["object","null"]},
+				    "focused":             {"type":"boolean"},
+				    "shellActive":         {"type":"boolean"},
+				    "focusNote":           {"type":"string"},
+				    "selectedBefore":      {"type":"boolean"},
+				    "selectedAfter":       {"type":"boolean"},
+				    "selectionHoldsItem":  {"type":"boolean"},
+				    "radioDeselected":     {"type":"integer"},
+				    "widgetDisposed":      {"type":"boolean"},
+				    "shellClosed":         {"type":"boolean"},
+				    "sortColumnBefore":    {"type":["string","null"]},
+				    "sortDirectionBefore": {"type":"string"},
+				    "sortColumnAfter":     {"type":["string","null"]},
+				    "sortDirectionAfter":  {"type":"string"},
+				    "timedOut":            {"type":"boolean"},
+				    "waitedSeconds":       {"type":"integer"},
+				    "note":                {"type":"string"}
+				  }
+				}"""; //$NON-NLS-1$
+	}
+
 	private record Request(String partId, String shell, String path, String label, Boolean selected,
 			boolean defaultSelection, boolean focus) {
 	}

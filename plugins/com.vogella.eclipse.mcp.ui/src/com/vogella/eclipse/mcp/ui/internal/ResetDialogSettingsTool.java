@@ -62,6 +62,29 @@ public final class ResetDialogSettingsTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "dryRun":          {"type":"boolean"},
+				    "bundles":         {"type":"array","items":{"type":"object","properties":{"bundle":{"type":"string"},"onDisk":{"type":"boolean"},"inMemory":{"type":"boolean"},"reload":{"type":"boolean"}}}},
+				    "total":           {"type":"integer"},
+				    "truncated":       {"type":"boolean"},
+				    "inMemoryKnown":   {"type":"boolean"},
+				    "note":            {"type":"string"},
+				    "unknownBundles":  {"type":"array","items":{"type":"string"}},
+				    "nothingToReset":  {"type":"array","items":{"type":"string"}},
+				    "failures":        {"type":"array","items":{"type":"object","properties":{"bundle":{"type":"string"},"onDisk":{"type":"boolean"},"inMemory":{"type":"boolean"},"reload":{"type":"boolean"},"failedAt":{"type":"string"},"fileDeleted":{"type":"boolean"},"error":{"type":"string"}}}},
+				    "failuresTotal":   {"type":"integer"},
+				    "openDialogs":     {"type":"array","items":{"type":"string"}},
+				    "openDialogsNote": {"type":"string"}
+				  },
+				  "required": ["dryRun", "bundles", "total", "truncated", "inMemoryKnown"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		boolean dryRun = args.getBoolean("dryRun", true); //$NON-NLS-1$

@@ -54,6 +54,27 @@ public final class ContextMenuTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "part":      {"type":["string","null"]},
+				    "found":     {"type":"boolean"},
+				    "reason":    {"type":"string"},
+				    "path":      {"type":["string","null"]},
+				    "topLevel":  {"type":"array","items":{"type":"string"}},
+				    "total":     {"type":"integer"},
+				    "reported":  {"type":"integer"},
+				    "truncated": {"type":"boolean"},
+				    "items":     {"type":"array","items":{"type":"object","properties":{"label":{"type":["string","null"]},"separator":{"type":"boolean"},"enabled":{"type":"boolean"},"command":{"type":["string","null"]},"selected":{"type":["boolean","null"]},"hasSubmenu":{"type":"boolean"},"items":{"type":"array"}}}},
+				    "note":      {"type":"string"}
+				  },
+				  "required": ["part", "found"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String partId = args.getString("part"); //$NON-NLS-1$

@@ -195,6 +195,34 @@ public final class TextBoundsTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "offset":        {"type":"integer"},
+					    "length":        {"type":"integer"},
+					    "visible":       {"type":"boolean"},
+					    "reason":        {"type":"string"},
+					    "scrolledOut":   {"type":"boolean"},
+					    "inPart":        {"type":"string"},
+					    "inPartStack":   {"type":"string"},
+					    "inShell":       {"type":"string"},
+					    "inTextWidget":  {"type":"string"},
+					    "lineHeight":    {"type":"integer"},
+					    "baseline":      {"type":"integer"},
+					    "widgetOffset":  {"type":"integer"},
+					    "line":          {"type":"integer"},
+					    "text":          {"type":"string"},
+					    "textTruncated": {"type":"boolean"},
+					    "editor":        {"type":["string","null"]},
+					    "textWidget":    {"type":"object","properties":{"inPart":{"type":"string"},"inPartStack":{"type":"string"},"inShell":{"type":"string"}}}
+					  },
+					  "required": ["offset", "length", "visible", "line", "text", "textTruncated", "editor", "textWidget"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			String part = args.getString("part"); //$NON-NLS-1$
@@ -270,6 +298,27 @@ public final class TextBoundsTools {
 					    "offset": {"type":"integer","minimum":0,"description":"Document offset, instead of line and column."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "offset":          {"type":"integer"},
+					    "widgetDisposed":  {"type":"boolean"},
+					    "note":            {"type":"string"},
+					    "editor":          {"type":["string","null"]},
+					    "clickedAt":       {"type":"object","properties":{"x":{"type":"integer"},"y":{"type":"integer"},"in":{"type":"string"},"inShell":{"type":"string"}}},
+					    "selectionOffset": {"type":"integer"},
+					    "selectionLength": {"type":"integer"},
+					    "line":            {"type":"integer"},
+					    "selectedText":    {"type":["string","null"]},
+					    "synthetic":       {"type":"boolean"}
+					  },
+					  "required": ["offset"]
 					}"""; //$NON-NLS-1$
 		}
 
@@ -402,6 +451,22 @@ public final class TextBoundsTools {
 					    "maxResults":    {"type":"integer","default":100,"minimum":1,"maximum":2000}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "editor":      {"type":["string","null"]},
+					    "total":       {"type":"integer"},
+					    "truncated":   {"type":"boolean"},
+					    "textWidget":  {"type":"object","properties":{"inPart":{"type":"string"},"inPartStack":{"type":"string"},"inShell":{"type":"string"}}},
+					    "annotations": {"type":"array","items":{"type":"object","properties":{"type":{"type":"string"},"source":{"type":"string"},"text":{"type":["string","null"]},"offset":{"type":"integer"},"length":{"type":"integer"},"startLine":{"type":"integer"},"endLine":{"type":"integer"},"collapsed":{"type":"boolean"},"bounds":{"type":"object"}}}}
+					  },
+					  "required": ["editor", "total", "truncated", "textWidget", "annotations"]
 					}"""; //$NON-NLS-1$
 		}
 

@@ -62,6 +62,28 @@ public final class SelectMenuItemTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "path":          {"type":"string"},
+				    "menu":          {"type":"string"},
+				    "part":          {"type":["string","null"]},
+				    "widgetIgnored": {"type":"string"},
+				    "selected":      {"type":"boolean"},
+				    "reason":        {"type":"string"},
+				    "available":     {"type":"array","items":{"type":"object","properties":{"label":{"type":"string"},"enabled":{"type":"boolean"},"command":{"type":["string","null"]},"checked":{"type":["boolean","null"]},"hasSubmenu":{"type":"boolean"}}}},
+				    "entry":         {"type":"object","properties":{"label":{"type":"string"},"enabled":{"type":"boolean"},"command":{"type":["string","null"]},"checked":{"type":["boolean","null"]},"hasSubmenu":{"type":"boolean"}}},
+				    "dryRun":        {"type":"boolean"},
+				    "checkedAfter":  {"type":["boolean","null"]},
+				    "note":          {"type":"string"}
+				  },
+				  "required": ["path", "menu", "selected"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path", ""); //$NON-NLS-1$ //$NON-NLS-2$

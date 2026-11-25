@@ -76,6 +76,29 @@ public final class MovePartTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "moved":         {"type":"boolean"},
+				    "reason":        {"type":"string"},
+				    "part":          {"type":"string"},
+				    "position":      {"type":"string"},
+				    "target":        {"type":["string","null"]},
+				    "previousStack": {"type":["string","null"]},
+				    "previousIndex": {"type":"integer"},
+				    "bounds":        {"type":"string"},
+				    "stack":         {"type":["string","null"]},
+				    "splitFrom":     {"type":["string","null"]},
+				    "note":          {"type":"string"},
+				    "layout":        {"type":"object","properties":{"stacks":{"type":"array","items":{"type":"object","properties":{"id":{"type":["string","null"]},"visible":{"type":"boolean"},"parts":{"type":"array","items":{"type":["string","null"]}}}}},"total":{"type":"integer"},"truncated":{"type":"boolean"}}}
+				  },
+				  "required": ["moved"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String partId = args.getString("part"); //$NON-NLS-1$

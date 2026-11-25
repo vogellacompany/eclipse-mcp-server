@@ -92,6 +92,29 @@ public final class WaitForTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "met":              {"type":"boolean"},
+				    "timedOut":         {"type":"boolean"},
+				    "stillWaiting":     {"type":"boolean"},
+				    "elapsedMillis":    {"type":"integer"},
+				    "probes":           {"type":"integer"},
+				    "requestedSeconds": {"type":"integer"},
+				    "budgetSeconds":    {"type":"integer"},
+				    "clamped":          {"type":"boolean"},
+				    "conditions":       {"type":"array","items":{"type":"object","properties":{"kind":{"type":"string"},"met":{"type":"boolean"},"observed":{"type":["object","null"]}}}},
+				    "cancelled":        {"type":"boolean"},
+				    "uiBusyMillis":     {"type":"integer"},
+				    "note":             {"type":"string"}
+				  },
+				  "required": ["met", "timedOut", "stillWaiting", "elapsedMillis", "probes", "requestedSeconds", "budgetSeconds", "clamped", "conditions"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		List<WaitCondition> conditions = new ArrayList<>();

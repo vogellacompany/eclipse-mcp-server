@@ -181,6 +181,22 @@ public final class SelectionTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "activePart":       {"type":["string","null"]},
+					    "activePartTitle":  {"type":["string","null"]},
+					    "handlerSelection": {"type":"object","properties":{"source":{"type":"string"},"kind":{"type":["string","null"]},"empty":{"type":"boolean"},"size":{"type":"integer"},"elements":{"type":"array","items":{"type":"object","properties":{"class":{"type":["string","null"]},"label":{"type":["string","null"]},"adaptsToResource":{"type":"boolean"},"path":{"type":["string","null"]},"project":{"type":["string","null"]},"accessible":{"type":["boolean","null"]}}}}}},
+					    "serviceSelection": {"type":"object","properties":{"source":{"type":"string"},"kind":{"type":["string","null"]},"empty":{"type":"boolean"},"size":{"type":"integer"},"elements":{"type":"array","items":{"type":"object","properties":{"class":{"type":["string","null"]},"label":{"type":["string","null"]},"adaptsToResource":{"type":"boolean"},"path":{"type":["string","null"]},"project":{"type":["string","null"]},"accessible":{"type":["boolean","null"]}}}}}},
+					    "note":             {"type":"string"}
+					  },
+					  "required": ["activePart", "activePartTitle", "handlerSelection", "serviceSelection"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			return UiThread.call(UI_TIMEOUT_SECONDS, () -> currentState(null));
 		}
@@ -214,6 +230,30 @@ public final class SelectionTools {
 					  },
 					  "required": ["elements"],
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "part":                    {"type":["string","null"]},
+					    "revealed":                {"type":"boolean"},
+					    "selectedThroughWidget":   {"type":"boolean"},
+					    "selectRevealCalled":      {"type":"boolean"},
+					    "requested":               {"type":"integer"},
+					    "resolved":                {"type":"integer"},
+					    "matchedToViewerElements": {"type":["integer","null"]},
+					    "treeSearchTruncated":     {"type":"boolean"},
+					    "unresolved":              {"type":"array","items":{"type":"string"}},
+					    "previousSelection":       {"type":"object","properties":{"source":{"type":"string"},"kind":{"type":["string","null"]},"empty":{"type":"boolean"},"size":{"type":"integer"},"elements":{"type":"array","items":{"type":"object","properties":{"class":{"type":["string","null"]},"label":{"type":["string","null"]},"adaptsToResource":{"type":"boolean"},"path":{"type":["string","null"]},"project":{"type":["string","null"]},"accessible":{"type":["boolean","null"]}}}}}},
+					    "after":                   {"type":"object"},
+					    "selectRevealError":       {"type":"string"},
+					    "unresolvedNote":          {"type":"string"}
+					  },
+					  "required": ["part", "revealed", "selectedThroughWidget", "selectRevealCalled", "requested", "resolved", "matchedToViewerElements", "treeSearchTruncated", "unresolved", "previousSelection", "after"]
 					}"""; //$NON-NLS-1$
 		}
 

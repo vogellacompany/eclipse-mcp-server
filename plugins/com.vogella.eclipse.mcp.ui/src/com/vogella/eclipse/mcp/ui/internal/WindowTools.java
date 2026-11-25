@@ -52,6 +52,28 @@ public final class WindowTools implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "opened":         {"type":"boolean"},
+				    "closed":         {"type":"boolean"},
+				    "perspective":    {"type":["string","null"]},
+				    "newWindowTitle": {"type":["string","null"]},
+				    "title":          {"type":["string","null"]},
+				    "wasActive":      {"type":"boolean"},
+				    "reason":         {"type":"string"},
+				    "candidates":     {"type":"array","items":{"type":"object"}},
+				    "windows":        {"type":"array","items":{"type":"object","properties":{"title":{"type":["string","null"]},"active":{"type":"boolean"},"bounds":{"type":["string","null"]}}}},
+				    "timedOut":       {"type":"boolean"},
+				    "note":           {"type":"string"}
+				  },
+				  "required": ["windows"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String action = args.getString("action"); //$NON-NLS-1$

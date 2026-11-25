@@ -41,6 +41,21 @@ public final class PauseTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "requestedMillis": {"type":"integer"},
+				    "pausedMillis":    {"type":"integer"},
+				    "clamped":         {"type":"boolean"},
+				    "note":            {"type":"string"}
+				  },
+				  "required": ["requestedMillis", "pausedMillis", "clamped"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		int requested = ToolArguments.of(arguments).getInt("millis", 0, 0, 600_000); //$NON-NLS-1$
 		if (requested <= 0) {

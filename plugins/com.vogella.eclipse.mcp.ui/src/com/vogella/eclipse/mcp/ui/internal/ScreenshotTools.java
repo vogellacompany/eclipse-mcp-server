@@ -135,6 +135,24 @@ public final class ScreenshotTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "shells":                  {"type":"array","items":{"type":"object","properties":{"index":{"type":"integer"},"title":{"type":["string","null"]},"kind":{"type":"string"},"firstControl":{"type":["string","null"]},"modal":{"type":"boolean"},"visible":{"type":"boolean"},"bounds":{"type":"string"}}}},
+					    "parts":                   {"type":"array","items":{"type":"object","properties":{"id":{"type":["string","null"]},"title":{"type":["string","null"]},"kind":{"type":"string"},"visible":{"type":"boolean"},"address":{"type":"string"},"input":{"type":"string"}}}},
+					    "nativeDialogs":           {"type":"array"},
+					    "availableViews":          {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"},"category":{"type":["string","null"]}}}},
+					    "availableViewsTotal":     {"type":"integer"},
+					    "availableViewsTruncated": {"type":"boolean"},
+					    "captureUnsupported":      {"type":"string"}
+					  },
+					  "required": ["shells", "parts"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			boolean includeAvailableViews = args.getBoolean("includeAvailableViews", false); //$NON-NLS-1$
@@ -279,6 +297,62 @@ public final class ScreenshotTools {
 				    "method": {"type":"string","enum":["auto","print","window"],"default":"auto","description":"auto reads the screen and falls back to painting the widgets. print always paints the widget hierarchy (method widgetPrint) and never reads the screen, so notifications, system prompts and other windows in front cannot get into the image, at the cost of the window decorations and the gaps widgetPrint has; a display target cannot be painted and is read from the screen with printUnavailable saying so. window asks the window system for the shell's own window instead: screencapture -l on macOS (needs the Screen Recording permission), PrintWindow with PW_RENDERFULLCONTENT on Windows, the toplevel GdkWindow on GTK. That is what was composited, independent of how the SWT implementation prints its controls, and on macOS and Windows unaffected by windows in front. A part is cropped out of its shell's window. The answer says method osWindow and windowReader when it worked, and windowCaptureFailure with the reason when it fell back to auto."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "captured":             {"type":"boolean"},
+					    "reason":               {"type":"string"},
+					    "path":                 {"type":["string","null"]},
+					    "width":                {"type":"integer"},
+					    "height":               {"type":"integer"},
+					    "capturedArea":         {"type":"string"},
+					    "areaInPoints":         {"type":"string"},
+					    "imageBounds":          {"type":["string","null"]},
+					    "scaleFactor":          {"type":"number"},
+					    "maxWidthSnappedTo":    {"type":["integer","null"]},
+					    "bytes":                {"type":["integer","null"]},
+					    "highlights":           {"type":"array"},
+					    "base64":               {"type":"string"},
+					    "method":               {"type":"string"},
+					    "zoom":                 {"type":"integer"},
+					    "deviceZoom":           {"type":"integer"},
+					    "foreground":           {"type":"boolean"},
+					    "requestedArea":        {"type":"string"},
+					    "uniformNote":          {"type":"string"},
+					    "nativePopups":         {"type":"array"},
+					    "popupsNote":           {"type":"string"},
+					    "mixedZoomNote":        {"type":"string"},
+					    "includePopupsNote":    {"type":"string"},
+					    "otherWindows":         {"type":"object"},
+					    "rootReader":           {"type":["string","null"]},
+					    "pixbufFailure":        {"type":"string"},
+					    "staleReadWarning":     {"type":"string"},
+					    "windowInPoints":       {"type":"string"},
+					    "windowReader":         {"type":["string","null"]},
+					    "windowCaptureFailure": {"type":["string","null"]},
+					    "belowDeviceZoom":      {"type":"string"},
+					    "printUnavailable":     {"type":"string"},
+					    "foregroundNote":       {"type":"string"},
+					    "sameTurnCapture":      {"type":"boolean"},
+					    "sameTurnNote":         {"type":"string"},
+					    "requestedAreaNote":    {"type":"string"},
+					    "paintScaleMismatch":   {"type":"string"},
+					    "unpaintedPixels":      {"type":"integer"},
+					    "unpaintedFraction":    {"type":["number","null"]},
+					    "unpaintedFilledWith":  {"type":"string"},
+					    "coverage":             {"type":"object"},
+					    "printNote":            {"type":"string"},
+					    "scaleMismatch":        {"type":"string"},
+					    "caretsSuppressed":     {"type":"integer"},
+					    "caretNote":            {"type":"string"}
+					  },
+					  "required": ["captured"]
 					}"""; //$NON-NLS-1$
 		}
 

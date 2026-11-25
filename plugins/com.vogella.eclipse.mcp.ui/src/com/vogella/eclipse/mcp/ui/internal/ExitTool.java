@@ -59,6 +59,25 @@ public final class ExitTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "inMillis":           {"type":"integer"},
+				    "cleared":            {"type":["object","null"]},
+				    "discarded":          {"type":["object","null"]},
+				    "savedEditors":       {"type":"boolean"},
+				    "workspace":          {"type":["string","null"]},
+				    "note":               {"type":"string"},
+				    "previousExitFailed": {"type":"object"},
+				    "previousExitNote":   {"type":"string"}
+				  },
+				  "required": ["inMillis", "savedEditors", "note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (!PlatformUI.isWorkbenchRunning()) {
 			return McpToolResult.error(Workbenches.noIde());

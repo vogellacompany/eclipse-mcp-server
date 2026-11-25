@@ -41,6 +41,30 @@ public final class ApplyCssTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "applied":         {"type":"boolean"},
+				    "reset":           {"type":"boolean"},
+				    "reason":          {"type":"string"},
+				    "previousSnippet": {"type":["string","null"]},
+				    "theme":           {"type":["string","null"]},
+				    "themeReapplied":  {"type":"boolean"},
+				    "engines":         {"type":"integer"},
+				    "rules":           {"type":["integer","null"]},
+				    "errors":          {"type":"array","items":{"type":"string"}},
+				    "elapsedMillis":   {"type":"integer"},
+				    "ignoredRules":    {"type":"array"},
+				    "preferenceRules": {"type":"array"},
+				    "note":            {"type":"string"}
+				  },
+				  "required": ["applied", "errors"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String css = args.getString("css"); //$NON-NLS-1$

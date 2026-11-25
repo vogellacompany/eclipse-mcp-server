@@ -38,6 +38,28 @@ public final class WaitUntilSettledTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "settled":                {"type":"boolean"},
+				    "reason":                 {"type":["string","null"]},
+				    "reconcilers":            {},
+				    "rounds":                 {"type":"integer"},
+				    "consecutiveQuietRounds": {"type":"integer"},
+				    "elapsedMillis":          {"type":"integer"},
+				    "slowestFenceMillis":     {"type":"integer"},
+				    "slowestProbeMillis":     {"type":"integer"},
+				    "jobs":                   {},
+				    "clamped":                {"type":["string","null"]},
+				    "cannotSee":              {"type":"string"}
+				  },
+				  "required": ["settled"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (!Workbenches.running()) {
 			return McpToolResult.error("There is no running workbench."); //$NON-NLS-1$

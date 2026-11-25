@@ -46,6 +46,28 @@ public final class ThemeDefinitionTool implements IMcpTool {
 				}"""; //$NON-NLS-1$
 	}
 
+	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "reason":            {"type":"string"},
+				    "activeThemeId":     {"type":["string","null"]},
+				    "activeCssThemeId":  {"type":["string","null"]},
+				    "colorDefinitions":  {"type":"integer"},
+				    "fontDefinitions":   {"type":"integer"},
+				    "themeNote":         {"type":"string"},
+				    "countOnly":         {"type":"boolean"},
+				    "colors":            {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":["string","null"]},"categoryId":{"type":["string","null"]},"categoryLabel":{"type":["string","null"]},"declaredValue":{"type":["string","null"]},"defaultsTo":{"type":["string","null"]},"resolvedValue":{"type":["string","null"]},"isEditable":{"type":"boolean"},"bundle":{"type":["string","null"]},"colorFactory":{"type":"string"},"overridden":{"type":"boolean"}}}},
+				    "fonts":             {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":["string","null"]},"categoryId":{"type":["string","null"]},"categoryLabel":{"type":["string","null"]},"declaredValue":{"type":["string","null"]},"defaultsTo":{"type":["string","null"]},"resolvedValue":{"type":["string","null"]},"isEditable":{"type":"boolean"},"bundle":{"type":["string","null"]},"colorFactory":{"type":"string"},"overridden":{"type":"boolean"}}}},
+				    "truncated":         {"type":"boolean"},
+				    "truncationNote":    {"type":"string"},
+				    "resolvedValueNote": {"type":"string"}
+				  }
+				}"""; //$NON-NLS-1$
+	}
+
 	private static Pattern compile(String pattern) {
 		return pattern == null ? null : Pattern.compile(pattern, Pattern.CASE_INSENSITIVE);
 	}

@@ -49,6 +49,21 @@ public final class EditorTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "total":   {"type":"integer"},
+					    "dirty":   {"type":"integer"},
+					    "editors": {"type":"array","items":{"type":"object","properties":{"title":{"type":["string","null"]},"id":{"type":["string","null"]},"path":{"type":["string","null"]},"dirty":{"type":"boolean"},"active":{"type":"boolean"},"pinned":{"type":"boolean"}}}},
+					    "note":    {"type":"string"}
+					  },
+					  "required": ["total", "dirty", "editors"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			return UiThread.call(UI_TIMEOUT_SECONDS, ListEditors::collect);
 		}
@@ -109,6 +124,24 @@ public final class EditorTools {
 					    "discardUnsaved": {"type":"boolean","default":false,"description":"Close a dirty editor and lose its changes."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "closed":         {"type":"integer"},
+					    "reason":         {"type":"string"},
+					    "openEditors":    {"type":"array","items":{"type":"object","properties":{"title":{"type":["string","null"]},"id":{"type":["string","null"]},"path":{"type":["string","null"]},"dirty":{"type":"boolean"},"active":{"type":"boolean"},"pinned":{"type":"boolean"}}}},
+					    "refused":        {"type":"integer"},
+					    "saved":          {"type":"array","items":{"type":"object"}},
+					    "closedEditors":  {"type":"array","items":{"type":"object","properties":{"title":{"type":["string","null"]},"path":{"type":["string","null"]},"discardedUnsavedChanges":{"type":"boolean"}}}},
+					    "refusedEditors": {"type":"array","items":{"type":"object","properties":{"title":{"type":["string","null"]},"path":{"type":["string","null"]},"reason":{"type":"string"}}}}
+					  },
+					  "required": ["closed"]
 					}"""; //$NON-NLS-1$
 		}
 
