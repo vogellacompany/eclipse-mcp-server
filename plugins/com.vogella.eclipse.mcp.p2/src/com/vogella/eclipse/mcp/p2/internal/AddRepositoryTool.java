@@ -55,6 +55,27 @@ public final class AddRepositoryTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "url":               {"type":"string"},
+				    "name":              {"type":["string","null"]},
+				    "dryRun":            {"type":"boolean"},
+				    "added":             {"type":"boolean"},
+				    "alreadyConfigured": {"type":"boolean"},
+				    "refreshed":         {"type":"boolean"},
+				    "groupCount":        {"type":"integer"},
+				    "truncated":         {"type":"boolean"},
+				    "groups":            {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"version":{"type":"string"}}}},
+				    "note":              {"type":"string"}
+				  },
+				  "required": ["url","dryRun","added","alreadyConfigured","refreshed","groupCount","truncated","groups","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String url = args.getString("url"); //$NON-NLS-1$

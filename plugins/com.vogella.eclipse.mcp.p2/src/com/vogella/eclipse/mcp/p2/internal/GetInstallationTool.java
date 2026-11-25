@@ -55,6 +55,26 @@ public final class GetInstallationTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "product":          {"type":["object","null"]},
+				    "profile":          {"type":"string"},
+				    "currentTimestamp": {"type":"integer"},
+				    "total":            {"type":"integer"},
+				    "matched":          {"type":"integer"},
+				    "truncated":        {"type":"boolean"},
+				    "features":         {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"version":{"type":"string"},"name":{"type":["string","null"]}}}},
+				    "runtime":          {"type":"object"},
+				    "revertPoints":     {"type":"array","items":{"type":"object","properties":{"timestamp":{"type":"integer"},"when":{"type":"string"}}}}
+				  },
+				  "required": ["profile","currentTimestamp","total","matched","truncated","features","runtime"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String filter = args.getString("filter"); //$NON-NLS-1$

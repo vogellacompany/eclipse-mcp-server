@@ -48,6 +48,27 @@ public final class CheckForUpdatesTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "resolution":               {"type":"string"},
+				    "metadataRefreshed":        {"type":"boolean"},
+				    "scopedToUnits":            {"type":["string","null"]},
+				    "widenedToAllRepositories": {"type":"boolean"},
+				    "scopeNote":                {"type":"string"},
+				    "caveat":                   {"type":"string"},
+				    "total":                    {"type":"integer"},
+				    "truncated":                {"type":"boolean"},
+				    "updates":                  {"type":"array","items":{"type":"object","properties":{"unit":{"type":"string"},"fromVersion":{"type":"string"},"toVersion":{"type":"string"},"name":{"type":["string","null"]}}}},
+				    "configuredRepositories":   {"type":"array","items":{"type":"object","properties":{"uri":{"type":"string"},"refreshed":{"type":"boolean"},"error":{"type":["string","null"]},"timestamp":{"type":["string","null"]}}}}
+				  },
+				  "required": ["resolution","total","truncated","updates","configuredRepositories"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		IProvisioningAgent agent = Provisioning.agent();
 		if (agent == null) {

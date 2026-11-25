@@ -37,6 +37,37 @@ public final class GetProvisioningStatusTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "operationId":           {"type":"string"},
+				    "kind":                  {"type":"string"},
+				    "state":                 {"type":"string"},
+				    "elapsedMillis":         {"type":"integer"},
+				    "changes":               {"type":"array","items":{"type":"object"}},
+				    "message":               {"type":["string","null"]},
+				    "previousConfiguration": {"type":["string","null"]},
+				    "trustedUnsigned":       {"type":"boolean"},
+				    "trustPrompts":          {"type":"array"},
+				    "trustPromptsTotal":     {"type":"integer"},
+				    "trustPromptsTruncated": {"type":"boolean"},
+				    "plan":                  {"type":"object"},
+				    "total":                 {"type":"integer"},
+				    "truncated":             {"type":"boolean"},
+				    "trustNote":             {"type":"string"},
+				    "blockedBy":             {"type":"string"},
+				    "restartRequired":       {"type":"boolean"},
+				    "note":                  {"type":"string"},
+				    "cancelRequested":       {"type":"boolean"},
+				    "cancelNote":            {"type":"string"}
+				  },
+				  "required": ["state"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		String id = ToolArguments.of(arguments).getString("operationId"); //$NON-NLS-1$
 		if (id == null && !ClientSessions.canAssumeASingleClient()) {

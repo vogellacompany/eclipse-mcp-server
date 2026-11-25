@@ -63,6 +63,36 @@ public final class InstallTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "operationId":           {"type":"string"},
+				    "kind":                  {"type":"string"},
+				    "state":                 {"type":"string"},
+				    "elapsedMillis":         {"type":"integer"},
+				    "changes":               {"type":"array","items":{"type":"object"}},
+				    "message":               {"type":["string","null"]},
+				    "previousConfiguration": {"type":["string","null"]},
+				    "trustedUnsigned":       {"type":"boolean"},
+				    "trustPrompts":          {"type":"array"},
+				    "trustPromptsTotal":     {"type":"integer"},
+				    "trustPromptsTruncated": {"type":"boolean"},
+				    "plan":                  {"type":"object"},
+				    "total":                 {"type":"integer"},
+				    "truncated":             {"type":"boolean"},
+				    "trustNote":             {"type":"string"},
+				    "blockedBy":             {"type":"string"},
+				    "restartRequired":       {"type":"boolean"},
+				    "note":                  {"type":"string"},
+				    "waitNote":              {"type":"string"}
+				  },
+				  "required": ["operationId","kind","state","elapsedMillis","changes","trustedUnsigned","trustPrompts","trustPromptsTotal","trustPromptsTruncated"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String unitId = args.getString("unit"); //$NON-NLS-1$

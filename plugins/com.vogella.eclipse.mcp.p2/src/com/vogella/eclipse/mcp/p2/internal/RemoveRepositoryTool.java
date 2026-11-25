@@ -45,6 +45,22 @@ public final class RemoveRepositoryTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "url":           {"type":"string"},
+				    "dryRun":        {"type":"boolean"},
+				    "wasConfigured": {"type":"boolean"},
+				    "removed":       {"type":"boolean"},
+				    "note":          {"type":["string","null"]}
+				  },
+				  "required": ["url","dryRun","wasConfigured","removed"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String url = args.getString("url"); //$NON-NLS-1$
