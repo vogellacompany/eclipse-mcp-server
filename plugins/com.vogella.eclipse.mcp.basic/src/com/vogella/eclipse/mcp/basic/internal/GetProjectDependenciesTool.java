@@ -53,6 +53,22 @@ public final class GetProjectDependenciesTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "direction":  {"type":"string"},
+				    "transitive": {"type":"boolean"},
+				    "total":      {"type":"integer"},
+				    "truncated":  {"type":"boolean"},
+				    "projects":   {"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"references":{"type":"array","items":{"type":"string"}},"referencedBy":{"type":"array","items":{"type":"string"}}}}}
+				  },
+				  "required": ["direction","transitive","total","truncated","projects"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String direction = args.getString("direction", "both"); //$NON-NLS-1$ //$NON-NLS-2$

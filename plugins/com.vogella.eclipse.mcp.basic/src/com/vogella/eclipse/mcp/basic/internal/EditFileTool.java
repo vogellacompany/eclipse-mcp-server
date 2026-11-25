@@ -62,6 +62,30 @@ public final class EditFileTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "path":                              {"type":"string"},
+				    "matches":                           {"type":"integer"},
+				    "lineDelimiter":                     {"type":"string"},
+				    "matchedAfterConvertingLineEndings": {"type":"boolean"},
+				    "replacements":                      {"type":"integer"},
+				    "changedLines":                      {"type":"array","items":{"type":"integer"}},
+				    "changedLinesTruncated":             {"type":"boolean"},
+				    "firstChangedLine":                  {"type":"integer"},
+				    "charset":                           {"type":"string"},
+				    "context":                           {"type":"string"},
+				    "dryRun":                            {"type":"boolean"},
+				    "edited":                            {"type":"boolean"},
+				    "note":                              {"type":"string"}
+				  },
+				  "required": ["path","matches","replacements","changedLines","changedLinesTruncated","firstChangedLine","charset","context","edited","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$

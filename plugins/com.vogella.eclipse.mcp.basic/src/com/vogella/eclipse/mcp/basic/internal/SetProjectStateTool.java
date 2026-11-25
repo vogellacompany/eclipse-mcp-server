@@ -55,6 +55,24 @@ public final class SetProjectStateTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "state":     {"type":"string"},
+				    "dryRun":    {"type":"boolean"},
+				    "total":     {"type":"integer"},
+				    "changed":   {"type":"integer"},
+				    "skipped":   {"type":"integer"},
+				    "truncated": {"type":"boolean"},
+				    "projects":  {"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"previousState":{"type":"string"},"platformReason":{"type":["string","null"]},"changed":{"type":"boolean"},"newState":{"type":"string"},"skippedBecause":{"type":["string","null"]},"dependentsClosingTogether":{"type":"array","items":{"type":"string"}},"openDependents":{"type":"array","items":{"type":"string"}}}}}
+				  },
+				  "required": ["state","dryRun","total","changed","skipped","truncated","projects"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String state = args.getString("state"); //$NON-NLS-1$

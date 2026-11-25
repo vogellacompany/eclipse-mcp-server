@@ -62,6 +62,23 @@ public final class GetPreferencesTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "qualifier":   {"type":"string"},
+				    "project":     {"type":["string","null"]},
+				    "scope":       {"type":"string"},
+				    "total":       {"type":"integer"},
+				    "truncated":   {"type":"boolean"},
+				    "preferences": {"type":"array","items":{"type":"object","properties":{"key":{"type":"string"},"effective":{"type":["string","null"]},"effectiveScope":{"type":["string","null"]},"values":{"type":"object"}}}}
+				  },
+				  "required": ["qualifier","project","scope","total","truncated","preferences"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String qualifier = args.getString("qualifier"); //$NON-NLS-1$

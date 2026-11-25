@@ -62,6 +62,32 @@ public final class EditWorkingCopyTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "path":                              {"type":"string"},
+				    "edited":                            {"type":"boolean"},
+				    "workingCopy":                       {"type":"boolean"},
+				    "reason":                            {"type":"string"},
+				    "matches":                           {"type":"integer"},
+				    "replacements":                      {"type":"integer"},
+				    "changedLines":                      {"type":"array","items":{"type":"integer"}},
+				    "changedLinesTruncated":             {"type":"boolean"},
+				    "firstChangedLine":                  {"type":"integer"},
+				    "lineDelimiter":                     {"type":"string"},
+				    "matchedAfterConvertingLineEndings": {"type":"boolean"},
+				    "dryRun":                            {"type":"boolean"},
+				    "dirty":                             {"type":"boolean"},
+				    "context":                           {"type":"string"},
+				    "note":                              {"type":"string"}
+				  },
+				  "required": ["path","edited","workingCopy"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$

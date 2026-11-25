@@ -44,6 +44,22 @@ public final class CancelBuildTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "cancelled":        {"type":"array"},
+				    "autoBuildEnabled": {"type":"boolean"},
+				    "waitedSeconds":    {"type":"integer"},
+				    "stillRunning":     {"type":"integer"},
+				    "note":             {"type":"string"}
+				  },
+				  "required": ["cancelled","autoBuildEnabled","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		int waitSeconds = ToolArguments.of(arguments).getInt("waitSeconds", DEFAULT_WAIT, 0, 20); //$NON-NLS-1$
 		JsonArray cancelled = new JsonArray();

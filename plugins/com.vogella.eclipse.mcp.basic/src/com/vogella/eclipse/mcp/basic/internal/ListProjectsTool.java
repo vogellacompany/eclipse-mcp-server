@@ -54,6 +54,23 @@ public final class ListProjectsTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "total":     {"type":"integer"},
+				    "open":      {"type":"integer"},
+				    "closed":    {"type":"integer"},
+				    "byNature":  {"type":"object"},
+				    "truncated": {"type":"boolean"},
+				    "projects":  {"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"open":{"type":"boolean"},"natures":{"type":["array","null"]},"natureSource":{"type":"string"},"location":{"type":["string","null"]}}}}
+				  },
+				  "required": ["total"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		int maxResults = args.getInt("maxResults", 200, 1, 5000); //$NON-NLS-1$

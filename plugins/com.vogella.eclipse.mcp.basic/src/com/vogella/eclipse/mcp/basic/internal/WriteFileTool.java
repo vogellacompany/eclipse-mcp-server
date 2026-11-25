@@ -57,6 +57,25 @@ public final class WriteFileTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "path":           {"type":"string"},
+				    "created":        {"type":"boolean"},
+				    "appended":       {"type":"boolean"},
+				    "charset":        {"type":"string"},
+				    "bytes":          {"type":"integer"},
+				    "createdFolders": {"type":"array","items":{"type":"string"}},
+				    "dryRun":         {"type":"boolean"},
+				    "written":        {"type":"boolean"}
+				  },
+				  "required": ["path","created","appended","charset","bytes","createdFolders","written"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$

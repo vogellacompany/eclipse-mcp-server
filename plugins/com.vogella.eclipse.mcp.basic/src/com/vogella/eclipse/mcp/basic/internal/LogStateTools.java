@@ -61,6 +61,22 @@ public final class LogStateTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "marker":   {"type":"string"},
+					    "logFile":  {"type":"string"},
+					    "position": {"type":"integer"},
+					    "markedAt": {"type":"integer"},
+					    "note":     {"type":"string"}
+					  },
+					  "required": ["marker","logFile","position","markedAt","note"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			Path log = logFile();
 			if (log == null) {
@@ -107,6 +123,27 @@ public final class LogStateTools {
 					    "includeRotated": {"type":"boolean","default":true,"description":"Also remove the rotated .log.bak sibling."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "logFile":          {"type":"string"},
+					    "dryRun":           {"type":"boolean"},
+					    "files":            {"type":"array","items":{"type":"string"}},
+					    "entriesDiscarded": {"type":"integer"},
+					    "bytes":            {"type":"integer"},
+					    "cleared":          {"type":"boolean"},
+					    "note":             {"type":"string"},
+					    "couldNotDelete":   {"type":"array","items":{"type":"string"}},
+					    "errorLogView":     {"type":"object"},
+					    "stillLogging":     {"type":"object"}
+					  },
+					  "required": ["logFile","dryRun","files","entriesDiscarded","bytes","cleared"]
 					}"""; //$NON-NLS-1$
 		}
 
@@ -243,6 +280,24 @@ public final class LogStateTools {
 					    "includeStackTrace": {"type":"boolean","default":false,"description":"Attach a throwable, so the entry carries a stack trace like a real failure."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "written":    {"type":"boolean"},
+					    "severity":   {"type":"string"},
+					    "pluginId":   {"type":"string"},
+					    "stackTrace": {"type":"boolean"},
+					    "verified":   {"type":"boolean"},
+					    "warning":    {"type":"string"},
+					    "note":       {"type":"string"}
+					  },
+					  "required": ["written","severity","pluginId","stackTrace","verified","note"]
 					}"""; //$NON-NLS-1$
 		}
 

@@ -66,6 +66,30 @@ public final class LocalHistoryTools {
 		}
 
 		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "path":      {"type":"string"},
+					    "exists":    {"type":"boolean"},
+					    "timestamp": {"type":"integer"},
+					    "time":      {"type":"string"},
+					    "bytes":     {"type":"integer"},
+					    "read":      {"type":"boolean"},
+					    "reason":    {"type":"string"},
+					    "binary":    {"type":"boolean"},
+					    "charset":   {"type":"string"},
+					    "content":   {"type":"string"},
+					    "versions":  {"type":"array","items":{"type":"object","properties":{"timestamp":{"type":"integer"},"time":{"type":"string"},"bytes":{"type":["integer","null"]}}}},
+					    "total":     {"type":"integer"},
+					    "truncated": {"type":"boolean"}
+					  },
+					  "required": ["path","exists"]
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
 		public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 			ToolArguments args = ToolArguments.of(arguments);
 			IFile file = file(args.getString("path")); //$NON-NLS-1$
@@ -157,6 +181,24 @@ public final class LocalHistoryTools {
 					    "dryRun":    {"type":"boolean","default":false,"description":"Report which version would be restored without writing it."}
 					  },
 					  "additionalProperties": false
+					}"""; //$NON-NLS-1$
+		}
+
+		@Override
+		public String getOutputSchema() {
+			return """
+					{
+					  "type": "object",
+					  "properties": {
+					    "path":                     {"type":"string"},
+					    "restored":                 {"type":"object"},
+					    "recreated":                {"type":"boolean"},
+					    "versionsAvailable":        {"type":"integer"},
+					    "dryRun":                   {"type":"boolean"},
+					    "written":                  {"type":"boolean"},
+					    "previousContentInHistory": {"type":"boolean"}
+					  },
+					  "required": ["path","restored","recreated","versionsAvailable","written"]
 					}"""; //$NON-NLS-1$
 		}
 

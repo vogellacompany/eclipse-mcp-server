@@ -73,6 +73,32 @@ public final class GetProblemsTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "total":             {"type":"integer"},
+				    "byType":            {"type":"object"},
+				    "truncated":         {"type":"boolean"},
+				    "refreshed":         {"type":"boolean"},
+				    "waitedForBuild":    {"type":"boolean"},
+				    "upToDate":          {"type":"boolean"},
+				    "autoBuild":         {"type":"boolean"},
+				    "problems":          {"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"project":{"type":["string","null"]},"line":{"type":["integer","null"]},"severity":{"type":"string"},"message":{"type":"string"},"type":{"type":"string"}}}},
+				    "staleness":         {"type":"string"},
+				    "marker":            {"type":"string"},
+				    "sinceMarker":       {"type":"boolean"},
+				    "resolvedCount":     {"type":"integer"},
+				    "resolvedTruncated": {"type":"boolean"},
+				    "resolved":          {"type":"array","items":{"type":"string"}},
+				    "note":              {"type":"string"}
+				  },
+				  "required": ["total","byType","truncated","refreshed","waitedForBuild","upToDate","autoBuild","problems"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String severity = args.getString("severity", "error"); //$NON-NLS-1$ //$NON-NLS-2$

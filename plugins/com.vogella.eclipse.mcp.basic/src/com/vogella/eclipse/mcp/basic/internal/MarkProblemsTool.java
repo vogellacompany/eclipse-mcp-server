@@ -31,6 +31,20 @@ public final class MarkProblemsTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "marker":   {"type":"string"},
+				    "problems": {"type":"integer"},
+				    "note":     {"type":"string"}
+				  },
+				  "required": ["marker","problems","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		// deliberately no build and no refresh: this records the state as it is, and
 		// making it current is the caller's decision through eclipse_get_problems or

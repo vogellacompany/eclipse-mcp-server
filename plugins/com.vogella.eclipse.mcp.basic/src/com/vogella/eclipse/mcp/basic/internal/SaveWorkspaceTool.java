@@ -51,6 +51,32 @@ public final class SaveWorkspaceTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "mode":                {"type":"string"},
+				    "dryRun":              {"type":"boolean"},
+				    "projects":            {"type":"object"},
+				    "markers":             {"type":["integer","null"]},
+				    "autoBuilding":        {"type":"boolean"},
+				    "jobs":                {"type":"object"},
+				    "localHistory":        {"type":"object"},
+				    "jobsWhenRequested":   {"type":"object"},
+				    "state":               {"type":"string"},
+				    "waitedSeconds":       {"type":"integer"},
+				    "saveMillis":          {"type":"integer"},
+				    "waitedForRuleMillis": {"type":"integer"},
+				    "elapsedMillis":       {"type":"integer"},
+				    "status":              {"type":["object","null"]},
+				    "note":                {"type":"string"}
+				  },
+				  "required": ["mode","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		boolean full = !"snapshot".equals(args.getString("mode", "full")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$

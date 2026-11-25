@@ -39,6 +39,26 @@ public final class WaitUntilQuietTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "state":            {"type":"string"},
+				    "elapsedMillis":    {"type":"integer"},
+				    "budgetSeconds":    {"type":"integer"},
+				    "requestedSeconds": {"type":"integer"},
+				    "waitedFor":        {"type":"array"},
+				    "running":          {"type":"array"},
+				    "jobsBefore":       {"type":"object"},
+				    "jobsAfter":        {"type":"object"},
+				    "note":             {"type":"string"}
+				  },
+				  "required": ["state","elapsedMillis","budgetSeconds","requestedSeconds","waitedFor","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		int timeoutSeconds = ToolArguments.of(arguments).getInt("timeoutSeconds", 120, 1, 900); //$NON-NLS-1$
 		int budget = CallBudget.boundedWaitSeconds(timeoutSeconds);

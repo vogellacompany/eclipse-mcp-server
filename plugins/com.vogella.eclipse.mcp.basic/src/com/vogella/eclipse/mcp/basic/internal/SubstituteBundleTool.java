@@ -87,6 +87,47 @@ public final class SubstituteBundleTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "substituted":                {"type":"array"},
+				    "count":                      {"type":"integer"},
+				    "stillInForce":               {"type":"integer"},
+				    "referencingSubstitutedJars": {"type":"array"},
+				    "sharedInstall":              {"type":["object","null"]},
+				    "restored":                   {},
+				    "restoredCount":              {"type":"integer"},
+				    "stillReferenced":            {"type":"array"},
+				    "notRestored":                {"type":"array"},
+				    "deleted":                    {"type":"array"},
+				    "kept":                       {"type":"array"},
+				    "repaired":                   {"type":"array"},
+				    "repairedCount":              {"type":"integer"},
+				    "dropped":                    {"type":"array"},
+				    "droppedCount":               {"type":"integer"},
+				    "notRepaired":                {"type":"array"},
+				    "bundle":                     {"type":"string"},
+				    "project":                    {"type":"string"},
+				    "packedFrom":                 {"type":"string"},
+				    "originalLine":               {"type":"string"},
+				    "substitutedLine":            {"type":"string"},
+				    "jar":                        {"type":"string"},
+				    "jarVersion":                 {"type":"string"},
+				    "copiedTo":                   {"type":"string"},
+				    "entries":                    {"type":"integer"},
+				    "unreadable":                 {"type":"array"},
+				    "unmatchedIncludes":          {"type":["array","null"]},
+				    "dryRun":                     {"type":"boolean"},
+				    "restartRequired":            {"type":"boolean"},
+				    "note":                       {"type":"string"}
+				  },
+				  "required": ["note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String action = args.getString("action", "status"); //$NON-NLS-1$ //$NON-NLS-2$

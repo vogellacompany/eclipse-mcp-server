@@ -48,6 +48,19 @@ public final class ResolvePathTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "resolved": {"type":"array","items":{"type":"object","properties":{"query":{"type":"string"},"resolved":{"type":"boolean"},"reason":{"type":"string"},"nearby":{"type":"array","items":{"type":"string"}},"project":{"type":["string","null"]},"workspacePath":{"type":["string","null"]},"location":{"type":["string","null"]},"exists":{"type":"boolean"},"open":{"type":["boolean","null"]},"note":{"type":"string"},"repositoryRoot":{"type":["string","null"]},"pathInRepository":{"type":["string","null"]}}}},
+				    "note":     {"type":"string"}
+				  },
+				  "required": ["resolved","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		Object raw = arguments == null ? null : arguments.get("of"); //$NON-NLS-1$
 		if (!(raw instanceof List<?> requested) || requested.isEmpty()) {

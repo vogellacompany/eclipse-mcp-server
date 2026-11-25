@@ -70,6 +70,28 @@ public final class SearchTextTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "pattern":                 {"type":"string"},
+				    "isRegex":                 {"type":"boolean"},
+				    "isCaseSensitive":         {"type":"boolean"},
+				    "includeDerived":          {"type":"boolean"},
+				    "total":                   {"type":"integer"},
+				    "files":                   {"type":"integer"},
+				    "duplicatePathsCollapsed": {"type":"integer"},
+				    "excludedByPath":          {"type":"integer"},
+				    "truncated":               {"type":"boolean"},
+				    "matches":                 {"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"line":{"type":"integer"},"offset":{"type":"integer"},"text":{"type":"string"},"alsoVisibleAs":{"type":"array","items":{"type":"string"}}}}},
+				    "note":                    {"type":"string"}
+				  },
+				  "required": ["pattern","isRegex","isCaseSensitive","includeDerived","total","files","duplicatePathsCollapsed","excludedByPath","truncated","matches"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String text = args.getString("pattern"); //$NON-NLS-1$

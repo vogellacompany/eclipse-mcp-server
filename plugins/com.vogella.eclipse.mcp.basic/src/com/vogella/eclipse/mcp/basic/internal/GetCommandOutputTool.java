@@ -45,6 +45,26 @@ public final class GetCommandOutputTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "commandId":     {"type":"string"},
+				    "command":       {"type":"array","items":{"type":"string"}},
+				    "directory":     {"type":"string"},
+				    "state":         {"type":"string"},
+				    "exitCode":      {"type":["integer","null"]},
+				    "elapsedMillis": {"type":"integer"},
+				    "droppedLines":  {"type":"integer"},
+				    "output":        {"type":"string"},
+				    "note":          {"type":"string"}
+				  },
+				  "required": ["state"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String id = args.getString("commandId"); //$NON-NLS-1$

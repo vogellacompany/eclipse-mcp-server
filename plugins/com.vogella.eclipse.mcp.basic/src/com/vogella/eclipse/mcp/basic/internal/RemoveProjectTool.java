@@ -53,6 +53,24 @@ public final class RemoveProjectTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "dryRun":    {"type":"boolean"},
+				    "selected":  {"type":"integer"},
+				    "removed":   {"type":"integer"},
+				    "refused":   {"type":"integer"},
+				    "truncated": {"type":"boolean"},
+				    "projects":  {"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"location":{"type":["string","null"]},"hasProjectFile":{"type":"boolean"},"dependents":{"type":"array","items":{"type":"string"}},"removed":{"type":"boolean"},"refusedBecause":{"type":"string"},"error":{"type":["string","null"]}}}},
+				    "note":      {"type":"string"}
+				  },
+				  "required": ["dryRun","selected","removed","refused","truncated","projects","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		Set<String> named = ProjectSelection.names(arguments);

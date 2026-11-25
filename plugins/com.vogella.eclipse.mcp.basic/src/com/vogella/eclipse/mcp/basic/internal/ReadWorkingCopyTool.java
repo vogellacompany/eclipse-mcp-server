@@ -51,6 +51,30 @@ public final class ReadWorkingCopyTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "path":         {"type":"string"},
+				    "workingCopy":  {"type":"boolean"},
+				    "dirty":        {"type":"boolean"},
+				    "synchronized": {"type":"boolean"},
+				    "bytes":        {"type":"integer"},
+				    "charset":      {"type":"string"},
+				    "read":         {"type":"boolean"},
+				    "reason":       {"type":"string"},
+				    "totalLines":   {"type":"integer"},
+				    "firstLine":    {"type":"integer"},
+				    "lastLine":     {"type":"integer"},
+				    "truncated":    {"type":"boolean"},
+				    "content":      {"type":"string"}
+				  },
+				  "required": ["path","workingCopy","read"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$

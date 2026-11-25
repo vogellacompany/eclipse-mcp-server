@@ -63,6 +63,24 @@ public final class GetLogEntriesTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "logFile":     {"type":"string"},
+				    "total":       {"type":"integer"},
+				    "truncated":   {"type":"boolean"},
+				    "entries":     {"type":"array","items":{"type":"object","properties":{"plugin":{"type":["string","null"]},"severity":{"type":"string"},"code":{"type":"integer"},"timestamp":{"type":["string","null"]},"message":{"type":["string","null"]},"exception":{"type":["string","null"]},"stackTrace":{"type":["string","null"]},"children":{"type":"array"}}}},
+				    "marker":      {"type":"string"},
+				    "markerStale": {"type":"boolean"},
+				    "markerNote":  {"type":"string"}
+				  },
+				  "required": ["logFile","total","truncated","entries"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String severity = args.getString("severity", "all"); //$NON-NLS-1$ //$NON-NLS-2$

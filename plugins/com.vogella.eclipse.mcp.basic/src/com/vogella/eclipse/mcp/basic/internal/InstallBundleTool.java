@@ -107,6 +107,44 @@ public final class InstallBundleTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "symbolicName":             {"type":"string"},
+				    "previousVersion":          {"type":["string","null"]},
+				    "version":                  {"type":"string"},
+				    "mode":                     {"type":"string"},
+				    "dryRun":                   {"type":"boolean"},
+				    "wouldBe":                  {"type":"string"},
+				    "startAfterwards":          {"type":"boolean"},
+				    "closureSize":              {"type":"integer"},
+				    "outcome":                  {"type":"string"},
+				    "state":                    {"type":"string"},
+				    "resolved":                 {"type":"boolean"},
+				    "fragment":                 {"type":"boolean"},
+				    "started":                  {"type":"boolean"},
+				    "resolutionError":          {"type":"string"},
+				    "fragmentNote":             {"type":"string"},
+				    "refreshScheduledInMillis": {"type":"integer"},
+				    "versionChanged":           {"type":"boolean"},
+				    "extensions":               {"type":"object"},
+				    "target":                   {"type":"string"},
+				    "dropinsExisted":           {"type":"boolean"},
+				    "writable":                 {"type":"boolean"},
+				    "survivesRestart":          {"type":"boolean"},
+				    "needsRestart":             {"type":"boolean"},
+				    "refreshed":                {"type":"array"},
+				    "total":                    {"type":"integer"},
+				    "truncated":                {"type":"boolean"},
+				    "notes":                    {"type":"array"}
+				  },
+				  "required": ["symbolicName","previousVersion","version","mode","dryRun","refreshed","total","truncated","notes"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (monitor.isCanceled()) {
 			return McpToolResult.error("The request was cancelled."); //$NON-NLS-1$

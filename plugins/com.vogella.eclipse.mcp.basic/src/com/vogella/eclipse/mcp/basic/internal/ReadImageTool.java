@@ -49,6 +49,22 @@ public final class ReadImageTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "path":     {"type":"string"},
+				    "mimeType": {"type":"string"},
+				    "bytes":    {"type":"integer"},
+				    "width":    {"type":"integer"},
+				    "height":   {"type":"integer"}
+				  },
+				  "required": ["path","mimeType","bytes"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$

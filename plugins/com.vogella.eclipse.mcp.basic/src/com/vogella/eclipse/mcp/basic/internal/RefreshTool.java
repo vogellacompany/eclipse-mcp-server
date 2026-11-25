@@ -49,6 +49,34 @@ public final class RefreshTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "buildId":           {"type":"string"},
+				    "kind":              {"type":"string"},
+				    "state":             {"type":"string"},
+				    "scope":             {"type":"string"},
+				    "projects":          {"type":"array","items":{"type":"string"}},
+				    "elapsedMillis":     {"type":"integer"},
+				    "refreshMillis":     {"type":["integer","null"]},
+				    "buildMillis":       {"type":["integer","null"]},
+				    "refreshedFiles":    {"type":["object","null"]},
+				    "builtFiles":        {"type":["object","null"]},
+				    "builtProjectCount": {"type":"integer"},
+				    "note":              {"type":["string","null"]},
+				    "errors":            {"type":["integer","null"]},
+				    "warnings":          {"type":["integer","null"]},
+				    "builderFailures":   {"type":"array"},
+				    "builtProjects":     {"type":"array"},
+				    "waitNote":          {"type":"string"}
+				  },
+				  "required": ["buildId","kind","state","scope","projects","elapsedMillis","builtProjectCount","builderFailures"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		List<String> projects = projectNames(arguments, args);
