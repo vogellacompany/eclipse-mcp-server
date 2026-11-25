@@ -53,6 +53,21 @@ public final class GetBundleInfoTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "workspaceOnly": {"type":"boolean"},
+				    "total":         {"type":"integer"},
+				    "truncated":     {"type":"boolean"},
+				    "bundles":       {"type":"array","items":{"type":"object","properties":{"symbolicName":{"type":["string","null"]},"version":{"type":["string","null"]},"resolved":{"type":"boolean"},"location":{"type":["string","null"]},"workspace":{"type":"boolean"},"platformFilter":{"type":["string","null"]},"fragmentHost":{"type":"object"},"exportPackage":{"type":"array","items":{"type":"object"}},"requireBundle":{"type":"array","items":{"type":"object"}},"importPackage":{"type":"array","items":{"type":"object"}}}}}
+				  },
+				  "required": ["workspaceOnly","total","truncated","bundles"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String symbolicName = args.getString("symbolicName"); //$NON-NLS-1$

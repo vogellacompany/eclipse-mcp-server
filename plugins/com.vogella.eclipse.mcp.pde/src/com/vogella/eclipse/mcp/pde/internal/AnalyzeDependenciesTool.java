@@ -78,6 +78,20 @@ public final class AnalyzeDependenciesTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "total":     {"type":"integer"},
+				    "truncated": {"type":"boolean"},
+				    "projects":  {"type":"array","items":{"type":"object","properties":{"project":{"type":"string"},"error":{"type":"string"},"bundle":{"type":"string"},"declaredRequireBundle":{"type":"array","items":{"type":"object"}},"declaredImportPackage":{"type":"array","items":{"type":"string"}},"actuallyUsed":{"type":"array","items":{"type":"object"}},"unused":{"type":"array","items":{"type":"object"}},"viaReexport":{"type":"array","items":{"type":"object"}},"undeclared":{"type":"array","items":{"type":"object"}},"caveats":{"type":"array","items":{"type":"string"}}}}}
+				  },
+				  "required": ["total","truncated","projects"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		List<String> names = new ArrayList<>();

@@ -52,6 +52,28 @@ public final class SetTargetPlatformTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "target":        {"type":["string","null"]},
+				    "state":         {"type":"string"},
+				    "resolveOnly":   {"type":"boolean"},
+				    "elapsedMillis": {"type":"integer"},
+				    "resolveMillis": {"type":["integer","null"]},
+				    "resolveStatus": {"type":["object","null"]},
+				    "loadStatus":    {"type":["object","null"]},
+				    "previous":      {"type":["object","null"]},
+				    "note":          {"type":"string"},
+				    "definition":    {"type":"object"},
+				    "waitNote":      {"type":"string"}
+				  },
+				  "required": ["target","state","resolveOnly","elapsedMillis"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String file = args.getString("file"); //$NON-NLS-1$

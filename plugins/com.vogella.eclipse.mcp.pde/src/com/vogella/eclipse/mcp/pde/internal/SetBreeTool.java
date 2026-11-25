@@ -71,6 +71,24 @@ public final class SetBreeTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "bree":      {"type":"string"},
+				    "dryRun":    {"type":"boolean"},
+				    "total":     {"type":"integer"},
+				    "changed":   {"type":"integer"},
+				    "skipped":   {"type":"integer"},
+				    "truncated": {"type":"boolean"},
+				    "projects":  {"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"previousBree":{"type":["string","null"]},"bree":{"type":"string"},"previousJreContainer":{"type":["string","null"]},"changed":{"type":"boolean"},"skippedBecause":{"type":["string","null"]},"compliance":{"type":"object"},"jreContainer":{"type":["string","null"]}}}}
+				  },
+				  "required": ["bree","dryRun","total","changed","skipped","truncated","projects"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String bree = args.getString("bree"); //$NON-NLS-1$

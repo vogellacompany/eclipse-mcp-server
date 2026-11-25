@@ -48,6 +48,28 @@ public final class GetTargetPlatformTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "targetSet":        {"type":"boolean"},
+				    "note":             {"type":"string"},
+				    "active":           {"type":["object","null"]},
+				    "resolveNote":      {"type":"string"},
+				    "lastLoad":         {"type":"object"},
+				    "waitedForResolve": {"type":"boolean"},
+				    "stillResolving":   {"type":"boolean"},
+				    "waitNote":         {"type":"string"},
+				    "known":            {"type":"array","items":{"type":"object","properties":{"memento":{"type":["string","null"]},"active":{"type":"boolean"},"name":{"type":["string","null"]},"unreadable":{"type":"string"}}}},
+				    "knownTotal":       {"type":"integer"},
+				    "knownTruncated":   {"type":"boolean"}
+				  },
+				  "required": ["targetSet","active"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		boolean includeLocations = args.getBoolean("includeLocations", true); //$NON-NLS-1$

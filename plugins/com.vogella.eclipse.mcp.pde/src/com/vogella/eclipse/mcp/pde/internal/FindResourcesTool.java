@@ -81,6 +81,24 @@ public final class FindResourcesTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "total":     {"type":"integer"},
+				    "scope":     {"type":"string"},
+				    "counts":    {"type":"object"},
+				    "hits":      {"type":"array","items":{"type":"object","properties":{"scope":{"type":"string"},"workspacePath":{"type":"string"},"location":{"type":["string","null"]},"version":{"type":["string","null"]},"bytes":{"type":"integer"},"bundle":{"type":["string","null"]},"path":{"type":"string"},"matched":{"type":"string"},"contentHash":{"type":"string"},"copiedTo":{"type":"string"},"copyFailed":{"type":"string"}}}},
+				    "truncated": {"type":"boolean"},
+				    "copiedTo":  {"type":"string"},
+				    "note":      {"type":"string"}
+				  },
+				  "required": ["total","scope","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		List<String> globs = new ArrayList<>(strings(arguments, "namePatterns")); //$NON-NLS-1$

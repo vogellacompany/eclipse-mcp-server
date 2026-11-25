@@ -82,6 +82,29 @@ public final class EditManifestTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "project":        {"type":"string"},
+				    "bundle":         {"type":["string","null"]},
+				    "dryRun":         {"type":"boolean"},
+				    "mightAlsoUseIt": {"type":"array","items":{"type":"object"}},
+				    "wouldBreak":     {"type":"array","items":{"type":"object"}},
+				    "applied":        {"type":"boolean"},
+				    "refusedBecause": {"type":"string"},
+				    "changes":        {"type":"object"},
+				    "exportPackage":  {"type":"array","items":{"type":"object"}},
+				    "requireBundle":  {"type":"array","items":{"type":"object"}},
+				    "importPackage":  {"type":"array","items":{"type":"object"}},
+				    "note":           {"type":"string"}
+				  },
+				  "required": ["project","bundle","dryRun","applied"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String projectName = args.getString("project"); //$NON-NLS-1$
