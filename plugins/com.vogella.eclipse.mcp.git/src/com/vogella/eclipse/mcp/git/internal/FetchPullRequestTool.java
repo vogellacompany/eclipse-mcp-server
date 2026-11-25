@@ -74,6 +74,40 @@ public final class FetchPullRequestTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "directory":        {"type":["string","null"]},
+				    "number":           {"type":"integer"},
+				    "remote":           {"type":"string"},
+				    "remoteUrl":        {"type":"string"},
+				    "ref":              {"type":"string"},
+				    "branch":           {"type":"string"},
+				    "branchSource":     {"type":"string"},
+				    "branchExists":     {"type":"boolean"},
+				    "fromBranch":       {"type":["string","null"]},
+				    "fromHead":         {"type":["string","null"]},
+				    "pullRequest":      {"type":["object","null"]},
+				    "apiError":         {"type":["string","null"]},
+				    "apiAuthenticated": {"type":"boolean"},
+				    "dryRun":           {"type":"boolean"},
+				    "headSha":          {"type":["string","null"]},
+				    "advertised":       {"type":"boolean"},
+				    "remoteError":      {"type":["string","null"]},
+				    "branchAction":     {"type":"string"},
+				    "wouldCheckout":    {"type":"boolean"},
+				    "checkedOut":       {"type":"boolean"},
+				    "checkoutStatus":   {"type":["string","null"]},
+				    "conflicts":        {"type":"array","items":{"type":"string"}},
+				    "note":             {"type":"string"}
+				  },
+				  "required": ["number","remote","ref","branch","dryRun","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		if (!EGit.isAvailable()) {
 			return McpToolResult.error(EGit.unavailable());

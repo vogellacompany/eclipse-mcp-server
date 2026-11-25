@@ -50,6 +50,30 @@ public final class CheckoutTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "directory":      {"type":["string","null"]},
+				    "target":         {"type":"string"},
+				    "resolved":       {"type":"string"},
+				    "fromBranch":     {"type":["string","null"]},
+				    "fromHead":       {"type":["string","null"]},
+				    "wasClean":       {"type":"boolean"},
+				    "dryRun":         {"type":"boolean"},
+				    "switched":       {"type":"boolean"},
+				    "note":           {"type":"string"},
+				    "toBranch":       {"type":["string","null"]},
+				    "toHead":         {"type":"string"},
+				    "checkoutStatus": {"type":["string","null"]},
+				    "conflicts":      {"type":"array","items":{"type":"string"}}
+				  },
+				  "required": ["target","resolved","dryRun","switched","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		if (!EGit.isAvailable()) {
 			return McpToolResult.error(EGit.unavailable());

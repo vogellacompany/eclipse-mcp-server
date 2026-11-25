@@ -53,6 +53,26 @@ public final class AddGitRepositoryTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "registered":        {},
+				    "gitDir":            {"type":"string"},
+				    "alreadyRegistered": {"type":"boolean"},
+				    "projectsToConnect": {"type":"array","items":{"type":"string"}},
+				    "dryRun":            {"type":"boolean"},
+				    "note":              {"type":"string"},
+				    "projectsConnected": {"type":"array","items":{"type":"string"}},
+				    "changed":           {"type":"boolean"},
+				    "wasRegistered":     {"type":"boolean"},
+				    "removed":           {"type":"boolean"}
+				  }
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		if (!EGit.isAvailable()) {
 			return McpToolResult.error(EGit.unavailable());

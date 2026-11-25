@@ -49,6 +49,27 @@ public final class GetGitStatusTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "directory":   {"type":["string","null"]},
+				    "branch":      {"type":["string","null"]},
+				    "head":        {"type":["string","null"]},
+				    "state":       {"type":"string"},
+				    "clean":       {"type":"boolean"},
+				    "modified":    {"type":"object","properties":{"total":{"type":"integer"},"truncated":{"type":"boolean"},"paths":{"type":"array","items":{"type":"string"}}}},
+				    "staged":      {"type":"object","properties":{"total":{"type":"integer"},"truncated":{"type":"boolean"},"paths":{"type":"array","items":{"type":"string"}}}},
+				    "missing":     {"type":"object","properties":{"total":{"type":"integer"},"truncated":{"type":"boolean"},"paths":{"type":"array","items":{"type":"string"}}}},
+				    "untracked":   {"type":"object","properties":{"total":{"type":"integer"},"truncated":{"type":"boolean"},"paths":{"type":"array","items":{"type":"string"}}}},
+				    "conflicting": {"type":"object","properties":{"total":{"type":"integer"},"truncated":{"type":"boolean"},"paths":{"type":"array","items":{"type":"string"}}}}
+				  },
+				  "required": ["state","clean","modified","staged","missing","untracked","conflicting"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		if (!EGit.isAvailable()) {
 			return McpToolResult.error(EGit.unavailable());

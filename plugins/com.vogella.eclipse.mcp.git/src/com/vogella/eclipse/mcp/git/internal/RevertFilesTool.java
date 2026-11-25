@@ -60,6 +60,25 @@ public final class RevertFilesTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "dryRun":      {"type":"boolean"},
+				    "requested":   {"type":"integer"},
+				    "reverted":    {"type":"integer"},
+				    "wouldRevert": {"type":"integer"},
+				    "refused":     {"type":"integer"},
+				    "failed":      {"type":"integer"},
+				    "files":       {"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"state":{"type":"string"},"reason":{"type":"string"},"repository":{"type":"string"},"repositoryPath":{"type":"string"},"existsOnDisk":{"type":"boolean"},"headBytes":{"type":"integer"},"currentBytes":{"type":["integer","null"]},"staged":{"type":"boolean"},"inWorkspace":{"type":"boolean"},"localHistory":{"type":"boolean"},"localHistoryNote":{"type":"string"},"unstaged":{"type":"boolean"}}}},
+				    "note":        {"type":"string"}
+				  },
+				  "required": ["dryRun","requested","reverted","wouldRevert","refused","failed","files"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (!EGit.isAvailable()) {
 			return McpToolResult.error(EGit.unavailable());
