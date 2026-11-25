@@ -69,6 +69,37 @@ public final class LaunchShortcutTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "total":                      {"type":"integer"},
+				    "truncated":                  {"type":"boolean"},
+				    "candidates":                 {"type":"array","items":{"type":"object","properties":{"id":{"type":["string","null"]},"label":{"type":["string","null"]}}}},
+				    "matched":                    {"type":"object"},
+				    "mode":                       {"type":"string"},
+				    "resolved":                   {"type":"integer"},
+				    "unresolved":                 {"type":"array","items":{"type":"string"}},
+				    "dryRun":                     {"type":"boolean"},
+				    "compileErrorPromptWas":      {},
+				    "newConfigurationsTotal":     {"type":"integer"},
+				    "newConfigurationsTruncated": {"type":"boolean"},
+				    "newConfigurations":          {"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"typeId":{"type":["string","null"]}}}},
+				    "launchesTotal":              {"type":"integer"},
+				    "launchesTruncated":          {"type":"boolean"},
+				    "launches":                   {"type":"array","items":{"type":"object","properties":{"configuration":{"type":["string","null"]},"mode":{"type":"string"},"terminated":{"type":"boolean"}}}},
+				    "timedOut":                   {"type":"boolean"},
+				    "waitedSeconds":              {"type":"integer"},
+				    "clamped":                    {"type":"boolean"},
+				    "invoked":                    {"type":"boolean"},
+				    "launchPending":              {"type":"boolean"},
+				    "note":                       {"type":"string"}
+				  }
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		if (!(arguments != null && arguments.get("elements") instanceof List<?> requested) || requested.isEmpty()) { //$NON-NLS-1$

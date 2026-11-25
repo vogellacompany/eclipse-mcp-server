@@ -83,6 +83,28 @@ public final class CompareTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "left":        {"type":"string"},
+				    "repository":  {},
+				    "commit":      {},
+				    "right":       {"type":"string"},
+				    "identical":   {"type":"boolean"},
+				    "leftBytes":   {"type":"integer"},
+				    "rightBytes":  {"type":"integer"},
+				    "note":        {"type":"string"},
+				    "opened":      {"type":"boolean"},
+				    "editor":      {"type":"string"},
+				    "unifiedDiff": {"type":"boolean"}
+				  },
+				  "required": ["left","right","identical","leftBytes","rightBytes","opened","editor","unifiedDiff"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String leftPath = args.getString("left"); //$NON-NLS-1$

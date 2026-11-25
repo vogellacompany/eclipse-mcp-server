@@ -58,6 +58,23 @@ public final class OpenInEditorTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "opened":       {"type":"boolean"},
+				    "reason":       {"type":["string","null"]},
+				    "path":         {"type":"string"},
+				    "external":     {"type":"boolean"},
+				    "editor":       {"type":"string"},
+				    "revealedLine": {"type":["integer","null"]}
+				  },
+				  "required": ["opened"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$
