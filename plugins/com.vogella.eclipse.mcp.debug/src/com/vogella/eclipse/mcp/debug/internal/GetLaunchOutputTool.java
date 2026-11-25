@@ -53,6 +53,21 @@ public final class GetLaunchOutputTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "sessionId":  {"type":"string"},
+				    "terminated": {"type":"boolean"},
+				    "processes":  {"type":"array","items":{"type":"object","properties":{"label":{"type":["string","null"]},"pid":{"type":["string","null"]},"terminated":{"type":"boolean"},"exitValue":{"type":"integer"},"note":{"type":"string"},"stdout":{"type":"object","properties":{"total":{"type":"integer"},"returned":{"type":"integer"},"truncated":{"type":"boolean"},"text":{"type":"string"}}},"stderr":{"type":"object","properties":{"total":{"type":"integer"},"returned":{"type":"integer"},"truncated":{"type":"boolean"},"text":{"type":"string"}}}}}},
+				    "note":       {"type":"string"}
+				  },
+				  "required": ["sessionId","terminated","processes"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		int tailLines = args.getInt("tailLines", 200, 1, 5000); //$NON-NLS-1$

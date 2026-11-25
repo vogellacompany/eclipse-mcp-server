@@ -58,6 +58,44 @@ public final class ControlTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "sessionId":             {"type":"string"},
+				    "startedByMcp":          {"type":"boolean"},
+				    "terminated":            {"type":"boolean"},
+				    "suspended":             {"type":"boolean"},
+				    "configuration":         {"type":["string","null"]},
+				    "registered":            {"type":"boolean"},
+				    "pid":                   {"type":["string","null"]},
+				    "failure":               {"type":"string"},
+				    "threads":               {"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"suspended":{"type":"boolean"},"location":{"type":["string","null"]},"breakpoint":{"type":["string","null"]}}}},
+				    "threadTotal":           {"type":"integer"},
+				    "truncated":             {"type":"boolean"},
+				    "action":                {"type":"string"},
+				    "timedOut":              {"type":"boolean"},
+				    "waitNote":              {"type":"string"},
+				    "location":              {"type":["string","null"]},
+				    "breakpointHit":         {"type":"boolean"},
+				    "suspendedByBreakpoint": {"type":"boolean"},
+				    "suspendedThread":       {"type":"string"},
+				    "frame":                 {"type":["string","null"]},
+				    "evaluationErrors":      {"type":"string"},
+				    "closeQueued":           {"type":"boolean"},
+				    "closedGracefully":      {"type":"boolean"},
+				    "waitedSeconds":         {"type":"integer"},
+				    "terminatedInstead":     {"type":"boolean"},
+				    "note":                  {"type":"string"},
+				    "refusedBecause":        {"type":"string"},
+				    "breakpoint":            {"type":["string"]}
+				  },
+				  "required": ["sessionId"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String action = args.getString("action"); //$NON-NLS-1$

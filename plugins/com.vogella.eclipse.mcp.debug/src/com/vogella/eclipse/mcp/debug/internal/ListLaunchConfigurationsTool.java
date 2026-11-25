@@ -58,6 +58,22 @@ public final class ListLaunchConfigurationsTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "configurations": {"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"type":{"type":"string"},"typeName":{"type":"string"},"launchable":{"type":"boolean"},"modes":{"type":"array","items":{"type":"string"}},"storage":{"type":"string"},"file":{"type":["string","null"]},"startedByMcp":{"type":"boolean"},"note":{"type":"string"},"attributes":{"type":"object"},"missingType":{"type":"string"},"path":{"type":["string","null"]},"nearestBundle":{"type":"string"},"nearestBundleState":{"type":"string"}}}},
+				    "total":          {"type":"integer"},
+				    "truncated":      {"type":"boolean"},
+				    "types":          {"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"modes":{"type":"array","items":{"type":"string"}}}}},
+				    "note":           {"type":"string"}
+				  },
+				  "required": ["configurations","total","truncated"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String typeFilter = lower(args.getString("typeFilter")); //$NON-NLS-1$

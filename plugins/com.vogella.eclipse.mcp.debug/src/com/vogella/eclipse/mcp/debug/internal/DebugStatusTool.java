@@ -44,6 +44,23 @@ public final class DebugStatusTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "total":     {"type":"integer"},
+				    "truncated": {"type":"boolean"},
+				    "sessions":  {"type":"array","items":{"type":"object","properties":{"sessionId":{"type":"string"},"startedByMcp":{"type":"boolean"},"terminated":{"type":"boolean"},"suspended":{"type":"boolean"},"configuration":{"type":["string","null"]},"registered":{"type":"boolean"},"pid":{"type":["string","null"]},"failure":{"type":"string"},"threads":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"suspended":{"type":"boolean"},"location":{"type":["string","null"]},"breakpoint":{"type":["string","null"]}}}},"threadTotal":{"type":"integer"},"truncated":{"type":"boolean"}}}},
+				    "note":      {"type":"string"},
+				    "timedOut":  {"type":"boolean"},
+				    "waitNote":  {"type":"string"}
+				  },
+				  "required": ["total","truncated","sessions"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String sessionId = args.getString("sessionId"); //$NON-NLS-1$

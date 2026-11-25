@@ -60,6 +60,26 @@ public final class EvaluateTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "sessionId":      {"type":"string"},
+				    "expression":     {"type":"string"},
+				    "timedOut":       {"type":"boolean"},
+				    "note":           {"type":"string"},
+				    "problems":       {"type":"array","items":{"type":"string"}},
+				    "exception":      {"type":"string"},
+				    "declaredType":   {"type":["string","null"]},
+				    "valueTruncated": {"type":"boolean"},
+				    "value":          {"type":"string"}
+				  },
+				  "required": ["sessionId","expression","timedOut"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String expression = args.getString("expression"); //$NON-NLS-1$

@@ -53,6 +53,27 @@ public final class GetFramesTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "sessionId":            {"type":"string"},
+				    "thread":               {"type":"string"},
+				    "frames":               {"type":"array","items":{"type":"object","properties":{"index":{"type":"integer"},"declaringType":{"type":["string","null"]},"method":{"type":["string","null"]},"argumentTypes":{"type":"array","items":{"type":"string"}},"line":{"type":"integer"},"sourceFile":{"type":["string","null"]},"native":{"type":"boolean"}}}},
+				    "frameTotal":           {"type":"integer"},
+				    "framesTruncated":      {"type":"boolean"},
+				    "variables":            {"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"declaredType":{"type":["string","null"]},"value":{"type":"string"},"hasChildren":{"type":"boolean"},"runtimeType":{"type":"string"},"valueTruncated":{"type":"boolean"}}}},
+				    "variablesUnavailable": {"type":"string"},
+				    "variablePath":         {"type":["string","null"]},
+				    "total":                {"type":"integer"},
+				    "truncated":            {"type":"boolean"}
+				  },
+				  "required": ["sessionId","thread","frames","frameTotal","framesTruncated","variables"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		int maxResults = args.getInt("maxResults", 100, 1, 2000); //$NON-NLS-1$

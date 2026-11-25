@@ -61,6 +61,27 @@ public final class SaveLaunchConfigurationTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "name":       {"type":"string"},
+				    "type":       {"type":"string"},
+				    "storage":    {"type":"string"},
+				    "action":     {"type":"string"},
+				    "attributes": {"type":"object"},
+				    "dryRun":     {"type":"boolean"},
+				    "warning":    {"type":"string"},
+				    "note":       {"type":"string"},
+				    "saved":      {"type":"boolean"},
+				    "file":       {"type":["string","null"]}
+				  },
+				  "required": ["name","type","storage","action","attributes","dryRun"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String name = args.getString("name"); //$NON-NLS-1$

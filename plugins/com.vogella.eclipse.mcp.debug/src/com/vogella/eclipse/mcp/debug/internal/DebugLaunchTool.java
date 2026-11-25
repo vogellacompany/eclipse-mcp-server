@@ -92,6 +92,42 @@ public final class DebugLaunchTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "sessionId":           {"type":"string"},
+				    "startedByMcp":        {"type":"boolean"},
+				    "terminated":          {"type":"boolean"},
+				    "suspended":           {"type":"boolean"},
+				    "configuration":       {"type":["string","null"]},
+				    "registered":          {"type":"boolean"},
+				    "pid":                 {"type":["string","null"]},
+				    "failure":             {"type":"string"},
+				    "threads":             {"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"suspended":{"type":"boolean"},"location":{"type":["string","null"]},"breakpoint":{"type":["string","null"]}}}},
+				    "threadTotal":         {"type":"integer"},
+				    "truncated":           {"type":"boolean"},
+				    "timedOut":            {"type":"boolean"},
+				    "waitNote":            {"type":"string"},
+				    "note":                {"type":"string"},
+				    "flightRecordingFile": {"type":"string"},
+				    "flightRecordingNote": {"type":"string"},
+				    "ready":               {"type":"boolean"},
+				    "readiness":           {"type":"object"},
+				    "mode":                {"type":"string"},
+				    "replaced":            {"type":"object"},
+				    "quiet":               {"type":"object"},
+				    "processes":           {"type":"array","items":{"type":"object","properties":{"label":{"type":["string","null"]},"pid":{"type":["string","null"]},"terminated":{"type":"boolean"},"exitValue":{"type":"integer"}}}},
+				    "processNote":         {"type":"string"},
+				    "processOutputTail":   {"type":"string"},
+				    "outputNote":          {"type":"string"}
+				  },
+				  "required": ["sessionId","threads","mode","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String outputPattern = args.getString("waitForOutput"); //$NON-NLS-1$

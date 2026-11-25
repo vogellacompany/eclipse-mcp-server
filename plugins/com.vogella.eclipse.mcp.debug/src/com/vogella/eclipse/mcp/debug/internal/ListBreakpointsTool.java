@@ -53,6 +53,20 @@ public final class ListBreakpointsTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "total":       {"type":"integer"},
+				    "truncated":   {"type":"boolean"},
+				    "breakpoints": {"type":"array","items":{"type":"object","properties":{"id":{"type":["string","null"]},"kind":{"type":"string"},"typeName":{"type":["string","null"]},"enabled":{"type":"boolean"},"installed":{"type":"boolean"},"hitCount":{"type":"integer"},"suspendPolicy":{"type":"string"},"line":{"type":"integer"},"condition":{"type":["string","null"]},"conditionEnabled":{"type":"boolean"},"caught":{"type":"boolean"},"uncaught":{"type":"boolean"},"resource":{"type":["string","null"]}}}}
+				  },
+				  "required": ["total","truncated","breakpoints"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String filter = args.getString("filter"); //$NON-NLS-1$

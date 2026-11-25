@@ -60,6 +60,35 @@ public final class SetBreakpointTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "id":               {"type":["string","null"]},
+				    "kind":             {"type":"string"},
+				    "typeName":         {"type":["string","null"]},
+				    "enabled":          {"type":"boolean"},
+				    "installed":        {"type":"boolean"},
+				    "hitCount":         {"type":"integer"},
+				    "suspendPolicy":    {"type":"string"},
+				    "line":             {"type":"integer"},
+				    "condition":        {"type":["string","null"]},
+				    "conditionEnabled": {"type":"boolean"},
+				    "caught":           {"type":"boolean"},
+				    "uncaught":         {"type":"boolean"},
+				    "resource":         {"type":["string","null"]},
+				    "created":          {"type":"boolean"},
+				    "updated":          {"type":"boolean"},
+				    "askedFor":         {"type":"string"},
+				    "note":             {"type":"string"},
+				    "removed":          {"type":"boolean"}
+				  },
+				  "required": ["id","typeName"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String id = args.getString("id"); //$NON-NLS-1$
