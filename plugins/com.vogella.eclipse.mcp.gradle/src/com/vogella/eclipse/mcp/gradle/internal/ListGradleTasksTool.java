@@ -55,6 +55,23 @@ public final class ListGradleTasksTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "project":   {"type":"string"},
+				    "state":     {"type":"string"},
+				    "note":      {"type":"string"},
+				    "total":     {"type":"integer"},
+				    "truncated": {"type":"boolean"},
+				    "tasks":     {"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"name":{"type":"string"},"project":{"type":"string"},"group":{"type":["string","null"]},"description":{"type":["string","null"]}}}}
+				  },
+				  "required": ["project"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (!Buildship.isAvailable()) {
 			return McpToolResult.error(Buildship.unavailable());

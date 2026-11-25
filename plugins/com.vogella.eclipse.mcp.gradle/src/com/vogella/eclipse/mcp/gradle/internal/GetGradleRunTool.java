@@ -43,6 +43,26 @@ public final class GetGradleRunTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "runId":         {"type":"string"},
+				    "kind":          {"type":"string"},
+				    "project":       {"type":"string"},
+				    "tasks":         {"type":"array","items":{"type":"string"}},
+				    "state":         {"type":"string"},
+				    "elapsedMillis": {"type":"integer"},
+				    "droppedLines":  {"type":"integer"},
+				    "output":        {"type":"string"},
+				    "note":          {"type":"string"}
+				  },
+				  "required": ["state"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String id = args.getString("runId"); //$NON-NLS-1$

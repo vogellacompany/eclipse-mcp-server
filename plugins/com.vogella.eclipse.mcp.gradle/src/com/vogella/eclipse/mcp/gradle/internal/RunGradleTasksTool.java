@@ -42,6 +42,26 @@ public final class RunGradleTasksTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "runId":         {"type":"string"},
+				    "kind":          {"type":"string"},
+				    "project":       {"type":"string"},
+				    "tasks":         {"type":"array","items":{"type":"string"}},
+				    "state":         {"type":"string"},
+				    "elapsedMillis": {"type":"integer"},
+				    "droppedLines":  {"type":"integer"},
+				    "output":        {"type":"string"},
+				    "note":          {"type":"string"}
+				  },
+				  "required": ["runId","kind","project","tasks","state","elapsedMillis","droppedLines","output"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		if (!Buildship.isAvailable()) {
 			return McpToolResult.error(Buildship.unavailable());
