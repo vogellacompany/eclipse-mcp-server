@@ -52,7 +52,8 @@ class DeprecationFilterTest {
 		TestFixture.addType(javaProject, "api", "JavadocOnly", """
 				package api;
 				/**
-				 * @deprecated Replaced by nothing at all.
+				 * @deprecated Replaced by
+				 *    nothing at all.
 				 */
 				public class JavadocOnly {
 				}
@@ -96,6 +97,7 @@ class DeprecationFilterTest {
 		Map<String, Object> entry = find(all(), "api.JavadocOnly");
 
 		assertEquals(List.of("javadoc"), entry.get("deprecatedBy"), "got " + entry);
+		assertEquals("Replaced by nothing at all.", entry.get("deprecationNote"), "the lines join without their stars");
 		assertTrue(String.valueOf(entry.get("deprecationMismatch")).contains("no deprecation warning"), "got " + entry);
 	}
 
