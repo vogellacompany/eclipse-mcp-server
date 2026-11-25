@@ -70,6 +70,37 @@ public final class DeleteTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "dryRun":                 {"type":"boolean"},
+				    "total":                  {"type":"integer"},
+				    "results":                {"type":"array","items":{"type":"object"}},
+				    "type":                   {"type":"string"},
+				    "file":                   {"type":["string","null"]},
+				    "member":                 {"type":"string"},
+				    "kind":                   {"type":"string"},
+				    "references":             {"type":"integer"},
+				    "registryEvidence":       {"type":"array","items":{"type":"object"}},
+				    "apiTier":                {"type":["string","null"]},
+				    "lastTypeInPackage":      {"type":"boolean"},
+				    "packageBecomesEmpty":    {"type":"string"},
+				    "danglingAfterDelete":    {"type":"string"},
+				    "injectionAnnotations":   {"type":"array"},
+				    "injectionNote":          {"type":"string"},
+				    "deleted":                {"type":"boolean"},
+				    "alsoDeclaredInThisFile": {"type":"array"},
+				    "refusedBecause":         {"type":"string"},
+				    "error":                  {"type":"string"},
+				    "note":                   {"type":"string"},
+				    "affectedFiles":          {"type":"array","items":{"type":"string"}}
+				  }
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		List<String> typeNames = new ArrayList<>();

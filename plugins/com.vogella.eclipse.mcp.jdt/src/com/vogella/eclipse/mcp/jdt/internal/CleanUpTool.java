@@ -107,6 +107,27 @@ public final class CleanUpTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "dryRun":          {"type":"boolean"},
+				    "cleanUps":        {"type":"array","items":{"type":"string"}},
+				    "filesConsidered": {"type":"integer"},
+				    "filesChanged":    {"type":"integer"},
+				    "edits":           {"type":"integer"},
+				    "truncated":       {"type":"boolean"},
+				    "files":           {"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"edits":{"type":"integer"},"cleanUps":{"type":"array","items":{"type":"object","properties":{"cleanUp":{"type":"string"},"edits":{"type":"integer"},"error":{"type":"string"}}}}}}},
+				    "failed":          {"type":"integer"},
+				    "failures":        {"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"cleanUp":{"type":"string"},"error":{"type":"string"}}}},
+				    "note":            {"type":"string"}
+				  },
+				  "required": ["dryRun","cleanUps","filesConsidered","filesChanged","edits","truncated","files"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		// headless, the jdt.ui preference node is missing and JDT dies on the lookup
 		OrganizeImportsTool.ensureCodeStylePreferences();

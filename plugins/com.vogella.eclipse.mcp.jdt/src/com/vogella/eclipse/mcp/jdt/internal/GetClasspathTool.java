@@ -55,6 +55,26 @@ public final class GetClasspathTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "project":         {"type":"string"},
+				    "resolved":        {"type":"boolean"},
+				    "outputLocation":  {"type":"string"},
+				    "rawTotal":        {"type":"integer"},
+				    "rawTruncated":    {"type":"boolean"},
+				    "rawEntries":      {"type":"array","items":{"type":"object","properties":{"kind":{"type":"string"},"path":{"type":"string"},"exported":{"type":"boolean"},"containerDescription":{"type":["string","null"]},"containerEntries":{"type":["integer","null"]},"boundJre":{"type":["object","null"]},"outputLocation":{"type":"string"},"accessRules":{"type":"array","items":{"type":"object","properties":{"pattern":{"type":"string"},"kind":{"type":"string"}}}}}}},
+				    "total":           {"type":"integer"},
+				    "truncated":       {"type":"boolean"},
+				    "resolvedEntries": {"type":"array","items":{"type":"object","properties":{"kind":{"type":"string"},"path":{"type":"string"},"exported":{"type":"boolean"},"sourceAttachment":{"type":["string","null"]},"attributes":{"type":"object"},"accessRules":{"type":"array","items":{"type":"object","properties":{"pattern":{"type":"string"},"kind":{"type":"string"}}}}}}}
+				  },
+				  "required": ["project","resolved","outputLocation","rawTotal","rawTruncated","rawEntries"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String projectName = args.getString("project"); //$NON-NLS-1$

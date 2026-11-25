@@ -81,6 +81,38 @@ public final class FindReferencesTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "resolved":             {"type":"string"},
+				    "resolvedFrom":         {"type":["string","null"]},
+				    "matchedBy":            {"type":"string"},
+				    "accessKind":           {"type":"string"},
+				    "total":                {"type":"integer"},
+				    "byOrigin":             {"type":"object"},
+				    "linkedDuplicates":     {"type":"integer"},
+				    "truncated":            {"type":"boolean"},
+				    "injectionAnnotations": {"type":"array"},
+				    "injectionNote":        {"type":"string"},
+				    "declaredIn":           {"type":"array"},
+				    "declaredInNote":       {"type":"string"},
+				    "byMember":             {"type":"array","items":{"type":"object","properties":{"signature":{"type":["string","null"]},"total":{"type":"integer"}}}},
+				    "byKind":               {"type":"object"},
+				    "caveat":               {"type":"string"},
+				    "refreshed":            {"type":"boolean"},
+				    "refreshMillis":        {"type":"integer"},
+				    "matches":              {"type":"array","items":{"type":"object","properties":{"origin":{"type":"string"},"path":{"type":["string","null"]},"project":{"type":["string","null"]},"library":{"type":["string","null"]},"line":{"type":["integer","null"]},"offset":{"type":"integer"},"length":{"type":"integer"},"signature":{"type":["string","null"]},"location":{"type":["string","null"]},"enclosingElement":{"type":["string","null"]},"kind":{"type":["string","null"]},"declaration":{"type":"boolean"},"alsoIn":{"type":"array"}}}},
+				    "countsOnly":           {"type":"boolean"},
+				    "note":                 {"type":"string"},
+				    "results":              {"type":"array","items":{"type":"object","properties":{"typeName":{"type":["string","null"]},"memberName":{"type":["string","null"]},"error":{"type":"string"},"accessKind":{"type":"string"},"total":{"type":"integer"},"source":{"type":"integer"},"binary":{"type":"integer"},"declaration":{"type":"integer"},"linkedDuplicates":{"type":"integer"},"declaredIn":{"type":"integer"},"byMember":{"type":"array","items":{"type":"object","properties":{"signature":{"type":["string","null"]},"total":{"type":"integer"}}}}}}}
+				  },
+				  "required": ["total","refreshed"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		List<Map<String, Object>> queries = queries(arguments);

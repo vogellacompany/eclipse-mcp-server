@@ -54,6 +54,23 @@ public final class GetSourceTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "type":            {"type":"string"},
+				    "binary":          {"type":"boolean"},
+				    "path":            {"type":["string","null"]},
+				    "sourceAvailable": {"type":"boolean"},
+				    "elements":        {"type":"array","items":{"type":"object","properties":{"element":{"type":["string","null"]},"line":{"type":["integer","null"]},"endLine":{"type":["integer","null"]},"source":{"type":["string","null"]},"truncated":{"type":"boolean"}}}},
+				    "hint":            {"type":"string"}
+				  },
+				  "required": ["type","binary","sourceAvailable","elements"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String typeName = args.getString("typeName"); //$NON-NLS-1$

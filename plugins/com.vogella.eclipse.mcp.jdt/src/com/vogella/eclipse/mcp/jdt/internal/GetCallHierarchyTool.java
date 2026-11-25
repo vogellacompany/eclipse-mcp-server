@@ -71,6 +71,28 @@ public final class GetCallHierarchyTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "resolved":       {"type":"string"},
+				    "direction":      {"type":"string"},
+				    "depth":          {"type":"integer"},
+				    "callers":        {"type":"array","items":{"type":"object","properties":{"caller":{"type":["string","null"]},"offset":{"type":"integer"},"line":{"type":"integer"},"callers":{"type":"array","items":{"type":"object"}}}}},
+				    "callees":        {"type":"array","items":{"type":"object","properties":{"callee":{"type":["string","null"]},"from":{"type":"string"},"line":{"type":"integer"},"calls":{"type":"integer"},"origin":{"type":"string"},"body":{"type":"string"},"callees":{"type":"array","items":{"type":"object"}},"repeated":{"type":"boolean"}}}},
+				    "jdkCallsHidden": {"type":"integer"},
+				    "withoutBody":    {"type":"array","items":{"type":"object","properties":{"method":{"type":["string","null"]},"reason":{"type":["string","null"]}}}},
+				    "total":          {"type":"integer"},
+				    "truncated":      {"type":"boolean"},
+				    "refreshed":      {"type":"boolean"},
+				    "refreshMillis":  {"type":"integer"}
+				  },
+				  "required": ["resolved","direction","depth","total","truncated","refreshed"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String typeName = args.getString("typeName"); //$NON-NLS-1$

@@ -66,6 +66,28 @@ public final class ApplyQuickFixTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "dryRun":               {"type":"boolean"},
+				    "problem":              {"type":"object"},
+				    "fix":                  {"type":["string","null"]},
+				    "changes":              {"type":"array","items":{"type":"object"}},
+				    "note":                 {"type":"string"},
+				    "unsavedFiles":         {"type":"array","items":{"type":"string"}},
+				    "checkSkipped":         {"type":"string"},
+				    "remainingErrors":      {"type":"array","items":{"type":"object"}},
+				    "remainingErrorsTotal": {"type":"integer"},
+				    "truncated":            {"type":"boolean"},
+				    "checkError":           {"type":"string"}
+				  },
+				  "required": ["dryRun","problem","fix"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$

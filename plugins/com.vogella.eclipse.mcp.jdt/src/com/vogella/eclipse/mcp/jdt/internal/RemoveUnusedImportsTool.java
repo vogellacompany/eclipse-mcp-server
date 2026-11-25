@@ -63,6 +63,25 @@ public final class RemoveUnusedImportsTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "dryRun":        {"type":"boolean"},
+				    "built":         {"type":"boolean"},
+				    "files":         {"type":"integer"},
+				    "unusedImports": {"type":"integer"},
+				    "removed":       {"type":"integer"},
+				    "truncated":     {"type":"boolean"},
+				    "details":       {"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"unusedImports":{"type":"array","items":{"type":"string"}},"error":{"type":"string"}}}},
+				    "note":          {"type":"string"}
+				  },
+				  "required": ["dryRun","built","files","unusedImports","removed","truncated","details"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$

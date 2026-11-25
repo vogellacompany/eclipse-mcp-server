@@ -65,6 +65,23 @@ public final class FindImplementationsTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "resolved":        {"type":"string"},
+				    "implementations": {"type":"array","items":{"type":"object","properties":{"type":{"type":["string","null"]},"method":{"type":["string","null"]},"kind":{"type":["string","null"]},"library":{"type":["string","null"]},"path":{"type":["string","null"]},"line":{"type":"integer"},"inheritedBy":{"type":"array","items":{"type":"string"}}}}},
+				    "total":           {"type":"integer"},
+				    "truncated":       {"type":"boolean"},
+				    "refreshed":       {"type":"boolean"},
+				    "refreshMillis":   {"type":"integer"}
+				  },
+				  "required": ["resolved","implementations","total","truncated","refreshed"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String typeName = args.getString("typeName"); //$NON-NLS-1$

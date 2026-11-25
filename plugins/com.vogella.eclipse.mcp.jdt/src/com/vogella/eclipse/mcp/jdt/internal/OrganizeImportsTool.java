@@ -59,6 +59,23 @@ public final class OrganizeImportsTool implements IMcpTool {
 				}"""; //$NON-NLS-1$
 	}
 
+	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "path":           {"type":"string"},
+				    "importsAdded":   {"type":"integer"},
+				    "importsRemoved": {"type":"integer"},
+				    "changed":        {"type":"boolean"},
+				    "ambiguous":      {"type":"array","items":{"type":"string"}},
+				    "parseError":     {"type":["string","null"]}
+				  },
+				  "required": ["path","importsAdded","importsRemoved","changed","ambiguous"]
+				}"""; //$NON-NLS-1$
+	}
+
 	/**
 	 * JDT reads the import order and the on-demand thresholds from the JDT UI preference
 	 * node, which only that plug-in registers. Nothing here overrides a value the user or

@@ -59,6 +59,20 @@ public final class SearchTypesTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "total":     {"type":"integer"},
+				    "truncated": {"type":"boolean"},
+				    "types":     {"type":"array","items":{"type":"object","properties":{"fullyQualifiedName":{"type":"string"},"simpleName":{"type":"string"},"packageName":{"type":"string"},"path":{"type":["string","null"]},"binary":{"type":"boolean"}}}}
+				  },
+				  "required": ["total","truncated","types"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String pattern = args.getString("pattern"); //$NON-NLS-1$

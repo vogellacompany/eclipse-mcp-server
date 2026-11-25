@@ -59,6 +59,23 @@ public final class SetJavaVersionTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "version":    {"type":"string"},
+				    "scope":      {"type":"string"},
+				    "dryRun":     {"type":"boolean"},
+				    "compliance": {"type":"object"},
+				    "defaultVm":  {"type":"object"},
+				    "note":       {"type":"string"}
+				  },
+				  "required": ["version","scope","dryRun","note"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		String version = args.getString("version"); //$NON-NLS-1$

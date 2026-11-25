@@ -53,6 +53,24 @@ public final class GetQuickFixesTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "file":        {"type":"string"},
+				    "total":       {"type":"integer"},
+				    "truncated":   {"type":"boolean"},
+				    "problems":    {"type":"array","items":{"type":"object","properties":{"problemId":{"type":"integer"},"message":{"type":["string","null"]},"severity":{"type":"string"},"line":{"type":"integer"},"note":{"type":"string"},"offset":{"type":"integer"},"length":{"type":"integer"},"partialError":{"type":"string"},"error":{"type":"string"},"fixes":{"type":"array","items":{"type":"object","properties":{"label":{"type":["string","null"]},"relevance":{"type":"integer"}}}}}}},
+				    "totalInFile": {"type":"integer"},
+				    "outOfTime":   {"type":"boolean"},
+				    "waitNote":    {"type":"string"}
+				  },
+				  "required": ["file","total","truncated","problems"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String path = args.getString("path"); //$NON-NLS-1$

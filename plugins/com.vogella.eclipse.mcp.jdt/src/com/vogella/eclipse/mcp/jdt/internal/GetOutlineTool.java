@@ -67,6 +67,21 @@ public final class GetOutlineTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "types":           {"type":"array","items":{"type":"object","properties":{"type":{"type":"string"},"kind":{"type":["string","null"]},"modifiers":{"type":["string","null"]},"binary":{"type":"boolean"},"path":{"type":["string","null"]},"typeParameters":{"type":"string"},"superclass":{"type":["string","null"]},"extends":{"type":"array","items":{"type":"string"}},"implements":{"type":"array","items":{"type":"string"}},"startLine":{"type":["integer","null"]},"endLine":{"type":["integer","null"]},"javadoc":{},"members":{"type":"array","items":{"type":"object"}}}}},
+				    "sourceAvailable": {"type":"boolean"},
+				    "total":           {"type":"integer"},
+				    "truncated":       {"type":"boolean"}
+				  },
+				  "required": ["types","sourceAvailable","total","truncated"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String typeName = args.getString("typeName"); //$NON-NLS-1$

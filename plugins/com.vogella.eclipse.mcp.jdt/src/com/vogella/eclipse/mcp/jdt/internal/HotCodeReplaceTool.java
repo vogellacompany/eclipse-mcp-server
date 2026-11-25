@@ -85,6 +85,35 @@ public final class HotCodeReplaceTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "project":           {"type":"string"},
+				    "directory":         {"type":"string"},
+				    "outputRoots":       {"type":"array"},
+				    "bundle":            {"type":"string"},
+				    "bundleVersion":     {"type":"string"},
+				    "bundleInstalledAt": {"type":"string"},
+				    "selection":         {"type":"string"},
+				    "changedSince":      {"type":"string"},
+				    "total":             {"type":"integer"},
+				    "truncated":         {"type":"boolean"},
+				    "dryRun":            {"type":"boolean"},
+				    "wouldReplace":      {"type":"array","items":{"type":"object","properties":{"class":{"type":["string","null"]},"classFile":{"type":"string"},"classFileModified":{"type":"string"},"sourceNewerThanClass":{"type":"boolean"},"wasLoaded":{"type":"boolean"},"bytes":{"type":"integer"},"owner":{"type":["string","null"]},"loader":{"type":"string"}}}},
+				    "failed":            {"type":"array","items":{"type":"object","properties":{"class":{"type":["string","null"]},"error":{"type":["string","null"]}}}},
+				    "agent":             {"type":"object","properties":{"loaded":{"type":"boolean"},"how":{"type":["string","null"]},"helperMillis":{"type":"integer"},"agentJar":{"type":["string","null"]}}},
+				    "replaced":          {"type":"integer"},
+				    "atomic":            {"type":"boolean"},
+				    "redefined":         {"type":"array","items":{"type":"object","properties":{"class":{"type":["string","null"]},"classFile":{"type":"string"},"classFileModified":{"type":"string"},"sourceNewerThanClass":{"type":"boolean"},"wasLoaded":{"type":"boolean"},"bytes":{"type":"integer"},"owner":{"type":["string","null"]},"loader":{"type":"string"}}}},
+				    "notes":             {"type":"array","items":{"type":"string"}}
+				  },
+				  "required": ["total","truncated","dryRun","failed"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String projectName = args.getString("project"); //$NON-NLS-1$

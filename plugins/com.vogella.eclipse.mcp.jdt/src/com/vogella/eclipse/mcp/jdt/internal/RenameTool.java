@@ -75,6 +75,25 @@ public final class RenameTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "element":           {"type":["string","null"]},
+				    "newName":           {"type":"string"},
+				    "refactoring":       {"type":"string"},
+				    "dryRun":            {"type":"boolean"},
+				    "warnings":          {"type":"array","items":{"type":"string"}},
+				    "affectedFiles":     {"type":"array","items":{"type":"string"}},
+				    "affectedFileCount": {"type":"integer"},
+				    "applied":           {"type":"boolean"}
+				  },
+				  "required": ["element","newName","refactoring","dryRun","warnings","affectedFiles","affectedFileCount","applied"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		// the rename processors read jdt.ui preferences, which are unregistered headless
 		if (JavaManipulation.getPreferenceNodeId() == null) {

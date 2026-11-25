@@ -118,6 +118,58 @@ public final class RunTestsTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "runId":                     {"type":"string"},
+				    "scope":                     {"type":["string","null"]},
+				    "launchedAs":                {"type":["string","null"]},
+				    "state":                     {"type":"string"},
+				    "elapsedMillis":             {"type":"integer"},
+				    "total":                     {"type":"integer"},
+				    "passed":                    {"type":"integer"},
+				    "failed":                    {"type":"integer"},
+				    "errors":                    {"type":"integer"},
+				    "ignored":                   {"type":"integer"},
+				    "truncated":                 {"type":"boolean"},
+				    "omitted":                   {"type":"integer"},
+				    "message":                   {"type":["string","null"]},
+				    "tests":                     {"type":"array","items":{"type":"object","properties":{"class":{"type":["string","null"]},"method":{"type":["string","null"]},"result":{"type":"string"},"seconds":{"type":"number"},"trace":{"type":["string","null"]},"expected":{"type":["string","null"]},"actual":{"type":["string","null"]}}}},
+				    "unclassified":              {"type":"integer"},
+				    "stateInconsistent":         {"type":"string"},
+				    "launchedPlatformErrors":    {"type":"array"},
+				    "launchedPlatformNote":      {"type":"string"},
+				    "countsInconsistent":        {"type":"string"},
+				    "testKind":                  {"type":"string"},
+				    "note":                      {"type":"string"},
+				    "launchAttributes":          {"type":"object"},
+				    "workspacePluginErrors":     {"type":"object"},
+				    "buildBeforeLaunch":         {"type":"object"},
+				    "display":                   {"type":"object"},
+				    "flightRecordingFile":       {"type":"string"},
+				    "flightRecordingNote":       {"type":"string"},
+				    "descriptorGeneration":      {"type":"object"},
+				    "launchedWithCompileErrors": {"type":"array"},
+				    "compileErrorPromptWas":     {},
+				    "compileErrorNote":          {"type":"string"},
+				    "headless":                  {"type":"string"},
+				    "debug":                     {"type":"boolean"},
+				    "debugNote":                 {"type":"string"},
+				    "caveat":                    {"type":"string"},
+				    "dryRun":                    {"type":"boolean"},
+				    "vmArguments":               {"type":"string"},
+				    "scan":                      {"type":"string"},
+				    "skippedTypes":              {"type":"integer"},
+				    "scanNote":                  {"type":"string"},
+				    "testTypes":                 {"type":"array","items":{"type":"string"}}
+				  },
+				  "required": ["testKind","total","truncated"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String projectName = args.getString("project"); //$NON-NLS-1$

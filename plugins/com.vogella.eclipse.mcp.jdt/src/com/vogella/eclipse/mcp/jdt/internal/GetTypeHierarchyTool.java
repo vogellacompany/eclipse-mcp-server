@@ -54,6 +54,26 @@ public final class GetTypeHierarchyTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "type":           {"type":"string"},
+				    "superclass":     {"type":["string","null"]},
+				    "interfaces":     {"type":"array","items":{"type":"string"}},
+				    "supertypes":     {"type":"array","items":{"type":"string"}},
+				    "supertypeTotal": {"type":"integer"},
+				    "directSubtypes": {"type":"array","items":{"type":"string"}},
+				    "subtypes":       {"type":"array","items":{"type":"string"}},
+				    "subtypeTotal":   {"type":"integer"},
+				    "truncated":      {"type":"boolean"}
+				  },
+				  "required": ["type","truncated"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		String typeName = args.getString("typeName"); //$NON-NLS-1$

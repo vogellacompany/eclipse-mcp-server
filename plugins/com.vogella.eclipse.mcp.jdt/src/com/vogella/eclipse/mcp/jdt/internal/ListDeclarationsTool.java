@@ -85,6 +85,31 @@ public final class ListDeclarationsTool implements IMcpTool {
 	}
 
 	@Override
+	public String getOutputSchema() {
+		return """
+				{
+				  "type": "object",
+				  "properties": {
+				    "cancelled":                    {"type":"boolean"},
+				    "kinds":                        {"type":"array","items":{"type":"string"}},
+				    "status":                       {"type":"string"},
+				    "total":                        {"type":"integer"},
+				    "truncated":                    {"type":"boolean"},
+				    "declarations":                 {"type":"array","items":{"type":"object","properties":{"name":{"type":["string","null"]},"kind":{"type":["string","null"]},"file":{"type":["string","null"]},"line":{"type":"integer"},"visibility":{"type":["string","null"]},"registryStatus":{"type":["string","null"]},"apiTier":{"type":["string","null"]},"searchIsAuthoritative":{"type":"boolean"},"friends":{"type":"array"},"apiRestrictions":{"type":["array","null"]},"registryEvidence":{"type":"array","items":{"type":"object"}},"typeTests":{"type":"array","items":{"type":"object"}},"typeTestNote":{"type":"string"}}}},
+				    "unresolved":                   {"type":"array"},
+				    "unresolvedNote":               {"type":"string"},
+				    "projects":                     {"type":"array","items":{"type":"string"}},
+				    "caveats":                      {"type":"array"},
+				    "dynamicReflectionSites":       {"type":"array"},
+				    "extensionPointsWithoutSchema": {"type":"array"},
+				    "refreshed":                    {"type":"boolean"},
+				    "refreshMillis":                {"type":"integer"}
+				  },
+				  "required": ["refreshed"]
+				}"""; //$NON-NLS-1$
+	}
+
+	@Override
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) throws McpToolException {
 		ToolArguments args = ToolArguments.of(arguments);
 		List<String> names = names(arguments, args);
