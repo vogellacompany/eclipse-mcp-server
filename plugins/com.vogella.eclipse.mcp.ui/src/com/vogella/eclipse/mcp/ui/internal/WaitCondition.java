@@ -190,6 +190,8 @@ public sealed interface WaitCondition {
 			Boolean enabled, Boolean visible, String textEquals, String textContains, Integer rowCount,
 			Integer minRowCount) implements WaitCondition {
 
+		private static final Pattern MNEMONIC = Pattern.compile("&(&?)"); //$NON-NLS-1$
+
 		static WidgetCondition parse(ToolArguments args) {
 			String path = args.getString("path"); //$NON-NLS-1$
 			if (path != null && !PATH.matcher(path.strip()).matches()) {
@@ -332,7 +334,7 @@ public sealed interface WaitCondition {
 			case org.eclipse.swt.custom.CLabel control -> control.getText();
 			default -> null;
 			};
-			return label == null || widget instanceof Shell ? label : label.replaceAll("&(&?)", "$1"); //$NON-NLS-1$ //$NON-NLS-2$
+			return label == null || widget instanceof Shell ? label : MNEMONIC.matcher(label).replaceAll("$1"); //$NON-NLS-1$
 		}
 
 		private static Boolean selected(Widget widget) {

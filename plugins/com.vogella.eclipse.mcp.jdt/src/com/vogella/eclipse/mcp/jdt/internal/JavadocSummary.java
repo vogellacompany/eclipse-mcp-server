@@ -17,6 +17,12 @@ public final class JavadocSummary {
 
 	private static final Pattern HTML = Pattern.compile("</?[A-Za-z][^>]*>"); //$NON-NLS-1$
 
+	private static final Pattern DELIMITERS = Pattern.compile("^/\\*\\*|\\*/$"); //$NON-NLS-1$
+
+	private static final Pattern LEADING_STARS = Pattern.compile("^\\*+\\s?"); //$NON-NLS-1$
+
+	private static final Pattern WHITESPACE = Pattern.compile("\\s+"); //$NON-NLS-1$
+
 	private JavadocSummary() {
 	}
 
@@ -45,10 +51,10 @@ public final class JavadocSummary {
 	 */
 	private static String description(String comment) {
 		StringBuilder body = new StringBuilder();
-		String inner = comment.strip().replaceFirst("^/\\*\\*", "").replaceFirst("\\*/$", ""); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+		String inner = DELIMITERS.matcher(comment.strip()).replaceAll(""); //$NON-NLS-1$
 		boolean inPre = false;
 		for (String line : inner.split("\\R")) { //$NON-NLS-1$
-			String trimmed = line.strip().replaceFirst("^\\*+\\s?", "").strip(); //$NON-NLS-1$ //$NON-NLS-2$
+			String trimmed = LEADING_STARS.matcher(line.strip()).replaceFirst("").strip(); //$NON-NLS-1$
 			if (!inPre && trimmed.startsWith("@")) { //$NON-NLS-1$
 				break;
 			}
@@ -74,7 +80,7 @@ public final class JavadocSummary {
 			last = tag.end();
 		}
 		plain.append(HTML.matcher(body.substring(last)).replaceAll("")); //$NON-NLS-1$
-		return plain.toString().replaceAll("\\s+", " ").strip(); //$NON-NLS-1$ //$NON-NLS-2$
+		return WHITESPACE.matcher(plain).replaceAll(" ").strip(); //$NON-NLS-1$
 	}
 
 	/** A link reads as its label when it has one, otherwise as its target. */
