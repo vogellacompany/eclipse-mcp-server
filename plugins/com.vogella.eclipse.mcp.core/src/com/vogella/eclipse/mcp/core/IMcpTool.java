@@ -23,6 +23,10 @@ public interface IMcpTool {
 	/** JSON Schema for the tool arguments, as a JSON string. */
 	String getInputSchema();
 
+	default String getOutputSchema() {
+		return null;
+	}
+
 	/**
 	 * Executes the tool.
 	 *

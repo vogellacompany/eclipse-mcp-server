@@ -138,6 +138,9 @@ public final class McpServerService {
 		tools.forEach(tool -> {
 			texts.add(tool.getDescription());
 			texts.add(tool.getInputSchema());
+			if (tool.getOutputSchema() != null) {
+				texts.add(tool.getOutputSchema());
+			}
 		});
 		var missing = ToolReferences.missing(tools.stream().map(tool -> tool.getName()).toList(), texts);
 		return missing.isEmpty() ? instructions

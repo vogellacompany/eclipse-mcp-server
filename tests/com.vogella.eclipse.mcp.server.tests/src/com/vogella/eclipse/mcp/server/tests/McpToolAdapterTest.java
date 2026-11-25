@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.server.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
@@ -126,6 +127,62 @@ class McpToolAdapterTest {
 			CallToolResult result = specification.callHandler().apply(null, new CallToolRequest("unlinked_tool", Map.of()));
 			assertEquals(Boolean.TRUE, result.isError());
 			return ((TextContent) result.content().get(0)).text();
+		} finally {
+			tools.shutdownNow();
+		}
+	}
+
+	@Test
+	void answersWithStructuredContentWhenTheToolDeclaresAnOutputSchema() {
+		IMcpTool tool = new IMcpTool() {
+			@Override
+			public String getName() {
+				return "structured_tool";
+			}
+
+			@Override
+			public String getDescription() {
+				return "Counts.";
+			}
+
+			@Override
+			public String getInputSchema() {
+				return "{\"type\":\"object\",\"properties\":{\"fail\":{\"type\":\"boolean\"},\"wrong\":{\"type\":\"boolean\"}}}";
+			}
+
+			@Override
+			public String getOutputSchema() {
+				return "{\"type\":\"object\",\"properties\":{\"count\":{\"type\":\"integer\"}},\"required\":[\"count\"]}";
+			}
+
+			@Override
+			public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
+				if (Boolean.TRUE.equals(arguments.get("fail"))) {
+					return McpToolResult.error("No count.");
+				}
+				return McpToolResult.of(Boolean.TRUE.equals(arguments.get("wrong")) ? "{\"count\": \"two\"}" : "{\"count\": 2}");
+			}
+		};
+		ExecutorService tools = Executors.newCachedThreadPool();
+		try {
+			var specification = McpToolAdapter.toSpecification(tool, new JacksonMcpJsonMapperSupplier().get(), tools);
+			assertEquals("object", specification.tool().outputSchema().get("type"));
+
+			CallToolResult result = specification.callHandler().apply(null, new CallToolRequest("structured_tool", Map.of()));
+			assertEquals(Map.of("count", 2), result.structuredContent());
+			assertEquals("{\"count\": 2}", ((TextContent) result.content().get(0)).text());
+
+			CallToolResult failed = specification.callHandler().apply(null,
+					new CallToolRequest("structured_tool", Map.of("fail", Boolean.TRUE)));
+			assertEquals(Boolean.TRUE, failed.isError());
+			assertNull(failed.structuredContent());
+
+			CallToolResult wrong = specification.callHandler().apply(null,
+					new CallToolRequest("structured_tool", Map.of("wrong", Boolean.TRUE)));
+			assertEquals(Boolean.TRUE, wrong.isError());
+			assertNull(wrong.structuredContent());
+			String text = ((TextContent) wrong.content().get(0)).text();
+			assertTrue(text.contains("finished") && text.contains("\"count\": \"two\""), text);
 		} finally {
 			tools.shutdownNow();
 		}

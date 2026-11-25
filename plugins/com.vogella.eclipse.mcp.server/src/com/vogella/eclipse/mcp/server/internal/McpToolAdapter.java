@@ -1,5 +1,6 @@
 package com.vogella.eclipse.mcp.server.internal;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -25,6 +26,8 @@ import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.server.McpPreferences;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator.ValidationResponse;
 import io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ImageContent;
@@ -42,6 +45,11 @@ public final class McpToolAdapter {
 		/** Claimed by the worker on start and by {@link #abandon} for a call that never started, never both. */
 		final AtomicInteger state = new AtomicInteger(QUEUED);
 	}
+
+	private static final TypeRef<Map<String, Object>> STRUCTURED = new TypeRef<>() {
+	};
+
+	private static final BundleJsonSchemaValidator VALIDATOR = new BundleJsonSchemaValidator();
 
 	/** Bounds a cause chain that loops. */
 	private static final int MAX_CAUSES = 20;
@@ -63,14 +71,20 @@ public final class McpToolAdapter {
 	/** As {@link #toSpecification(IMcpTool, McpJsonMapper, ExecutorService)}, for an installation given by the caller. */
 	public static SyncToolSpecification toSpecification(IMcpTool tool, McpJsonMapper jsonMapper,
 			ExecutorService executor, Path installation) {
-		Tool descriptor = Tool.builder().name(tool.getName()).description(tool.getDescription())
-				.inputSchema(jsonMapper, tool.getInputSchema()).build();
-		return SyncToolSpecification.builder().tool(descriptor)
-				.callHandler((exchange, request) -> call(tool, request.arguments(), executor, installation)).build();
+		Tool.Builder descriptor = Tool.builder().name(tool.getName()).description(tool.getDescription())
+				.inputSchema(jsonMapper, tool.getInputSchema());
+		if (tool.getOutputSchema() != null) {
+			descriptor.outputSchema(jsonMapper, tool.getOutputSchema());
+		}
+		Tool built = descriptor.build();
+		return SyncToolSpecification.builder().tool(built)
+				.callHandler((exchange, request) -> call(tool, request.arguments(), executor, installation,
+						built.outputSchema(), jsonMapper))
+				.build();
 	}
 
 	private static CallToolResult call(IMcpTool tool, Map<String, Object> arguments, ExecutorService executor,
-			Path installation) {
+			Path installation, Map<String, Object> outputSchema, McpJsonMapper jsonMapper) {
 		// read per call, so that changing the preference takes effect without a restart
 		Duration timeout = McpPreferences.getCallTimeout();
 		NullProgressMonitor monitor = new NullProgressMonitor();
@@ -91,6 +105,21 @@ public final class McpToolAdapter {
 			McpToolResult result = pending.get(timeout.toSeconds(), TimeUnit.SECONDS);
 			CallToolResult.Builder answer = CallToolResult.builder().addTextContent(result.text())
 					.isError(Boolean.valueOf(result.isError()));
+			if (outputSchema != null && !result.isError()) {
+				Map<String, Object> content = structuredContent(jsonMapper, result.text());
+				ValidationResponse validation = content == null ? null : VALIDATOR.validate(outputSchema, content);
+				if (validation == null || !validation.valid()) {
+					String problem = validation == null ? "is not a JSON object" //$NON-NLS-1$
+							: "does not match its output schema: " + validation.errorMessage(); //$NON-NLS-1$
+					ILog.get().error("The answer of the MCP tool '%s' %s".formatted(tool.getName(), problem)); //$NON-NLS-1$
+					answer = CallToolResult.builder().addTextContent(
+							"The tool '%s' finished, but its answer %s, which is a bug in the tool. Do not repeat the call because of this; the answer follows.%n%s" //$NON-NLS-1$
+									.formatted(tool.getName(), problem, result.text()))
+							.isError(Boolean.TRUE);
+				} else {
+					answer.structuredContent(content);
+				}
+			}
 			for (McpToolResult.Image image : result.images()) {
 				answer.addContent(
 						new ImageContent(null, Base64.getEncoder().encodeToString(image.data()), image.mimeType()));
@@ -185,6 +214,14 @@ public final class McpToolAdapter {
 					.formatted(Integer.valueOf(ABANDONED.size()), ABANDONED.keySet()));
 		}
 		return ABANDONED.size();
+	}
+
+	private static Map<String, Object> structuredContent(McpJsonMapper jsonMapper, String text) {
+		try {
+			return jsonMapper.readValue(text, STRUCTURED);
+		} catch (IOException | RuntimeException e) {
+			return null;
+		}
 	}
 
 	private static CallToolResult error(String message) {

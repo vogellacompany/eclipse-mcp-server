@@ -496,6 +496,8 @@ class McpServerServiceTest {
 						tool.name() + " returned something other than text");
 				assertNotEquals(Boolean.TRUE, result.isError(),
 						tool.name() + " failed: " + ((TextContent) result.content().get(0)).text());
+				assertEquals(tool.outputSchema() != null, result.structuredContent() != null,
+						tool.name() + " has structured content exactly when it declares an output schema");
 			}
 		}
 	}

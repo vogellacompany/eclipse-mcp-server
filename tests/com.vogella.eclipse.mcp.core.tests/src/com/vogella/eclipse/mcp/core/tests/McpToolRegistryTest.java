@@ -7,12 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
 import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpToolRegistry;
+import com.vogella.eclipse.mcp.server.internal.BundleJsonSchemaValidator;
 import com.vogella.eclipse.mcp.server.internal.ToolReferences;
 
 class McpToolRegistryTest {
@@ -33,6 +35,20 @@ class McpToolRegistryTest {
 			assertFalse(tool.getDescription().isBlank(), tool.getName() + " has a blank description");
 			assertDoesNotThrow(() -> TestFixture.parse(tool.getInputSchema()),
 					tool.getName() + " has an input schema that is not valid JSON");
+		}
+	}
+
+	@Test
+	void everyOutputSchemaIsAnObjectSchema() throws Exception {
+		BundleJsonSchemaValidator validator = new BundleJsonSchemaValidator();
+		for (IMcpTool tool : McpToolRegistry.getInstance().getTools()) {
+			if (tool.getOutputSchema() == null) {
+				continue;
+			}
+			Map<String, Object> schema = TestFixture.parse(tool.getOutputSchema());
+			assertEquals("object", schema.get("type"), tool.getName() + " has an output schema that is not an object");
+			var validation = validator.validateSchema(schema);
+			assertTrue(validation.valid(), tool.getName() + ": " + validation.errorMessage());
 		}
 	}
 

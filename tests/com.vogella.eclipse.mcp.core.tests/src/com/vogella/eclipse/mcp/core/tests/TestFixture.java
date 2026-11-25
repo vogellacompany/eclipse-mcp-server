@@ -36,6 +36,7 @@ import com.vogella.eclipse.mcp.core.McpToolException;
 import com.vogella.eclipse.mcp.core.McpToolRegistry;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.basic.internal.BuildRegistry;
+import com.vogella.eclipse.mcp.server.internal.BundleJsonSchemaValidator;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapperSupplier;
@@ -47,6 +48,8 @@ final class TestFixture {
 
 	private static final McpJsonMapper JSON = new JacksonMcpJsonMapperSupplier().get();
 
+	private static final BundleJsonSchemaValidator VALIDATOR = new BundleJsonSchemaValidator();
+
 	private final List<IProject> created = new ArrayList<>();
 
 	static IMcpTool tool(String name) {
@@ -55,7 +58,28 @@ final class TestFixture {
 	}
 
 	static McpToolResult call(String toolName, Map<String, Object> arguments) throws McpToolException {
-		return tool(toolName).call(arguments, new NullProgressMonitor());
+		IMcpTool tool = tool(toolName);
+		McpToolResult result = tool.call(arguments, new NullProgressMonitor());
+		assertConformsToOutputSchema(tool, result);
+		return result;
+	}
+
+	static void assertConformsToOutputSchema(IMcpTool tool, McpToolResult result) {
+		if (tool.getOutputSchema() == null || result.isError()) {
+			return;
+		}
+		Map<String, Object> schema;
+		Map<String, Object> answer;
+		try {
+			schema = parse(tool.getOutputSchema());
+			answer = parse(result.text());
+		} catch (IOException | RuntimeException e) {
+			throw new AssertionError(tool.getName() + " has an output schema but answered with something other than a JSON object: "
+					+ result.text(), e);
+		}
+		var validation = VALIDATOR.validate(schema, answer);
+		assertTrue(validation.valid(), "%s answered outside its output schema: %s%n%s".formatted(tool.getName(),
+				validation.errorMessage(), result.text()));
 	}
 
 	/** Runs the tool and parses its JSON payload. Fails when the tool reported an error. */
