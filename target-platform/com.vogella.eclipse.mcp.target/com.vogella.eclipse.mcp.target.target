@@ -22,7 +22,27 @@
         <dependency>
           <groupId>io.modelcontextprotocol.sdk</groupId>
           <artifactId>mcp</artifactId>
-          <version>2.0.0</version>
+          <version>2.2.0</version>
+          <type>jar</type>
+        </dependency>
+        <!-- the SDK's pom pins a release candidate of reactor-core -->
+        <dependency>
+          <groupId>io.projectreactor</groupId>
+          <artifactId>reactor-core</artifactId>
+          <version>3.9.0</version>
+          <type>jar</type>
+        </dependency>
+        <!-- the SDK's pom pairs Jackson 3.1 with a json-schema-validator that imports Jackson 3.2 -->
+        <dependency>
+          <groupId>tools.jackson.core</groupId>
+          <artifactId>jackson-databind</artifactId>
+          <version>3.2.4</version>
+          <type>jar</type>
+        </dependency>
+        <dependency>
+          <groupId>tools.jackson.dataformat</groupId>
+          <artifactId>jackson-dataformat-yaml</artifactId>
+          <version>3.2.4</version>
           <type>jar</type>
         </dependency>
       </dependencies>

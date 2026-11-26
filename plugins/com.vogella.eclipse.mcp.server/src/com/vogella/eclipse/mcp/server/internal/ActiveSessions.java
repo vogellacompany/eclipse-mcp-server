@@ -4,12 +4,14 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Counts the MCP sessions that have been heard from recently.
+ * Counts the MCP clients that have been heard from recently.
  * <p>
- * The SDK's transport does not expose its sessions, so they are counted from the
- * {@code Mcp-Session-Id} header on the way through the token filter. A client
- * that has gone away stops refreshing its entry and drops out of the count, which
- * is what keeps a stale disconnect from making the defaults refuse forever.
+ * A session-based client is counted by its {@code Mcp-Session-Id} header on the way
+ * through the token filter, since the SDK's transport does not expose its sessions. A
+ * stateless client has no session and is counted by its clientInfo, so two copies of
+ * the same client count as one. A client that has gone away stops refreshing its entry
+ * and drops out of the count, which keeps a stale disconnect from making the defaults
+ * refuse forever.
  */
 public final class ActiveSessions {
 
@@ -28,6 +30,12 @@ public final class ActiveSessions {
 		if (sessionId != null && !sessionId.isBlank()) {
 			lastSeen.put(sessionId, Long.valueOf(System.currentTimeMillis()));
 		}
+	}
+
+	/** A request of a stateless client, named by {@link ProtocolRouter#clientIdentity}. */
+	static void seenStateless(String identity) {
+		// prefixed so that no session id can collide with it
+		seen("stateless:" + identity); //$NON-NLS-1$
 	}
 
 	/** A client ending its session stops being a client immediately. */

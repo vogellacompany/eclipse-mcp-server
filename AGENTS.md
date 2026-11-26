@@ -128,7 +128,7 @@ Build a lookup key in one helper, as `FindReferencesTool.locationOf` does; two s
 
 **"The most recent" is ambiguous with more than one client.**
 The build, test run, provisioning and command registries are per IDE, so those tools consult `ClientSessions` and refuse the implicit default when a second client is connected.
-`ActiveSessions` counts `Mcp-Session-Id` headers and drops a session on its DELETE; with no provider (headless, tests) the count is one.
+`ActiveSessions` counts `Mcp-Session-Id` headers and drops a session on its DELETE, and counts a stateless client by its `clientInfo` name and version, so two copies of one client on 2026-07-28 count as one; with no provider (headless, tests) the count is one.
 
 **The web bundle has no third party dependency.**
 `com.vogella.eclipse.mcp.web` speaks the Chrome DevTools Protocol over `java.net.http.WebSocket` and never downloads a browser; Playwright for Java would need a Node.js driver per platform inside the bundle and a browser download on first use.
@@ -161,7 +161,8 @@ Do not undo these without understanding why they are there.
 
 - The root pom sets `project.build.outputTimestamp` to the build time: Tycho takes the qualifier from it, and the super POM of Maven 3.10 and later pins it to 1980, which gives every build the same version and p2 never sees an update.
 - `.mvn/maven.config` sets the Tycho version, which `.mvn/extensions.xml` and the root pom read, and `tycho.pomless.aggregator.names`, without which `update-site/` is not an aggregator and the build fails.
-- The feature includes Jetty ee11, the MCP SDK, Jackson 3, networknt, reactor and `jakarta.servlet-api`, and leaves out `slf4j.api`, which the host IDE ships.
+- The feature includes Jetty ee11, the MCP SDK, Jackson 3, networknt, reactor, jspecify and `jakarta.servlet-api`, and leaves out `slf4j.api`, which the host IDE ships.
+- The target pins Jackson 3.2.4 and reactor-core 3.9.0 next to the SDK: its pom brings Jackson 3.1, which networknt 3.0.8 does not resolve against, and a reactor release candidate.
   The server imports `jakarta.servlet` `[6.1,7)`, which a plain SDK does not provide, so without the bundle an install from the update site alone fails.
 - Jetty imports are pinned to `[12.1.12,13)`, the floor `jetty-ee11-servlet` needs.
 - `com.vogella.eclipse.mcp.ui` is the feature's branding plugin; `featureImage` is 32x32 (source `icons/eclipse-mcp-server.png`), and there is no `about.mappings` because Tycho does not substitute `{0}`.
@@ -175,6 +176,8 @@ Do not undo these without understanding why they are there.
 - `McpServerService.start` binds the port before it loads the tools, and `ReadyGate` holds requests until they are loaded. Claude Code gives up reconnecting after five refused attempts, about 15 seconds, so loading first would leave it disconnected after most restarts. A held request waits at most `READY_WAIT_MILLIS`, 25 seconds, which is kept below Claude Code's 30 second connection timeout by hand.
 - `BundleJsonSchemaValidator` clears the context class loader, or networknt fails with `FileNotFoundException: classpath:draft/2020-12/schema`; any MCP client built inside the IDE needs the same (`McpServerServiceTest.schemaValidator()`).
 - The MCP SDK gets an explicit `jsonMapper` and `jsonSchemaValidator`; `ServiceLoader` discovery across bundles is fragile.
+- One endpoint serves both protocol generations: `ProtocolRouter` sends a POST that names a version in `_meta['io.modelcontextprotocol/protocolVersion']`, or that carries no `Mcp-Session-Id` and a stateless `MCP-Protocol-Version`, to the stateless server of 2026-07-28, and everything else, `initialize`, GET and DELETE included, to the session-based one, which clients fall back to. Dropping the session server would cut off every client that does not speak 2026-07-28 yet.
+- The stateless server is `io.modelcontextprotocol.modern`, imported `[2.2,2.3)` because the SDK may still change it in minor releases. It is built after the tools load, so its transport talks to a `PendingRequestManager` that `ReadyGate` guards. Both servers list the tools sorted by name.
 
 ### Workspace, build and log tools
 

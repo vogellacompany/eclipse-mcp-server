@@ -25,13 +25,15 @@ import com.vogella.eclipse.mcp.core.McpToolResult;
 import com.vogella.eclipse.mcp.server.McpPreferences;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.modern.server.McpSyncResponse;
+import io.modelcontextprotocol.modern.server.feature.McpSyncTool;
 import io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ImageContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 
 /**
- * Presents an {@link IMcpTool} as an MCP tool, under a hard call timeout.
+ * Presents an {@link IMcpTool} as an MCP tool of either protocol generation, under a hard call timeout.
  */
 public final class McpToolAdapter {
 
@@ -66,10 +68,45 @@ public final class McpToolAdapter {
 		Tool descriptor = Tool.builder().name(tool.getName()).description(tool.getDescription())
 				.inputSchema(jsonMapper, tool.getInputSchema()).build();
 		return SyncToolSpecification.builder().tool(descriptor)
-				.callHandler((exchange, request) -> call(tool, request.arguments(), executor, installation)).build();
+				.callHandler((exchange, request) -> toSessionResult(call(tool, request.arguments(), executor, installation)))
+				.build();
 	}
 
-	private static CallToolResult call(IMcpTool tool, Map<String, Object> arguments, ExecutorService executor,
+	/** The tool for the stateless server of protocol revision 2026-07-28 and later. */
+	public static McpSyncTool toStatelessTool(IMcpTool tool, McpJsonMapper jsonMapper, ExecutorService executor) {
+		return toStatelessTool(tool, jsonMapper, executor, INSTALLATION);
+	}
+
+	/** As {@link #toStatelessTool(IMcpTool, McpJsonMapper, ExecutorService)}, for an installation given by the caller. */
+	public static McpSyncTool toStatelessTool(IMcpTool tool, McpJsonMapper jsonMapper, ExecutorService executor,
+			Path installation) {
+		var descriptor = io.modelcontextprotocol.modern.McpSchema.Tool
+				.builder(tool.getName(), jsonMapper, tool.getInputSchema()).description(tool.getDescription()).build();
+		return McpSyncTool.of(descriptor, (context, request) -> McpSyncResponse
+				.result(toStatelessResult(call(tool, request.arguments(), executor, installation))));
+	}
+
+	private static CallToolResult toSessionResult(McpToolResult result) {
+		CallToolResult.Builder answer = CallToolResult.builder().addTextContent(result.text())
+				.isError(Boolean.valueOf(result.isError()));
+		for (McpToolResult.Image image : result.images()) {
+			answer.addContent(new ImageContent(null, Base64.getEncoder().encodeToString(image.data()), image.mimeType()));
+		}
+		return answer.build();
+	}
+
+	private static io.modelcontextprotocol.modern.McpSchema.CallToolResult toStatelessResult(McpToolResult result) {
+		var answer = io.modelcontextprotocol.modern.McpSchema.CallToolResult.builder()
+				.addContent(io.modelcontextprotocol.modern.McpSchema.TextContent.builder(result.text()).build())
+				.isError(result.isError());
+		for (McpToolResult.Image image : result.images()) {
+			answer.addContent(io.modelcontextprotocol.modern.McpSchema.ImageContent
+					.builder(Base64.getEncoder().encodeToString(image.data()), image.mimeType()).build());
+		}
+		return answer.build();
+	}
+
+	private static McpToolResult call(IMcpTool tool, Map<String, Object> arguments, ExecutorService executor,
 			Path installation) {
 		// read per call, so that changing the preference takes effect without a restart
 		Duration timeout = McpPreferences.getCallTimeout();
@@ -88,21 +125,14 @@ public final class McpToolAdapter {
 			}
 		});
 		try {
-			McpToolResult result = pending.get(timeout.toSeconds(), TimeUnit.SECONDS);
-			CallToolResult.Builder answer = CallToolResult.builder().addTextContent(result.text())
-					.isError(Boolean.valueOf(result.isError()));
-			for (McpToolResult.Image image : result.images()) {
-				answer.addContent(
-						new ImageContent(null, Base64.getEncoder().encodeToString(image.data()), image.mimeType()));
-			}
-			return answer.build();
+			return pending.get(timeout.toSeconds(), TimeUnit.SECONDS);
 		} catch (TimeoutException e) {
 			// the monitor stops a cooperative tool; cancel(true) only interrupts, so a blocked
 			// tool keeps its thread and must be reported through abandon
 			monitor.setCanceled(true);
 			pending.cancel(true);
 			int abandoned = abandon(tool.getName(), running);
-			return error(
+			return McpToolResult.error(
 					"The tool '%s' did not finish within %d seconds. Raise the timeout in Preferences > General > MCP Server if the operation is expected to take longer.%s" //$NON-NLS-1$
 							.formatted(tool.getName(), timeout.toSeconds(), abandoned <= 1 ? "" //$NON-NLS-1$
 									: " %d calls are now abandoned and still running in this IDE; they hold locks that block builds and refreshes, so a restart is worth considering." //$NON-NLS-1$
@@ -110,11 +140,11 @@ public final class McpToolAdapter {
 		} catch (InterruptedException e) {
 			pending.cancel(true);
 			Thread.currentThread().interrupt();
-			return error("The call to '%s' was interrupted.".formatted(tool.getName())); //$NON-NLS-1$
+			return McpToolResult.error("The call to '%s' was interrupted.".formatted(tool.getName())); //$NON-NLS-1$
 		} catch (ExecutionException e) {
 			Throwable cause = e.getCause() == null ? e : e.getCause();
 			ILog.get().error("The MCP tool '%s' failed".formatted(tool.getName()), cause); //$NON-NLS-1$
-			return error("The tool '%s' failed: %s%s".formatted(tool.getName(), describe(cause), //$NON-NLS-1$
+			return McpToolResult.error("The tool '%s' failed: %s%s".formatted(tool.getName(), describe(cause), //$NON-NLS-1$
 					missingInstallation(cause, installation)));
 		}
 	}
@@ -185,9 +215,5 @@ public final class McpToolAdapter {
 					.formatted(Integer.valueOf(ABANDONED.size()), ABANDONED.keySet()));
 		}
 		return ABANDONED.size();
-	}
-
-	private static CallToolResult error(String message) {
-		return CallToolResult.builder().addTextContent(message).isError(Boolean.TRUE).build();
 	}
 }

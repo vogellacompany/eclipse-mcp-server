@@ -51,6 +51,7 @@
    <plugin id="org.snakeyaml.engine" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="io.projectreactor.reactor-core" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="reactive-streams" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
+   <plugin id="org.jspecify.jspecify" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="org.eclipse.jetty.ee11.servlet" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="org.eclipse.jetty.server" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
    <plugin id="org.eclipse.jetty.http" download-size="0" install-size="0" version="0.0.0" unpack="false"/>

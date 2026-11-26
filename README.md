@@ -103,6 +103,7 @@ claude mcp add --transport http eclipse http://127.0.0.1:8642/mcp \
 ```
 
 The transport is Streamable HTTP and every request carries `Authorization: Bearer <token>`; anything else gets a `401`.
+The endpoint speaks MCP 2026-07-28, which has no session and starts with `server/discover`, and the earlier session-based revisions, which start with `initialize`, side by side.
 The token lives in `~/.eclipse/com.vogella.eclipse.mcp.server/token` with owner-only permissions and survives restarts, updates and workspace switches.
 With two IDEs open on the same fixed port, only the one that bound the port can serve it; in ephemeral-port mode each may use a different port.
 The `workspace` field in the discovery file tells which workspace an endpoint serves.
@@ -110,8 +111,9 @@ After `eclipse_restart`, compare `startedAt` to know the new server is up; some 
 
 Several clients can share one server.
 While more than one is connected, `eclipse_get_build_status`, `eclipse_get_test_results`, `eclipse_get_provisioning_status` and `eclipse_get_command_output` refuse to guess "the most recent" entry, so pass the id explicitly.
+A 2026-07-28 client has no session, so the server tells such clients apart by their `clientInfo` name and version, and two copies of the same client count as one.
 
-The server offers tools only: `initialize`, `ping`, `tools/list` and `tools/call`.
+The server offers tools only: `server/discover`, `tools/list` and `tools/call`, plus `initialize` and `ping` for session-based clients.
 Every tool returns pretty-printed JSON, and every list-returning tool honours `maxResults` and reports `total` and `truncated`.
 
 ## Testing Eclipse and SWT changes
@@ -287,7 +289,7 @@ A product that embeds the server tells clients what they are connected to throug
 
 Clients put the instructions into the agent's context.
 Contributed texts are appended to the default instructions, which describe the IDE, and `replace="true"` leaves the default out.
-`serverInfo` sets the name and version reported on `initialize`; the version defaults to the contributing bundle's.
+`serverInfo` sets the name and version reported on `initialize` and in every 2026-07-28 result; the version defaults to the contributing bundle's.
 
 ## Bundles
 

@@ -45,6 +45,7 @@ import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.launching.JavaRuntime;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.osgi.framework.FrameworkUtil;
@@ -57,6 +58,7 @@ import com.vogella.eclipse.mcp.server.McpPreferences;
 import com.vogella.eclipse.mcp.server.McpServerException;
 import com.vogella.eclipse.mcp.server.McpServerLifecycle;
 import com.vogella.eclipse.mcp.server.McpServerService;
+import com.vogella.eclipse.mcp.server.internal.ActiveSessions;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -100,6 +102,8 @@ class McpServerServiceTest {
 
 	/** A throwaway bundle jar the install tool can look at without installing it. */
 	private static Path SMOKE_JAR;
+
+	private static final String STATELESS_VERSION = "2026-07-28";
 
 	/** An initialize request answers 200 without a session, which makes it a usable probe. */
 	private static final String INITIALIZE = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":"
@@ -201,6 +205,12 @@ class McpServerServiceTest {
 		McpServerService.getInstance().stop();
 		InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).remove(McpPreferences.KEY_PORT);
 		InstanceScope.INSTANCE.getNode(McpPreferences.QUALIFIER).flush();
+	}
+
+	/** A stateless client never ends a session, so it would count as a second client for a minute. */
+	@AfterEach
+	void forgetClients() {
+		ActiveSessions.clear();
 	}
 
 	@Test
@@ -570,11 +580,88 @@ class McpServerServiceTest {
 			// client's and the wrong answer looks exactly like a right one
 			assertEquals(Boolean.TRUE, result.isError(), "expected a refusal");
 			String text = ((TextContent) result.content().get(0)).text();
-			assertTrue(text.contains("MCP sessions"), text);
+			assertTrue(text.contains("MCP sessions or clients"), text);
 			// sessions, not clients: a client opening one per call and never ending it
 			// otherwise reads as a room full of other agents
 			assertTrue(text.contains("HTTP DELETE"), "the refusal should say how a session ends: " + text);
 			assertTrue(text.contains("buildId"), "the refusal should name the argument to pass: " + text);
+		}
+	}
+
+	@Test
+	void discoversAndListsEveryRegisteredToolStatelesslyInNameOrder() throws Exception {
+		var client = connectStateless("stateless-probe");
+		var discovered = client.discover();
+		assertTrue(discovered.supportedVersions().contains(STATELESS_VERSION), discovered.toString());
+		assertNotNull(discovered.capabilities().tools(), "tools are not advertised");
+		assertTrue(discovered.instructions().contains("eclipse_"), discovered.instructions());
+
+		List<String> served = client.tools().list().tools().stream()
+				.map(io.modelcontextprotocol.modern.McpSchema.Tool::name).toList();
+		List<String> registered = McpToolRegistry.getInstance().getTools().stream().map(IMcpTool::getName).sorted()
+				.toList();
+		assertEquals(registered, served);
+	}
+
+	@Test
+	void callsAToolStatelesslyAndReturnsItsImage() throws Exception {
+		var client = connectStateless("stateless-probe");
+		var result = client.tool("eclipse_read_image").arguments(Map.of("path", IMAGE)).call();
+
+		assertNotEquals(Boolean.TRUE, result.isError(), result.toString());
+		assertEquals(2, result.content().size(), result.content().toString());
+		var text = (io.modelcontextprotocol.modern.McpSchema.TextContent) result.content().get(0);
+		assertTrue(text.text().contains("\"width\": 1"), text.text());
+		var image = (io.modelcontextprotocol.modern.McpSchema.ImageContent) result.content().get(1);
+		assertEquals("image/png", image.mimeType());
+		assertArrayEquals(PIXEL, Base64.getDecoder().decode(image.data()));
+	}
+
+	@Test
+	void reportsSchemaViolationsStatelesslyAsAToolError() throws Exception {
+		var client = connectStateless("stateless-probe");
+		var result = client.tool("eclipse_log_status").arguments(Map.of()).call();
+
+		assertEquals(Boolean.TRUE, result.isError());
+		var text = (io.modelcontextprotocol.modern.McpSchema.TextContent) result.content().get(0);
+		assertTrue(text.text().contains("message"), text.text());
+	}
+
+	@Test
+	void rejectsAStatelessCallWhoseNameHeaderIsMissing() throws Exception {
+		HttpResponse<String> response = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create(endpoint().url()))
+				.header("Authorization", "Bearer " + endpoint().token()).header("Content-Type", "application/json")
+				.header("Accept", "application/json, text/event-stream").header("Mcp-Method", "tools/call")
+				.header("MCP-Protocol-Version", STATELESS_VERSION)
+				.POST(HttpRequest.BodyPublishers.ofString(("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":"
+						+ "{\"name\":\"eclipse_list_projects\",\"arguments\":{},\"_meta\":{"
+						+ "\"io.modelcontextprotocol/protocolVersion\":\"%s\","
+						+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}").formatted(STATELESS_VERSION)))
+				.build(), HttpResponse.BodyHandlers.ofString());
+
+		assertEquals(400, response.statusCode(), response.body());
+		assertTrue(response.body().contains("Mcp-Name"), response.body());
+	}
+
+	@Test
+	void answersALegacyInitializeAndAStatelessDiscoverOnTheSameEndpoint() throws Exception {
+		assertEquals(200, post("Bearer " + endpoint().token()));
+		var client = connectStateless("stateless-probe");
+		assertNotNull(client.discover());
+	}
+
+	@Test
+	void countsAStatelessClientAsASecondClient() throws Exception {
+		var statelessClient = connectStateless("another-agent");
+		try (McpSyncClient sessionClient = connect()) {
+			sessionClient.initialize();
+			statelessClient.tools().list();
+
+			CallToolResult result = sessionClient.callTool(new CallToolRequest("eclipse_get_build_status", Map.of()));
+
+			assertEquals(Boolean.TRUE, result.isError(), "expected a refusal");
+			String text = ((TextContent) result.content().get(0)).text();
+			assertTrue(text.contains("clientInfo"), "the refusal should say how a stateless client is counted: " + text);
 		}
 	}
 
@@ -729,6 +816,21 @@ class McpServerServiceTest {
 						"Bearer " + endpoint().token()))
 				.build();
 		return McpClient.sync(transport).jsonSchemaValidator(schemaValidator()).build();
+	}
+
+	/** A stateless client of protocol 2026-07-28, which holds no connection state to close. */
+	private static io.modelcontextprotocol.modern.client.McpSyncClient connectStateless(String clientName) {
+		var transport = io.modelcontextprotocol.modern.client.transport.HttpClientMcpTransport
+				.builder(endpoint().url()).jsonMapper(new JacksonMcpJsonMapperSupplier().get())
+				.requestCustomizer((request, headers, context) -> {
+					headers.set("Authorization", "Bearer " + endpoint().token());
+					return reactor.core.publisher.Mono.empty();
+				}).build();
+		return io.modelcontextprotocol.modern.client.McpClient.sync(transport)
+				.clientInfo(new io.modelcontextprotocol.modern.McpSchema.Implementation(clientName, null, "1", null, null,
+						null))
+				.jsonMapper(new JacksonMcpJsonMapperSupplier().get()).roundTimeout(java.time.Duration.ofSeconds(60))
+				.build();
 	}
 
 	private static Path portFile() {

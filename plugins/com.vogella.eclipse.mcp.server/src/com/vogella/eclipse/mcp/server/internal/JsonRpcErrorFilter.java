@@ -59,7 +59,7 @@ public final class JsonRpcErrorFilter implements Filter {
 		if (message.startsWith("Session not found")) { //$NON-NLS-1$
 			message += ". The server has restarted or ended that session; initialize a new one."; //$NON-NLS-1$
 		} else if (message.startsWith("Session ID required")) { //$NON-NLS-1$
-			message += ". Send the Mcp-Session-Id the initialize response returned."; //$NON-NLS-1$
+			message += ". Send the Mcp-Session-Id the initialize response returned, or, on protocol 2026-07-28, name the version in _meta['io.modelcontextprotocol/protocolVersion'] instead of initializing."; //$NON-NLS-1$
 			// the SDK says method not found, but the method exists and the request is what is wrong
 			code = Integer.valueOf(-32600);
 		}

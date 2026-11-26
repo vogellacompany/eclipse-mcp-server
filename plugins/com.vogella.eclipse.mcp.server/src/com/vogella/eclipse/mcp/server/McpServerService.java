@@ -5,6 +5,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -21,6 +22,7 @@ import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
 
 import com.vogella.eclipse.mcp.core.ClientSessions;
+import com.vogella.eclipse.mcp.core.IMcpTool;
 import com.vogella.eclipse.mcp.core.McpServerDescription;
 import com.vogella.eclipse.mcp.core.McpToolRegistry;
 import com.vogella.eclipse.mcp.core.TracePages;
@@ -31,7 +33,10 @@ import com.vogella.eclipse.mcp.server.internal.BundleJsonSchemaValidator;
 import com.vogella.eclipse.mcp.server.internal.EndpointFile;
 import com.vogella.eclipse.mcp.server.internal.LastPortFile;
 import com.vogella.eclipse.mcp.server.internal.McpToolAdapter;
+import com.vogella.eclipse.mcp.server.internal.PendingRequestManager;
+import com.vogella.eclipse.mcp.server.internal.ProtocolRouter;
 import com.vogella.eclipse.mcp.server.internal.ReadyGate;
+import com.vogella.eclipse.mcp.server.internal.StatelessTools;
 import com.vogella.eclipse.mcp.server.internal.ToolReferences;
 import com.vogella.eclipse.mcp.server.internal.TracePageStore;
 import com.vogella.eclipse.mcp.server.internal.TraceServlet;
@@ -39,6 +44,10 @@ import com.vogella.eclipse.mcp.server.internal.TokenStore;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapperSupplier;
+import io.modelcontextprotocol.modern.McpSchema.CacheScope;
+import io.modelcontextprotocol.modern.McpSchema.Implementation;
+import io.modelcontextprotocol.modern.server.feature.ToolsFeature;
+import io.modelcontextprotocol.modern.server.transport.HttpServletMcpTransport;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -50,7 +59,8 @@ import jakarta.servlet.DispatcherType;
 
 /**
  * The embedded MCP server: an HTTP endpoint on the loopback interface that exposes every
- * tool of the {@link McpToolRegistry} over the Streamable HTTP transport.
+ * tool of the {@link McpToolRegistry} over Streamable HTTP, to stateless clients of protocol
+ * revision 2026-07-28 and to session-based clients of the earlier revisions alike.
  */
 public final class McpServerService {
 
@@ -62,13 +72,16 @@ public final class McpServerService {
 			+ "capture with eclipse_screenshot. " //$NON-NLS-1$
 			+ "eclipse_mark_log then eclipse_get_log_entries shows what an action logged, UI freezes included. " //$NON-NLS-1$
 			+ "To run changed platform code, eclipse_substitute_bundle swaps in a workspace bundle at the next eclipse_restart, and eclipse_hot_code_replace redefines classes in place. " //$NON-NLS-1$
-			+ "Builds, test runs and provisioning return a handle to poll. With several clients connected, pass ids explicitly instead of relying on a most-recent default; a session ends with an HTTP DELETE or after 60 seconds without a request."; //$NON-NLS-1$
+			+ "Builds, test runs and provisioning return a handle to poll. With several clients connected, pass ids explicitly instead of relying on a most-recent default; a client counts as gone after 60 seconds without a request, or at once when it ends its session with an HTTP DELETE."; //$NON-NLS-1$
 
 	private static final String ENDPOINT_PATH = "/mcp"; //$NON-NLS-1$
 
 	private static final String TRACE_PATH = "/trace"; //$NON-NLS-1$
 
 	private static final String LOOPBACK = "127.0.0.1"; //$NON-NLS-1$
+
+	/** The stateless protocol revisions served next to the session-based ones the SDK's legacy server negotiates. */
+	private static final List<String> STATELESS_VERSIONS = List.of(io.modelcontextprotocol.modern.McpSchema.LATEST_PROTOCOL_VERSION);
 
 	/** The system property that enables best-effort reuse of an OS-assigned port. */
 	public static final String EPHEMERAL_PORT_PROPERTY = "com.vogella.eclipse.mcp.server.ephemeralPort"; //$NON-NLS-1$
@@ -91,6 +104,12 @@ public final class McpServerService {
 	private McpSyncServer mcpServer;
 
 	private HttpServletStreamableServerTransportProvider transport;
+
+	private io.modelcontextprotocol.modern.server.McpServer statelessServer;
+
+	private PendingRequestManager statelessRequests;
+
+	private HttpServletMcpTransport statelessTransport;
 
 	private ReadyGate readyGate;
 
@@ -260,6 +279,12 @@ public final class McpServerService {
 				.securityValidator(DefaultServerTransportSecurityValidator.builder().allowedHost(LOOPBACK + ":*") //$NON-NLS-1$
 						.allowedHost("localhost:*").build()) //$NON-NLS-1$
 				.build();
+		statelessRequests = new PendingRequestManager();
+		statelessTransport = HttpServletMcpTransport.builder(statelessRequests).jsonMapper(jsonMapper)
+				.endpoint(ENDPOINT_PATH)
+				.httpHeaderValidator(DefaultServerTransportSecurityValidator.builder().allowedHost(LOOPBACK + ":*") //$NON-NLS-1$
+						.allowedHost("localhost:*").build()) //$NON-NLS-1$
+				.build();
 		readyGate = new ReadyGate(READY_WAIT_MILLIS);
 
 		if (!ephemeralPort && !awaitPort(port)) {
@@ -312,14 +337,27 @@ public final class McpServerService {
 		// that a client reconnecting after a restart waits in the ready gate instead of being refused
 		List<SyncToolSpecification> specifications;
 		try {
-			specifications = McpToolRegistry.getInstance().getTools().stream()
+			// sorted, so that both generations list the tools in the same, stable order
+			List<IMcpTool> tools = McpToolRegistry.getInstance().getTools().stream()
+					.sorted(Comparator.comparing(IMcpTool::getName)).toList();
+			specifications = tools.stream()
 					.map(tool -> McpToolAdapter.toSpecification(tool, jsonMapper, toolExecutor)).toList();
 			McpServerDescription description = McpServerDescription.read(new McpServerDescription("eclipse-mcp", //$NON-NLS-1$
 					version(), DEFAULT_INSTRUCTIONS));
+			String instructions = withMissingTools(description.instructions());
+			BundleJsonSchemaValidator schemaValidator = new BundleJsonSchemaValidator();
 			mcpServer = McpServer.sync(transport).serverInfo(description.name(), description.version())
-					.instructions(withMissingTools(description.instructions()))
+					.instructions(instructions)
 					.capabilities(ServerCapabilities.builder().tools(false).build()).jsonMapper(jsonMapper)
-					.jsonSchemaValidator(new BundleJsonSchemaValidator()).tools(specifications).build();
+					.jsonSchemaValidator(schemaValidator).tools(specifications).build();
+			StatelessTools statelessTools = new StatelessTools(tools.stream()
+					.map(tool -> McpToolAdapter.toStatelessTool(tool, jsonMapper, toolExecutor)).toList());
+			statelessServer = io.modelcontextprotocol.modern.server.McpServer.builder()
+					.serverInfo(new Implementation(description.name(), null, description.version(), null, null, null))
+					.instructions(instructions).supportedVersions(STATELESS_VERSIONS).jsonMapper(jsonMapper)
+					.feature(ToolsFeature.ofSync(statelessTools, jsonMapper, schemaValidator, 0L, CacheScope.PRIVATE))
+					.build();
+			statelessRequests.set(statelessServer);
 			runningPort = listeningPort;
 			portEphemeral = ephemeralPort;
 			endpoint = new McpEndpoint("http://%s:%d%s".formatted(LOOPBACK, listeningPort, ENDPOINT_PATH), token); //$NON-NLS-1$
@@ -375,7 +413,7 @@ public final class McpServerService {
 		server.addConnector(connector);
 
 		ServletContextHandler context = new ServletContextHandler("/"); //$NON-NLS-1$
-		ServletHolder servlet = new ServletHolder(transport);
+		ServletHolder servlet = new ServletHolder(new ProtocolRouter(transport, statelessTransport, STATELESS_VERSIONS));
 		servlet.setAsyncSupported(true);
 		context.addServlet(servlet, ENDPOINT_PATH + "/*"); //$NON-NLS-1$
 		FilterHolder filter = new FilterHolder(new BearerTokenFilter(token));
@@ -436,6 +474,10 @@ public final class McpServerService {
 			}
 			mcpServer = null;
 		}
+		if (statelessServer != null) {
+			statelessServer.closeGracefully();
+			statelessServer = null;
+		}
 		if (jetty != null) {
 			try {
 				jetty.stop();
@@ -445,6 +487,8 @@ public final class McpServerService {
 			jetty = null;
 		}
 		transport = null;
+		statelessTransport = null;
+		statelessRequests = null;
 		readyGate = null;
 		if (toolExecutor != null) {
 			toolExecutor.shutdownNow();

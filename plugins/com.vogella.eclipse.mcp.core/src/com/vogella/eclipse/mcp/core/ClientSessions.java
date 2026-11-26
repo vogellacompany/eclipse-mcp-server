@@ -40,7 +40,7 @@ public final class ClientSessions {
 	 * rather than being told only that it guessed wrong.
 	 */
 	public static String ambiguousDefault(String what, String argument, List<String> available) {
-		return "%d MCP sessions have made a request in the last minute, so 'the most recent %s' is not necessarily yours. Pass '%s' explicitly. Known ids, newest last: %s. Note that sessions are counted, not clients: a client that opens a new session per call and never ends one looks like many. A session is dropped when it ends its session with an HTTP DELETE, or after 60 seconds of silence." //$NON-NLS-1$
+		return "%d MCP sessions or clients have made a request in the last minute, so 'the most recent %s' is not necessarily yours. Pass '%s' explicitly. Known ids, newest last: %s. A session-based client is counted per session, so one that opens a new session per call and never ends one looks like many; a session is dropped when it ends with an HTTP DELETE, or after 60 seconds of silence. A client on protocol 2026-07-28 has no session and is counted by its clientInfo name and version for 60 seconds after its last request." //$NON-NLS-1$
 				.formatted(Integer.valueOf(count()), what, argument,
 						available.isEmpty() ? "none yet" : String.join(", ", available)); //$NON-NLS-1$ //$NON-NLS-2$
 	}
