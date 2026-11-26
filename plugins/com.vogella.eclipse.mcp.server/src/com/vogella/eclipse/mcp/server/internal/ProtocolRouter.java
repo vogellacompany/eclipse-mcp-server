@@ -83,11 +83,9 @@ public final class ProtocolRouter extends HttpServlet {
 			sessions.service(replayed, response);
 			return;
 		}
+		// before the call, so that a client's first call is already refused the implicit default
+		ActiveSessions.seenStateless(clientIdentity(message));
 		stateless.service(replayed, response);
-		// only once the request was accepted, as for sessions
-		if (response.getStatus() < 400) {
-			ActiveSessions.seenStateless(clientIdentity(message));
-		}
 	}
 
 	/**

@@ -661,8 +661,19 @@ class McpServerServiceTest {
 
 			assertEquals(Boolean.TRUE, result.isError(), "expected a refusal");
 			String text = ((TextContent) result.content().get(0)).text();
-			assertTrue(text.contains("clientInfo"), "the refusal should say how a stateless client is counted: " + text);
+			assertTrue(text.contains("2026-07-28"), "the refusal should say how a stateless client is counted: " + text);
 		}
+	}
+
+	@Test
+	void refusesTheImplicitDefaultToASingleStatelessClient() throws Exception {
+		var client = connectStateless("only-agent");
+
+		var result = client.tool("eclipse_get_build_status").arguments(Map.of()).call();
+
+		assertEquals(Boolean.TRUE, result.isError(), "a stateless client cannot be told from a copy of itself");
+		String text = ((io.modelcontextprotocol.modern.McpSchema.TextContent) result.content().get(0)).text();
+		assertTrue(text.contains("cannot be told from a second copy"), text);
 	}
 
 	@Test

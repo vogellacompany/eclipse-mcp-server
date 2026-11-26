@@ -111,7 +111,7 @@ After `eclipse_restart`, compare `startedAt` to know the new server is up; some 
 
 Several clients can share one server.
 While more than one is connected, `eclipse_get_build_status`, `eclipse_get_test_results`, `eclipse_get_provisioning_status` and `eclipse_get_command_output` refuse to guess "the most recent" entry, so pass the id explicitly.
-A 2026-07-28 client has no session, so the server tells such clients apart by their `clientInfo` name and version, and two copies of the same client count as one.
+A 2026-07-28 client has no session, and two copies of the same client cannot be told apart, so such a client always passes the id of the build, test run or other job it asks about.
 
 The server offers tools only: `server/discover`, `tools/list` and `tools/call`, plus `initialize` and `ping` for session-based clients.
 Every tool returns pretty-printed JSON, and every list-returning tool honours `maxResults` and reports `total` and `truncated`.

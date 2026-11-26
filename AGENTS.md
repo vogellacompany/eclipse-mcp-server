@@ -128,7 +128,7 @@ Build a lookup key in one helper, as `FindReferencesTool.locationOf` does; two s
 
 **"The most recent" is ambiguous with more than one client.**
 The build, test run, provisioning and command registries are per IDE, so those tools consult `ClientSessions` and refuse the implicit default when a second client is connected.
-`ActiveSessions` counts `Mcp-Session-Id` headers and drops a session on its DELETE, and counts a stateless client by its `clientInfo` name and version, so two copies of one client on 2026-07-28 count as one; with no provider (headless, tests) the count is one.
+`ActiveSessions` counts `Mcp-Session-Id` headers and drops a session on its DELETE, and counts a client on 2026-07-28 twice, since it has no session and two copies of one client cannot be told apart, so such a client always has to pass the id; with no provider (headless, tests) the count is one.
 
 **The web bundle has no third party dependency.**
 `com.vogella.eclipse.mcp.web` speaks the Chrome DevTools Protocol over `java.net.http.WebSocket` and never downloads a browser; Playwright for Java would need a Node.js driver per platform inside the bundle and a browser download on first use.
