@@ -39,7 +39,7 @@ public final class ScrollTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Scrolls a widget with the real mouse wheel: moves the pointer onto it and turns the wheel by 'notches' (negative scrolls up, or left with horizontal) through the X server's XTest extension on GTK, or Display.post elsewhere, so the toolkit scrolls by its own amount, which for a GTK Tree or Table is not a whole number of rows. The selection and focus stay as they are, unlike eclipse_set_selection with reveal or eclipse_press_key. CHANGES THE SCROLL POSITION and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path; the wheel turns over its centre, or at x and y inside it. The answer reports the vertical and horizontal scroll bar of the nearest scrollable widget, plus topIndex or topItem for a Table or Tree, before and after the scroll, and 'changed' says whether they moved; 'changed' compares the selection of the scrolled direction's bar only and is left out when the position could not be read, and notchesSent says how many notches the window system took; after waits up to 1.5 seconds for an animated or slow-starting scroll to stop. The scroll bars are those of the control under the pointer or its nearest parent with a bar in that direction, and nothing is scrolled when there is none. Like eclipse_click it reads the pointer back first and scrolls nothing when the pointer did not arrive, reporting pointerWaitMillis or pointerWaitSkipped on macOS, or another control covers the point, and it needs an X11 display without a compositor, such as Xvfb."; //$NON-NLS-1$
+		return "Scrolls a widget with the real mouse wheel: moves the pointer onto it and turns the wheel by 'notches' (negative scrolls up, or left with horizontal) through the X server's XTest extension on GTK, SWT's own input queue on its headless backend, or Display.post elsewhere, so the toolkit scrolls by its own amount, which for a GTK Tree or Table is not a whole number of rows. The selection and focus stay as they are, unlike eclipse_set_selection with reveal or eclipse_press_key. CHANGES THE SCROLL POSITION and MOVES THE MOUSE POINTER, which stays where it was put. Address the widget the way eclipse_get_widget_tree reports it, part or shell plus path; the wheel turns over its centre, or at x and y inside it. The answer reports the vertical and horizontal scroll bar of the nearest scrollable widget, plus topIndex or topItem for a Table or Tree, before and after the scroll, and 'changed' says whether they moved; 'changed' compares the selection of the scrolled direction's bar only and is left out when the position could not be read, and notchesSent says how many notches the window system took; after waits up to 1.5 seconds for an animated or slow-starting scroll to stop. The scroll bars are those of the control under the pointer or its nearest parent with a bar in that direction, and nothing is scrolled when there is none. Like eclipse_click it reads the pointer back first and scrolls nothing when the pointer did not arrive, reporting pointerWaitMillis or pointerWaitSkipped on macOS, or another control covers the point, and it needs an X11 display without a compositor, such as Xvfb."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -136,7 +136,12 @@ public final class ScrollTool implements IMcpTool {
 					.put("before", state(scrollable)); //$NON-NLS-1$
 			String failure;
 			int sent;
-			if (XTestInput.unavailableReason() == null) {
+			if (HeadlessInput.applies()) {
+				result.put("method", HeadlessInput.METHOD); //$NON-NLS-1$
+				// the headless backend counts upwards and leftwards as positive, as SWT does
+				failure = HeadlessInput.wheel(horizontal, -notches);
+				sent = failure == null ? Math.abs(notches) : 0;
+			} else if (XTestInput.unavailableReason() == null) {
 				result.put("method", "xtest"); //$NON-NLS-1$ //$NON-NLS-2$
 				// X11 wheel buttons: 4 up, 5 down, 6 left, 7 right
 				int button = horizontal ? (notches < 0 ? 6 : 7) : (notches < 0 ? 4 : 5);

@@ -115,7 +115,7 @@ A tool that needs editors, views, perspectives or commands refuses with `Workben
 
 **Optional dependencies live in one class each.**
 `CssStyling` (e4 CSS engine) and `GitContent` (jgit, in the ide bundle) are imported optionally and callers catch `LinkageError`; never let one of their types into a signature a tool touches.
-`CocoaKeys`, `DisplayScaling`, `NativeAppKit`, `NativeComboList`, `NativeDialogs`, `NativeForeground`, `NativeScreen`, `NativeStacking` and `NativeWindowState` reach SWT internals (`DPIUtil`, `cocoa.NSApplication`, `gtk.GTK`, `win32.OS`) by name, so the bundle stays cross platform.
+`CocoaKeys`, `DisplayScaling`, `NativeAppKit`, `NativeComboList`, `NativeDialogs`, `NativeForeground`, `NativeScreen`, `NativeStacking`, `NativeWindowState` and `HeadlessInput` reach SWT internals (`DPIUtil`, `cocoa.NSApplication`, `gtk.GTK`, `win32.OS`, `headless.RecordingInput`) by name, so the bundle stays cross platform.
 
 **Answers.**
 Every list-returning tool honours `maxResults` and reports `total` and `truncated`.
@@ -258,6 +258,7 @@ Do not undo these without understanding why they are there.
 - On Windows, `NativeForeground` attaches to the foreground input queue for a raise through the foreign function API, since SWT's `OS` no longer has `AttachThreadInput`, detaches in a `finally`, skips windows `IsHungAppWindow` reports, and reports `foregroundMethod`. Read foreground back through `NativeForeground.isForeground`, never `Display.getActiveShell`, which on GTK reports the request before the compositor has answered and on Cocoa is not `NSApplication.isActive`; `eclipse_press_key` gates on it after polling for late focus through `ForegroundWait` from the calling thread, never the UI thread, where the wait would hold back the focus it waits for. Unverified on Windows.
 - `XTestInput` keeps one X connection for the life of the process and opens it on the UI thread. `XOpenDisplay` holds Xlib's process-wide lock while it waits for the server, and GDK takes that lock while it holds a server grab, so a connection opened on another thread can hang the IDE and the tool call together.
 - On native Wayland, `MutterRemoteDesktop` drives `eclipse_click` and `eclipse_drag` through mutter's `org.gnome.Mutter.RemoteDesktop` session: relative moves corrected by `getCursorLocation`, which Wayland reports only over this IDE's windows and never during a drag, so the moves run off the UI thread (the IDE sees them only once its event loop dispatched them) and a drag reads the pointer only after the release.
+- On SWT's headless backend (`SWT.getPlatform()` is `headless`) there is no window system: `eclipse_click`, `eclipse_scroll` and `eclipse_drag` feed pointer events through `HeadlessInput`, which calls `RecordingInput` on the UI thread and never drains its timers, while keys still go through `Display.post`.
 - `eclipse_drag` moves the pointer through XTest, wiggles it on each point, and resolves the first leg before the press: SWT's X11 drag detection holds the UI thread for up to 500 ms after the press, so a UI call there delays the first move past it, and GTK starts its drag partway along the line, so a drop target only reacts to motion after that.
 - `eclipse_screenshot` reports a non-integer scale, and `crispWidth` snaps to a whole divisor.
 
