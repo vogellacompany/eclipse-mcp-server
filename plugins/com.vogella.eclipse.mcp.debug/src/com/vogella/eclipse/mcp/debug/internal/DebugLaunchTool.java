@@ -140,8 +140,9 @@ public final class DebugLaunchTool implements IMcpTool {
 				registry.scheduleAutoTerminate(session, idle);
 			}
 			// launching happens in a job: creating the JVM takes seconds, and doing it on
-			// the calling thread would hold the request open for all of it
-			org.eclipse.core.runtime.jobs.Job.create("MCP debug launch " + session.id(), progress -> { //$NON-NLS-1$
+			// the calling thread would hold the request open for all of it; it is named as
+			// Eclipse names its own, since the progress area shows it to whoever watches the IDE
+			org.eclipse.core.runtime.jobs.Job.create("Launching " + configuration.getName(), progress -> { //$NON-NLS-1$
 				// the same prompt eclipse_run_tests answers: launching a project with
 				// compile errors otherwise opens a modal dialog and the launch waits for
 				// a person who does not know they are being asked
