@@ -56,8 +56,7 @@ public final class RemoveProjectTool implements IMcpTool {
 	public McpToolResult call(Map<String, Object> arguments, IProgressMonitor monitor) {
 		ToolArguments args = ToolArguments.of(arguments);
 		Set<String> named = ProjectSelection.names(arguments);
-		String namePatternArg = args.getString("namePattern"); //$NON-NLS-1$
-		Pattern namePattern = namePatternArg == null ? null : Globs.compile(namePatternArg);
+		Pattern namePattern = Globs.compile(args.getString("namePattern")); //$NON-NLS-1$
 		if (named.isEmpty() && namePattern == null) {
 			return McpToolResult.error("Name what to remove with 'projects' or 'namePattern'."); //$NON-NLS-1$
 		}

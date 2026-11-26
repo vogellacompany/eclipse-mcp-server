@@ -31,6 +31,12 @@ record Deprecation(boolean annotated, boolean tagged, boolean flagged, boolean f
 
 	private static final Pattern NEXT_BLOCK_TAG = Pattern.compile("\\n\\s*\\*?\\s*@[a-zA-Z]"); //$NON-NLS-1$
 
+	private static final Pattern COMMENT_END = Pattern.compile("\\s*\\*/\\s*$"); //$NON-NLS-1$
+
+	private static final Pattern LINE_STARS = Pattern.compile("(?m)^\\s*\\*\\s?"); //$NON-NLS-1$
+
+	private static final Pattern WHITESPACE = Pattern.compile("\\s+"); //$NON-NLS-1$
+
 	boolean deprecated() {
 		return annotated || tagged || flagged;
 	}
@@ -84,8 +90,9 @@ record Deprecation(boolean annotated, boolean tagged, boolean flagged, boolean f
 		if (next.find()) {
 			text = text.substring(0, next.start());
 		}
-		String cleaned = text.replaceAll("\\s*\\*/\\s*$", "").replaceAll("(?m)^\\s*\\*\\s?", " ") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-				.replaceAll("\\s+", " ").strip(); //$NON-NLS-1$ //$NON-NLS-2$
+		text = COMMENT_END.matcher(text).replaceAll(""); //$NON-NLS-1$
+		text = LINE_STARS.matcher(text).replaceAll(" "); //$NON-NLS-1$
+		String cleaned = WHITESPACE.matcher(text).replaceAll(" ").strip(); //$NON-NLS-1$
 		if (cleaned.isEmpty()) {
 			// a bare tag still marks the member as deprecated
 			return ""; //$NON-NLS-1$

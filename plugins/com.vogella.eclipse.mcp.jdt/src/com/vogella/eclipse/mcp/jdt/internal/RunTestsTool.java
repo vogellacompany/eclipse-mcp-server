@@ -64,9 +64,6 @@ public final class RunTestsTool implements IMcpTool {
 	/** Runs the tests in a platform with no workbench. */
 	private static final String CORE_TEST_APPLICATION = "org.eclipse.pde.junit.runtime.coretestapplication"; //$NON-NLS-1$
 
-	/** Opens a workbench window, so it is never the default. */
-	private static final String UI_TEST_APPLICATION = "org.eclipse.pde.junit.runtime.uitestapplication"; //$NON-NLS-1$
-
 	private static final String PLUGIN_NATURE = "org.eclipse.pde.PluginNature"; //$NON-NLS-1$
 
 	/** Projects named in the pre-flight before it says how many more there are. */
