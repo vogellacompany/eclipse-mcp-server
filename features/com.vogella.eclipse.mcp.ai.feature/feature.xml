@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feature
+      id="com.vogella.eclipse.mcp.ai.feature"
+      label="Eclipse AI Perspective"
+      version="5.0.0.qualifier"
+      provider-name="vogella GmbH">
+
+   <description>
+      An AI perspective that lists the local Claude Code sessions, starts new
+      ones in embedded terminals and shows the transcripts of sessions running
+      elsewhere.
+   </description>
+
+   <copyright>
+      Copyright (c) 2026 vogella GmbH and others.
+   </copyright>
+
+   <license url="https://www.eclipse.org/legal/epl-2.0/">
+      Eclipse Public License 2.0
+   </license>
+
+   <requires>
+      <!-- for its JSON reader only; required rather than included, since a second copy of this singleton beside the server's would not resolve -->
+      <import plugin="com.vogella.eclipse.mcp.core" version="5.0.0" match="compatible"/>
+   </requires>
+
+   <plugin id="com.vogella.eclipse.mcp.ai" download-size="0" install-size="0" version="0.0.0" unpack="false"/>
+
+</feature>

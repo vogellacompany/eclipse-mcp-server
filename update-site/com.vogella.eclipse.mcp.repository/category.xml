@@ -3,6 +3,9 @@
    <feature id="com.vogella.eclipse.mcp.feature" version="0.0.0">
       <category name="com.vogella.eclipse.mcp"/>
    </feature>
+   <feature id="com.vogella.eclipse.mcp.ai.feature" version="0.0.0">
+      <category name="com.vogella.eclipse.mcp"/>
+   </feature>
    <category-def name="com.vogella.eclipse.mcp" label="Eclipse MCP Server">
       <description>
          Read-only MCP server capabilities for the Eclipse IDE.

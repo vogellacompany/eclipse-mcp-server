@@ -6,6 +6,9 @@
       <unit id="org.eclipse.sdk.feature.group" version="0.0.0"/>
       <!-- Only to compile against: the gradle bundle requires Buildship optionally -->
       <unit id="org.eclipse.buildship.core" version="0.0.0"/>
+      <!-- the AI perspective's terminals; the SDK feature does not include the terminal -->
+      <unit id="org.eclipse.terminal.control" version="0.0.0"/>
+      <unit id="org.eclipse.terminal.connector.process" version="0.0.0"/>
       <repository location="https://download.eclipse.org/releases/2026-09/"/>
     </location>
     <!-- Only to compile against: the ui and git bundles require these optionally, so an
