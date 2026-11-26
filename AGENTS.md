@@ -179,6 +179,7 @@ Do not undo these without understanding why they are there.
 ### Workspace, build and log tools
 
 - `eclipse_get_problems` never starts a build: it refreshes, waits for a running build and reports `upToDate` false with `staleness` when auto-build is off. Starting a build is `eclipse_build`'s job.
+  With a marker it defaults to every severity and reports `buildsSinceMarker`, counted workspace-wide by a `POST_BUILD` listener that `BuildCounter` registers on first use, with `staleness` when it is 0; a check of a change that was not built otherwise reads as clean.
 - Everything slow runs inside the build job, the refresh included: `BuildRegistry.Request` carries it, `scopes` limits it, and `refreshMillis` and `buildMillis` are reported apart.
 - `BuildManager` swallows builder exceptions, so `collectLogged` adds platform log errors and warnings from the build's time window to `builderFailures`; over-reporting is intended.
 - `eclipse_get_log_entries` parses `.metadata/.log` rather than listening to `ILog`, which misses everything before the listener and from earlier sessions. `PlatformLogFile` is `x-friends` to the tests.

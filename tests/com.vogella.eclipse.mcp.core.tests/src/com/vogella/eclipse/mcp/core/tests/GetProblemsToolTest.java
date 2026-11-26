@@ -1,6 +1,7 @@
 package com.vogella.eclipse.mcp.core.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -8,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IMarker;
@@ -15,9 +17,14 @@ import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.IWorkspaceDescription;
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jdt.core.IJavaProject;
 
+import com.vogella.eclipse.mcp.basic.internal.BuildRegistry;
 import com.vogella.eclipse.mcp.core.McpToolResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -93,6 +100,98 @@ class GetProblemsToolTest {
 		assertEquals(Integer.valueOf(0), result.get("resolvedCount"),
 				"another project's problems are not this query's business, got " + result.get("resolved"));
 		assertTrue(((List<Object>) result.get("problems")).isEmpty(), "got " + result);
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void aMarkerReportsNewWarningsWithoutBeingAskedFor() throws Exception {
+		IProject project = fixture.createProject(PROJECT);
+		String marker = String.valueOf(TestFixture.callAndParse("eclipse_mark_problems", Map.of()).get("marker"));
+		createMarker(project, "warning.txt", IMarker.SEVERITY_WARNING, "A new warning", 1);
+
+		Map<String, Object> result = TestFixture.callAndParse("eclipse_get_problems",
+				Map.of("project", PROJECT, "marker", marker));
+
+		assertEquals("all", result.get("severity"));
+		assertEquals("A new warning", onlyProblem(result).get("message"));
+		Map<String, Object> explicit = TestFixture.callAndParse("eclipse_get_problems",
+				Map.of("project", PROJECT, "marker", marker, "severity", "error"));
+		assertTrue(((List<Object>) explicit.get("problems")).isEmpty(), "an explicit severity still applies");
+	}
+
+	@Test
+	void aMarkerSaysWhenNothingWasBuiltSince() throws Exception {
+		IWorkspace workspace = ResourcesPlugin.getWorkspace();
+		IWorkspaceDescription description = workspace.getDescription();
+		boolean autoBuilding = description.isAutoBuilding();
+		description.setAutoBuilding(false);
+		workspace.setDescription(description);
+		try {
+			IProject project = fixture.createProject(PROJECT);
+			TestFixture.waitForBackgroundJobs();
+			String marker = String.valueOf(TestFixture.callAndParse("eclipse_mark_problems", Map.of()).get("marker"));
+
+			Map<String, Object> before = TestFixture.callAndParse("eclipse_get_problems",
+					Map.of("project", PROJECT, "marker", marker));
+			assertEquals(0L, ((Number) before.get("buildsSinceMarker")).longValue());
+			String staleness = String.valueOf(before.get("staleness"));
+			assertTrue(staleness.contains("Auto-build is off") && staleness.contains("Nothing was built"),
+					"both notes, got " + before);
+
+			TestFixture.build(project);
+			Map<String, Object> after = TestFixture.callAndParse("eclipse_get_problems",
+					Map.of("project", PROJECT, "marker", marker));
+			assertTrue(((Number) after.get("buildsSinceMarker")).longValue() > 0, "got " + after);
+			String afterStaleness = String.valueOf(after.get("staleness"));
+			assertTrue(afterStaleness.contains("Auto-build is off"), "got " + after);
+			assertFalse(afterStaleness.contains("Nothing was built"), "got " + after);
+		} finally {
+			description.setAutoBuilding(autoBuilding);
+			workspace.setDescription(description);
+		}
+	}
+
+	@Test
+	void bothToolsWaitForABuildTheServerStarted() throws Exception {
+		fixture.createProject(PROJECT);
+		AtomicBoolean finished = startServerBuild();
+		Map<String, Object> mark = TestFixture.callAndParse("eclipse_mark_problems", Map.of());
+		assertTrue(finished.get(), "the marker was taken while the build ran");
+		assertEquals(Boolean.TRUE, mark.get("waitedForBuild"));
+
+		finished = startServerBuild();
+		Map<String, Object> problems = TestFixture.callAndParse("eclipse_get_problems",
+				Map.of("project", PROJECT, "marker", String.valueOf(mark.get("marker"))));
+		assertTrue(finished.get(), "the problems were read while the build ran");
+		assertEquals(Boolean.TRUE, problems.get("waitedForBuild"));
+	}
+
+	/** Starts a job in eclipse_build's family and returns once it runs. */
+	private static AtomicBoolean startServerBuild() throws InterruptedException {
+		AtomicBoolean finished = new AtomicBoolean();
+		Job build = new Job("mcp-test-build") {
+			@Override
+			protected IStatus run(IProgressMonitor monitor) {
+				try {
+					Thread.sleep(500);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+				finished.set(true);
+				return Status.OK_STATUS;
+			}
+
+			@Override
+			public boolean belongsTo(Object family) {
+				return BuildRegistry.FAMILY.equals(family);
+			}
+		};
+		build.schedule();
+		long deadline = System.currentTimeMillis() + 5000;
+		while (build.getState() != Job.RUNNING && !finished.get() && System.currentTimeMillis() < deadline) {
+			Thread.sleep(10);
+		}
+		return finished;
 	}
 
 	@Test
