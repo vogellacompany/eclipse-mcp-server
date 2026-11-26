@@ -34,7 +34,9 @@ plugins/com.vogella.eclipse.mcp.gradle   Gradle tools through Buildship: refresh
 plugins/com.vogella.eclipse.mcp.ide      IDE-only tools: open in editor, compare, launch shortcuts, project import
 plugins/com.vogella.eclipse.mcp.p2       provisioning tools, repositories, install, update, headless trust
 plugins/com.vogella.eclipse.mcp.web      web page tools: a Chromium driven over the DevTools Protocol
+plugins/com.vogella.eclipse.mcp.ai       AI perspective: local Claude Code sessions, their terminals and transcripts
 features/com.vogella.eclipse.mcp.feature
+features/com.vogella.eclipse.mcp.ai.feature
 tests/com.vogella.eclipse.mcp.core.tests    the tools, headless
 tests/com.vogella.eclipse.mcp.server.tests  the HTTP endpoint, driven by a real MCP client
 target-platform/com.vogella.eclipse.mcp.target
@@ -141,6 +143,15 @@ Starting a browser is bounded by `CallBudget` as well as the settle wait, so a s
 JavaScript dialogs block the page until answered, so `WebBrowser` answers each at once and the acting tool reports it under `dialogs`; a confirm or prompt is dismissed unless the call passes `acceptDialogs`, and a leave-page prompt is accepted, which the descriptions say because it discards unsaved input.
 Every DevTools command waits at most what is left of the call, and the settle wait leaves `ANSWER_SECONDS` for reading the page afterwards, so the answer is never what the call timeout kills.
 `WebToolsTest` drives a real headless browser and is skipped where none is installed or the one found cannot start; the surefire `argLine` sets `com.vogella.eclipse.mcp.web.noSandbox` because CI agents and containers often cannot set up Chromium's sandbox. Install Chrome or Chromium on the Jenkins agent, or the web tools go untested there.
+
+**The AI perspective is not part of the MCP server.**
+`com.vogella.eclipse.mcp.ai` has its own feature, because it requires the Eclipse terminal and `org.eclipse.jface.notifications`, which an RCP product with the server need not have; it uses core only for its JSON reader.
+It reads Claude Code's files (`~/.claude/sessions/<pid>.json`, the transcripts under `~/.claude/projects`) and never its messaging socket, which is internal to Claude Code.
+A session it starts is matched to its sessions file by pid or by the `--session-id` it was started with, since `/clear` changes the id and the file appears only once Claude Code is up.
+`Commands.environment` drops the variables a Claude Code session gives its children, or a session started from an IDE that was itself started from a session keeps no transcript and writes no sessions file.
+The perspective holds the one `AiView`: its terminals live in a `StackLayout` inside it rather than in views of their own, because the session drawer has to lie over them, and a terminal keeps running while another is on top.
+Its view and perspective are 3.x contributions whose registry is read at startup, so a hot install shows nothing until a restart.
+While the AI perspective is active, `WindowChrome` hides the top trim and moves the `PerspectiveSwitcher` into the bottom trim, and records both in the window's persisted state, so leaving the perspective restores them even after a restart in between; without the move the switcher would disappear with the toolbar.
 
 ## Tests and CI
 

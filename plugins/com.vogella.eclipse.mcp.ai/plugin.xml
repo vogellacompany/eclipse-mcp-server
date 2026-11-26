@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+   <extension point="org.eclipse.ui.perspectives">
+      <perspective
+            class="com.vogella.eclipse.mcp.ai.internal.AiPerspective"
+            icon="icons/ai_perspective.svg"
+            id="com.vogella.eclipse.mcp.ai.perspective"
+            name="AI">
+         <description>Claude Code sessions with their terminals and transcripts</description>
+      </perspective>
+   </extension>
+
+   <extension point="org.eclipse.ui.views">
+      <category
+            id="com.vogella.eclipse.mcp.ai"
+            name="AI">
+      </category>
+      <view
+            category="com.vogella.eclipse.mcp.ai"
+            class="com.vogella.eclipse.mcp.ai.internal.AiView"
+            icon="icons/sessions_view.svg"
+            id="com.vogella.eclipse.mcp.ai.view"
+            name="AI">
+      </view>
+   </extension>
+
+</plugin>
