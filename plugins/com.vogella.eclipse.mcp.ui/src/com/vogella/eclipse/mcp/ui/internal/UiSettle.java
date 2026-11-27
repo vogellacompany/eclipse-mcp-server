@@ -195,8 +195,14 @@ final class UiSettle {
 	}
 
 	private static void sleep(long millis) {
+		long start = System.currentTimeMillis();
+		// the headless display clock only moves while the display pauses; the rest of the round still waits in real
+		// time, since jobs do and a display clock running ahead of them would put minutes of nothing into a recording
+		if (HeadlessInput.applies()) {
+			HeadlessInput.pauseFromWorker(millis);
+		}
 		try {
-			Thread.sleep(millis);
+			Thread.sleep(Math.max(0, millis - (System.currentTimeMillis() - start)));
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}

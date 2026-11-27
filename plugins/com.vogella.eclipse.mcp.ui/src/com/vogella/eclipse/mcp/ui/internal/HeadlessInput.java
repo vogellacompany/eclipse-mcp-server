@@ -5,6 +5,8 @@ import java.lang.reflect.Method;
 
 import org.eclipse.swt.SWT;
 
+import com.vogella.eclipse.mcp.core.json.JsonObject;
+
 /**
  * Pointer input for SWT's headless backend, which has no window system to post to: its
  * {@code RecordingInput} feeds the events to the display directly. Reached by name, so the bundle stays usable on
@@ -37,6 +39,30 @@ public final class HeadlessInput {
 	/** Turns the wheel at the pointer, SWT's way round: positive lines scroll up, positive columns left. */
 	static String wheel(boolean horizontal, int count) {
 		return invoke(horizontal ? "horizontalWheel" : "wheel", new Class<?>[] { int.class }, Integer.valueOf(count)); //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
+	/**
+	 * Waits on the display thread while timers run and paint; with {@code swt.headless.clock=controlled} it steps the
+	 * display clock to each deadline instead of sleeping, so the recording shows the whole pause at little wall time.
+	 */
+	static String pause(long millis) {
+		return invoke("pause", new Class<?>[] { long.class }, Long.valueOf(millis)); //$NON-NLS-1$
+	}
+
+	/**
+	 * Runs {@link #pause} on the UI thread from a worker, answering {@code null} once done or why it could not, so the
+	 * caller can fall back to sleeping.
+	 */
+	static String pauseFromWorker(long millis) {
+		UiThread.Outcome outcome = UiThread.run(millis / 1000 + 2, () -> {
+			String failure = pause(millis);
+			return new JsonObject().put("failure", failure); //$NON-NLS-1$
+		});
+		if (outcome.error() != null) {
+			return outcome.error();
+		}
+		Object failure = outcome.value().remove("failure"); //$NON-NLS-1$
+		return failure == null ? null : failure.toString();
 	}
 
 	private static String invoke(String name, Class<?>[] types, Object... arguments) {

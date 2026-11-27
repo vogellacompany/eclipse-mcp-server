@@ -24,7 +24,7 @@ public final class PauseTool implements IMcpTool {
 
 	@Override
 	public String getDescription() {
-		return "Waits for the given number of milliseconds and returns. Changes nothing. This is the pause a demonstration needs so a person can read a step before the next one, and it is the honest form of what eclipse_wait_until_settled with quietRounds was being used for. The wait is capped at the call timeout less a margin, and the answer says so under clamped when the cap applied, so a longer hold is several calls. Refused inside a batch of tools run in one UI turn, where it would freeze the UI thread for the whole time and nothing would repaint."; //$NON-NLS-1$
+		return "Waits for the given number of milliseconds and returns. Changes nothing. This is the pause a demonstration needs so a person can read a step before the next one, and it is the honest form of what eclipse_wait_until_settled with quietRounds was being used for. The wait is capped at the call timeout less a margin, and the answer says so under clamped when the cap applied, so a longer hold is several calls. On SWT's headless backend the pause runs on the display clock, which with swt.headless.clock=controlled steps through timers instead of sleeping: pausedMillis is then the wall time and displayMillis what a recording shows. Refused inside a batch of tools run in one UI turn, where it would freeze the UI thread for the whole time and nothing would repaint."; //$NON-NLS-1$
 	}
 
 	@Override
@@ -53,7 +53,8 @@ public final class PauseTool implements IMcpTool {
 		int cap = CallBudget.maxWaitSeconds() * 1000;
 		int millis = Math.min(requested, cap);
 		long start = System.currentTimeMillis();
-		long deadline = start + millis;
+		String headless = HeadlessInput.applies() ? HeadlessInput.pauseFromWorker(millis) : "";
+		long deadline = headless == null ? start : start + millis;
 		while (true) {
 			long remaining = deadline - System.currentTimeMillis();
 			if (remaining <= 0 || monitor.isCanceled()) {
@@ -69,6 +70,11 @@ public final class PauseTool implements IMcpTool {
 		long paused = System.currentTimeMillis() - start;
 		JsonObject result = new JsonObject().put("requestedMillis", requested).put("pausedMillis", paused) //$NON-NLS-1$ //$NON-NLS-2$
 				.put("clamped", millis < requested); //$NON-NLS-1$
+		if (headless == null) {
+			result.put("method", HeadlessInput.METHOD).put("displayMillis", millis); //$NON-NLS-1$ //$NON-NLS-2$
+		} else if (!headless.isEmpty()) {
+			result.put("headlessFallback", headless); //$NON-NLS-1$
+		}
 		if (millis < requested) {
 			result.put("note", "Paused %d of the %d ms asked for, because one call may wait at most %d seconds before the server's %d second tool call timeout aborts it. Call eclipse_pause again for the rest." //$NON-NLS-1$
 					.formatted(Integer.valueOf(millis), Integer.valueOf(requested), Integer.valueOf(CallBudget.maxWaitSeconds()),
